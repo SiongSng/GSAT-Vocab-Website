@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import Header from "$lib/components/Header.svelte";
     import BrowseView from "$lib/components/BrowseView.svelte";
-    import FlashcardView from "$lib/components/FlashcardView.svelte";
+    import SRSFlashcardView from "$lib/components/srs/SRSFlashcardView.svelte";
     import QuizView from "$lib/components/QuizView.svelte";
     import { getAppStore, setMobile } from "$lib/stores/app.svelte";
     import { loadVocabData } from "$lib/stores/vocab.svelte";
@@ -26,14 +26,16 @@
     });
 </script>
 
-<div class="app h-full flex flex-col bg-slate-100 text-slate-700 antialiased">
+<div
+    class="app h-full flex flex-col bg-surface-page text-content-primary antialiased"
+>
     <Header />
 
     <main class="flex-1 overflow-hidden">
         {#if app.mode === "browse"}
             <BrowseView />
         {:else if app.mode === "flashcard"}
-            <FlashcardView />
+            <SRSFlashcardView />
         {:else if app.mode === "quiz"}
             <QuizView />
         {/if}
@@ -66,11 +68,11 @@
     }
 
     :global(::-webkit-scrollbar-thumb) {
-        background-color: rgb(203 213 225);
+        background-color: rgba(0, 0, 0, 0.15);
         border-radius: 3px;
     }
 
     :global(::-webkit-scrollbar-thumb:hover) {
-        background-color: rgb(148 163 184);
+        background-color: rgba(0, 0, 0, 0.25);
     }
 </style>

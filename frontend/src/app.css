@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans TC", system-ui, -apple-system, sans-serif;
+  --font-heading: "Manrope", "Inter", system-ui, sans-serif;
+
+  --color-surface-page: #f7f7f7;
+  --color-surface-primary: #ffffff;
+  --color-surface-secondary: #fafafa;
+  --color-surface-hover: rgba(0, 0, 0, 0.04);
+
+  --color-content-primary: #2e2e2e;
+  --color-content-secondary: #6a6972;
+  --color-content-tertiary: #908f89;
+
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-hover: rgba(0, 0, 0, 0.13);
+
+  --color-accent: #207dff;
+  --color-accent-soft: rgba(32, 125, 255, 0.1);
+
+  --color-srs-again: #e57373;
+  --color-srs-hard: #ffb74d;
+  --color-srs-good: #81c784;
+  --color-srs-easy: #64b5f6;
+
+  --shadow-card: 0 0 0 1px hsla(0, 0%, 6%, 0.05), 0 2px 4px hsla(0, 0%, 6%, 0.1);
+  --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
+  --shadow-image: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --tracking-tight: -0.36px;
+  --tracking-tighter: -0.8px;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  height: 100%;
+}

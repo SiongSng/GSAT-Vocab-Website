@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>GSAT Vocab - Heptabase Style Prototype v2</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600;700&display=swap"
+            rel="stylesheet"
+        />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ["Inter", "system-ui", "sans-serif"],
+                            heading: ["Manrope", "system-ui", "sans-serif"],
+                        },
+                        colors: {
+                            surface: {
+                                page: "#f7f7f7",
+                                primary: "#ffffff",
+                                secondary: "#fafafa",
+                                hover: "rgba(0,0,0,0.02)",
+                            },
+                            content: {
+                                primary: "#2e2e2e",
+                                secondary: "#6a6972",
+                                tertiary: "#908f89",
+                            },
+                            border: {
+                                DEFAULT: "rgba(0,0,0,0.08)",
+                                hover: "rgba(0,0,0,0.13)",
+                            },
+                            accent: {
+                                DEFAULT: "#207dff",
+                                soft: "rgba(32,125,255,0.08)",
+                            },
+                            srs: {
+                                again: "#e57373",
+                                hard: "#ffb74d",
+                                good: "#81c784",
+                                easy: "#64b5f6",
+                            },
+                        },
+                        boxShadow: {
+                            card: "0 0 0 1px rgba(15,15,15,0.03), 0 2px 4px rgba(15,15,15,0.06)",
+                            float: "0 10px 30px rgba(0,0,0,0.06)",
+                            image: "0 8px 24px rgba(0,0,0,0.12)",
+                        },
+                        borderRadius: {
+                            sm: "4px",
+                            DEFAULT: "6px",
+                            md: "8px",
+                            lg: "10px",
+                        },
+                        letterSpacing: {
+                            tight: "-0.02em",
+                            tighter: "-0.03em",
+                        },
+                    },
+                },
+            };
+        </script>
+        <style>
+            body {
+                background: #f7f7f7;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }
+            .view-section {
+                border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+                padding: 3.5rem 0;
+            }
+            .view-section:last-child {
+                border-bottom: none;
+            }
+            .section-label {
+                font-size: 11px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: #908f89;
+                margin-bottom: 1.5rem;
+            }
+            .clickable-overlay {
+                position: relative;
+            }
+            .clickable-overlay::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: transparent;
+                transition: background 0.15s ease;
+            }
+            .clickable-overlay:hover::before {
+                background: rgba(0, 0, 0, 0.04);
+            }
+            .gradient-bg {
+                background: linear-gradient(
+                    135deg,
+                    #f8f8f8 0%,
+                    #f0f0f0 50%,
+                    #e8e8e8 100%
+                );
+            }
+        </style>
+    </head>
+    <body class="font-sans text-content-primary">
+        <div class="max-w-4xl mx-auto px-6 py-12">
+            <header class="mb-12">
+                <h1
+                    class="font-heading text-[28px] font-semibold tracking-tighter text-content-primary"
+                >
+                    GSAT Vocab
+                </h1>
+                <p class="text-[15px] text-content-secondary mt-1">
+                    Heptabase-inspired design system v2
+                </p>
+            </header>
+
+            <!-- ==================== DASHBOARD ==================== -->
+            <section class="view-section">
+                <div class="section-label">Dashboard</div>
+
+                <div
+                    class="bg-surface-primary rounded-lg border border-border p-7 max-w-xl shadow-card"
+                >
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-7">
+                        <h2
+                            class="font-heading text-[22px] font-semibold tracking-tight text-content-primary"
+                        >
+                            Today
+                        </h2>
+                        <button
+                            class="p-2 rounded-md clickable-overlay transition-colors"
+                        >
+                            <svg
+                                class="w-[18px] h-[18px] text-content-tertiary"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                stroke-width="1.5"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+                                />
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-3 gap-3 mb-7">
+                        <div
+                            class="text-center py-5 px-3 rounded-md bg-surface-page/60"
+                        >
+                            <div
+                                class="text-[26px] font-semibold text-content-primary tracking-tight"
+                            >
+                                12
+                            </div>
+                            <div
+                                class="text-[13px] text-content-secondary mt-1.5"
+                            >
+                                Review
+                            </div>
+                            <div
+                                class="w-1.5 h-1.5 rounded-full bg-srs-again/70 mx-auto mt-3"
+                            ></div>
+                        </div>
+                        <div
+                            class="text-center py-5 px-3 rounded-md bg-surface-page/60"
+                        >
+                            <div
+                                class="text-[26px] font-semibold text-content-primary tracking-tight"
+                            >
+                                35
+                            </div>
+                            <div
+                                class="text-[13px] text-content-secondary mt-1.5"
+                            >
+                                Learning
+                            </div>
+                            <div
+                                class="w-1.5 h-1.5 rounded-full bg-srs-hard/70 mx-auto mt-3"
+                            ></div>
+                        </div>
+                        <div
+                            class="text-center py-5 px-3 rounded-md bg-surface-page/60"
+                        >
+                            <div
+                                class="text-[26px] font-semibold text-content-primary tracking-tight"
+                            >
+                                8
+                            </div>
+                            <div
+                                class="text-[13px] text-content-secondary mt-1.5"
+                            >
+                                New
+                            </div>
+                            <div
+                                class="w-1.5 h-1.5 rounded-full bg-srs-easy/70 mx-auto mt-3"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <!-- Start Button -->
+                    <button
+                        class="w-full py-3 px-5 bg-content-primary text-white rounded-lg text-[15px] font-medium hover:opacity-90 transition-opacity shadow-card"
+                    >
+                        Start Learning
+                        <span class="text-white/60 ml-1.5">55</span>
+                    </button>
+
+                    <!-- Divider -->
+                    <div class="border-t border-border my-6"></div>
+
+                    <!-- Custom Study Toggle -->
+                    <button
+                        class="w-full flex items-center justify-between py-2.5 px-1 text-[14px] text-content-secondary hover:text-content-primary transition-colors rounded"
+                    >
+                        <span>Custom Study</span>
+                        <svg
+                            class="w-4 h-4 text-content-tertiary"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="m19 9-7 7-7-7"
+                            />
+                        </svg>
+                    </button>
+
+                    <!-- Divider -->
+                    <div class="border-t border-border my-5"></div>
+
+                    <!-- Stats Footer -->
+                    <div
+                        class="flex items-center gap-3 text-[13px] text-content-tertiary"
+                    >
+                        <span>1,234 learned</span>
+                        <span class="text-border-hover">•</span>
+                        <span>7 day streak 🔥</span>
+                        <span class="text-border-hover">•</span>
+                        <span>85% retention</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== CUSTOM STUDY EXPANDED ==================== -->
+            <section class="view-section">
+                <div class="section-label">Custom Study Panel</div>
+
+                <div
+                    class="bg-surface-primary rounded-lg border border-border p-7 max-w-xl shadow-card"
+                >
+                    <h2
+                        class="font-heading text-[20px] font-semibold tracking-tight text-content-primary mb-6"
+                    >
+                        Custom Study
+                    </h2>
+
+                    <!-- Word Count -->
+                    <div class="mb-5">
+                        <label
+                            class="block text-[13px] font-medium text-content-secondary mb-2"
+                            >Number of cards</label
+                        >
+                        <input
+                            type="number"
+                            value="20"
+                            class="w-full px-3.5 py-2.5 text-[14px] bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                        />
+                    </div>
+
+                    <!-- POS Filter -->
+                    <div class="mb-5">
+                        <label
+                            class="block text-[13px] font-medium text-content-secondary mb-2.5"
+                            >Part of Speech</label
+                        >
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                class="px-3.5 py-2 text-[13px] font-medium rounded-md bg-surface-page text-content-secondary border border-transparent hover:border-border-hover transition-all"
+                            >
+                                All
+                            </button>
+                            <button
+                                class="px-3.5 py-2 text-[13px] font-medium rounded-md bg-accent-soft text-accent border border-accent/20"
+                            >
+                                NOUN
+                            </button>
+                            <button
+                                class="px-3.5 py-2 text-[13px] font-medium rounded-md bg-surface-page text-content-secondary border border-transparent hover:border-border-hover transition-all"
+                            >
+                                VERB
+                            </button>
+                            <button
+                                class="px-3.5 py-2 text-[13px] font-medium rounded-md bg-surface-page text-content-secondary border border-transparent hover:border-border-hover transition-all"
+                            >
+                                ADJ
+                            </button>
+                            <button
+                                class="px-3.5 py-2 text-[13px] font-medium rounded-md bg-surface-page text-content-secondary border border-transparent hover:border-border-hover transition-all"
+                            >
+                                ADV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Frequency Range -->
+                    <div class="mb-5">
+                        <label
+                            class="block text-[13px] font-medium text-content-secondary mb-2"
+                            >Frequency Range</label
+                        >
+                        <div class="flex gap-3 items-center">
+                            <input
+                                type="number"
+                                value="1"
+                                class="flex-1 px-3.5 py-2.5 text-[14px] bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                            />
+                            <span class="text-content-tertiary text-[13px]"
+                                >to</span
+                            >
+                            <input
+                                type="number"
+                                value="20"
+                                class="flex-1 px-3.5 py-2.5 text-[14px] bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Checkboxes -->
+                    <div class="space-y-3 mb-6">
+                        <label
+                            class="flex items-center gap-3 cursor-pointer group"
+                        >
+                            <input
+                                type="checkbox"
+                                class="w-4 h-4 rounded border-border-hover text-accent focus:ring-0 focus:ring-offset-0"
+                            />
+                            <span
+                                class="text-[14px] text-content-secondary group-hover:text-content-primary transition-colors"
+                                >Exclude proper nouns</span
+                            >
+                        </label>
+                        <label
+                            class="flex items-center gap-3 cursor-pointer group"
+                        >
+                            <input
+                                type="checkbox"
+                                checked
+                                class="w-4 h-4 rounded border-border-hover text-accent focus:ring-0 focus:ring-offset-0"
+                            />
+                            <span
+                                class="text-[14px] text-content-secondary group-hover:text-content-primary transition-colors"
+                                >Auto-play pronunciation</span
+                            >
+                        </label>
+                        <label
+                            class="flex items-center gap-3 cursor-pointer group"
+                        >
+                            <input
+                                type="checkbox"
+                                class="w-4 h-4 rounded border-border-hover text-accent focus:ring-0 focus:ring-offset-0"
+                            />
+                            <span
+                                class="text-[14px] text-content-secondary group-hover:text-content-primary transition-colors"
+                                >Browse mode (no scheduling)</span
+                            >
+                        </label>
+                    </div>
+
+                    <!-- Pool Count -->
+                    <div class="text-[13px] text-content-tertiary mb-6">
+                        432 cards available
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-3">
+                        <button
+                            class="flex-1 py-2.5 px-5 bg-content-primary text-white rounded-lg text-[14px] font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Start
+                        </button>
+                        <button
+                            class="py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-[14px] font-medium border border-border hover:border-border-hover transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== FLASHCARD FRONT ==================== -->
+            <section class="view-section">
+                <div class="section-label">Flashcard — Front</div>
+
+                <div class="max-w-lg mx-auto">
+                    <!-- Card -->
+                    <div
+                        class="bg-surface-primary rounded-lg border border-border p-8 min-h-[340px] flex flex-col shadow-card"
+                    >
+                        <!-- Header -->
+                        <div class="flex items-center justify-between">
+                            <span
+                                class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-easy/10 text-srs-easy"
+                                >New</span
+                            >
+                            <button
+                                class="p-2 rounded-md clickable-overlay transition-colors"
+                            >
+                                <svg
+                                    class="w-5 h-5 text-content-tertiary"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="1.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Word -->
+                        <div
+                            class="flex-1 flex flex-col items-center justify-center text-center"
+                        >
+                            <h2
+                                class="font-heading text-[36px] font-semibold tracking-tighter text-content-primary mb-2"
+                            >
+                                student
+                            </h2>
+                            <p class="text-[14px] text-content-tertiary">
+                                noun
+                            </p>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="text-center">
+                            <p class="text-[12px] text-content-tertiary/60">
+                                Click to reveal
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Progress -->
+                    <div class="mt-5">
+                        <div
+                            class="h-1 bg-surface-page rounded-full overflow-hidden mb-3"
+                        >
+                            <div
+                                class="h-full bg-accent/60 rounded-full transition-all duration-300"
+                                style="width: 22%"
+                            ></div>
+                        </div>
+                        <div
+                            class="flex items-center justify-center gap-4 text-[12px] text-content-tertiary"
+                        >
+                            <span class="font-medium text-content-secondary"
+                                >12 / 55</span
+                            >
+                            <span class="text-border-hover">•</span>
+                            <span class="text-srs-easy">3 new</span>
+                            <span class="text-srs-hard">7 learning</span>
+                            <span class="text-srs-again">2 review</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== FLASHCARD BACK ==================== -->
+            <section class="view-section">
+                <div class="section-label">Flashcard — Back</div>
+
+                <div class="max-w-lg mx-auto">
+                    <!-- Card -->
+                    <div
+                        class="bg-surface-primary rounded-lg border border-border p-8 min-h-[340px] flex flex-col shadow-card"
+                    >
+                        <!-- Header -->
+                        <div class="flex items-center justify-between mb-5">
+                            <span
+                                class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-easy/10 text-srs-easy"
+                                >New</span
+                            >
+                            <button
+                                class="p-2 rounded-md clickable-overlay transition-colors"
+                            >
+                                <svg
+                                    class="w-5 h-5 text-content-tertiary"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="1.5"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Word (smaller) -->
+                        <div class="text-center mb-5">
+                            <h2
+                                class="font-heading text-[22px] font-semibold tracking-tight text-content-primary"
+                            >
+                                student
+                            </h2>
+                        </div>
+
+                        <!-- Definitions -->
+                        <div class="flex-1 space-y-4 overflow-y-auto px-1">
+                            <div class="pb-4 border-b border-border/60">
+                                <span
+                                    class="inline-block px-2 py-0.5 text-[11px] font-medium rounded bg-surface-page text-content-tertiary mb-2"
+                                    >noun</span
+                                >
+                                <p
+                                    class="text-[15px] text-content-primary leading-relaxed"
+                                >
+                                    學生；研究者
+                                </p>
+                                <p
+                                    class="text-[13px] text-content-tertiary mt-1 leading-relaxed"
+                                >
+                                    a person who is studying at a school or
+                                    college
+                                </p>
+                            </div>
+                            <div>
+                                <span
+                                    class="inline-block px-2 py-0.5 text-[11px] font-medium rounded bg-surface-page text-content-tertiary mb-2"
+                                    >noun</span
+                                >
+                                <p
+                                    class="text-[15px] text-content-primary leading-relaxed"
+                                >
+                                    學習者
+                                </p>
+                                <p
+                                    class="text-[13px] text-content-tertiary mt-1 leading-relaxed"
+                                >
+                                    a person who takes an interest in a
+                                    particular subject
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rating Buttons -->
+                    <div class="mt-5 grid grid-cols-4 gap-2">
+                        <button
+                            class="flex flex-col items-center py-3.5 px-2 rounded-lg border border-transparent hover:border-srs-again/30 hover:bg-srs-again/5 transition-all group"
+                        >
+                            <span
+                                class="text-[14px] font-medium text-content-secondary group-hover:text-srs-again transition-colors"
+                                >Again</span
+                            >
+                            <span class="text-[11px] text-content-tertiary mt-1"
+                                >&lt;1m</span
+                            >
+                        </button>
+                        <button
+                            class="flex flex-col items-center py-3.5 px-2 rounded-lg border border-transparent hover:border-srs-hard/30 hover:bg-srs-hard/5 transition-all group"
+                        >
+                            <span
+                                class="text-[14px] font-medium text-content-secondary group-hover:text-srs-hard transition-colors"
+                                >Hard</span
+                            >
+                            <span class="text-[11px] text-content-tertiary mt-1"
+                                >6m</span
+                            >
+                        </button>
+                        <button
+                            class="flex flex-col items-center py-3.5 px-2 rounded-lg border border-transparent hover:border-srs-good/30 hover:bg-srs-good/5 transition-all group"
+                        >
+                            <span
+                                class="text-[14px] font-medium text-content-secondary group-hover:text-srs-good transition-colors"
+                                >Good</span
+                            >
+                            <span class="text-[11px] text-content-tertiary mt-1"
+                                >1d</span
+                            >
+                        </button>
+                        <button
+                            class="flex flex-col items-center py-3.5 px-2 rounded-lg border border-transparent hover:border-srs-easy/30 hover:bg-srs-easy/5 transition-all group"
+                        >
+                            <span
+                                class="text-[14px] font-medium text-content-secondary group-hover:text-srs-easy transition-colors"
+                                >Easy</span
+                            >
+                            <span class="text-[11px] text-content-tertiary mt-1"
+                                >4d</span
+                            >
+                        </button>
+                    </div>
+
+                    <!-- Keyboard hint -->
+                    <div class="mt-3 text-center">
+                        <p class="text-[11px] text-content-tertiary/50">
+                            Press 1, 2, 3, or 4
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== STATE BADGES ==================== -->
+            <section class="view-section">
+                <div class="section-label">Card State Badges</div>
+
+                <div class="flex flex-wrap gap-3">
+                    <span
+                        class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-easy/10 text-srs-easy"
+                        >New</span
+                    >
+                    <span
+                        class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-hard/10 text-srs-hard"
+                        >Learning</span
+                    >
+                    <span
+                        class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-good/10 text-srs-good"
+                        >Review</span
+                    >
+                    <span
+                        class="px-2.5 py-1 text-[11px] font-medium rounded-full bg-srs-again/10 text-srs-again"
+                        >Relearning</span
+                    >
+                </div>
+            </section>
+
+            <!-- ==================== SESSION COMPLETE ==================== -->
+            <section class="view-section">
+                <div class="section-label">Session Complete</div>
+
+                <div
+                    class="bg-surface-primary rounded-lg border border-border p-7 max-w-lg mx-auto shadow-card"
+                >
+                    <!-- Header -->
+                    <div class="text-center mb-7">
+                        <div class="text-[32px] mb-2">🎉</div>
+                        <h2
+                            class="font-heading text-[20px] font-semibold tracking-tight text-content-primary"
+                        >
+                            Session Complete
+                        </h2>
+                        <p class="text-[14px] text-content-tertiary mt-1">
+                            Great work today!
+                        </p>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-2 gap-3 mb-6">
+                        <div
+                            class="p-4 rounded-md bg-surface-page/60 text-center"
+                        >
+                            <div
+                                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                            >
+                                55
+                            </div>
+                            <div class="text-[12px] text-content-tertiary mt-1">
+                                Cards reviewed
+                            </div>
+                        </div>
+                        <div
+                            class="p-4 rounded-md bg-surface-page/60 text-center"
+                        >
+                            <div
+                                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                            >
+                                85%
+                            </div>
+                            <div class="text-[12px] text-content-tertiary mt-1">
+                                Correct rate
+                            </div>
+                        </div>
+                        <div
+                            class="p-4 rounded-md bg-surface-page/60 text-center"
+                        >
+                            <div
+                                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                            >
+                                12m
+                            </div>
+                            <div class="text-[12px] text-content-tertiary mt-1">
+                                Time spent
+                            </div>
+                        </div>
+                        <div
+                            class="p-4 rounded-md bg-surface-page/60 text-center"
+                        >
+                            <div
+                                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                            >
+                                8
+                            </div>
+                            <div class="text-[12px] text-content-tertiary mt-1">
+                                New learned
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tomorrow Preview -->
+                    <div
+                        class="p-4 rounded-md border border-border/60 bg-surface-secondary/30 mb-6"
+                    >
+                        <div
+                            class="text-[12px] font-medium text-content-secondary mb-2"
+                        >
+                            Tomorrow's forecast
+                        </div>
+                        <div class="flex gap-5 text-[13px]">
+                            <span class="text-srs-again">23 review</span>
+                            <span class="text-srs-easy">20 new</span>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-3">
+                        <button
+                            class="flex-1 py-2.5 px-5 bg-content-primary text-white rounded-lg text-[14px] font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Learn More
+                        </button>
+                        <button
+                            class="py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-[14px] font-medium border border-border hover:border-border-hover transition-colors"
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== BUTTONS ==================== -->
+            <section class="view-section">
+                <div class="section-label">Button Styles</div>
+
+                <div class="space-y-5">
+                    <!-- Primary -->
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="text-[12px] text-content-tertiary w-24"
+                            >Primary</span
+                        >
+                        <button
+                            class="py-2.5 px-5 bg-content-primary text-white rounded-lg text-[14px] font-medium hover:opacity-90 transition-opacity shadow-card"
+                        >
+                            Button
+                        </button>
+                        <button
+                            class="py-2 px-4 bg-content-primary text-white rounded-lg text-[13px] font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Small
+                        </button>
+                    </div>
+
+                    <!-- Primary Pill -->
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="text-[12px] text-content-tertiary w-24"
+                            >Primary Pill</span
+                        >
+                        <button
+                            class="py-2.5 px-6 bg-content-primary text-white rounded-full text-[14px] font-medium hover:opacity-90 transition-opacity"
+                        >
+                            Get started
+                        </button>
+                    </div>
+
+                    <!-- Secondary -->
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="text-[12px] text-content-tertiary w-24"
+                            >Secondary</span
+                        >
+                        <button
+                            class="py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-[14px] font-medium border border-border hover:border-border-hover transition-colors"
+                        >
+                            Button
+                        </button>
+                        <button
+                            class="py-2 px-4 bg-surface-page text-content-secondary rounded-lg text-[13px] font-medium border border-border hover:border-border-hover transition-colors"
+                        >
+                            Small
+                        </button>
+                    </div>
+
+                    <!-- Ghost -->
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="text-[12px] text-content-tertiary w-24"
+                            >Ghost</span
+                        >
+                        <button
+                            class="py-2.5 px-4 text-content-secondary rounded-lg text-[14px] font-medium hover:bg-surface-page transition-colors"
+                        >
+                            Button
+                        </button>
+                        <button
+                            class="py-2 px-3 text-content-secondary rounded-lg text-[13px] font-medium hover:bg-surface-page transition-colors"
+                        >
+                            Small
+                        </button>
+                    </div>
+
+                    <!-- Accent -->
+                    <div class="flex flex-wrap items-center gap-4">
+                        <span class="text-[12px] text-content-tertiary w-24"
+                            >Accent</span
+                        >
+                        <button
+                            class="py-2.5 px-5 bg-accent-soft text-accent rounded-lg text-[14px] font-medium border border-accent/15 hover:border-accent/30 transition-colors"
+                        >
+                            Button
+                        </button>
+                        <button
+                            class="py-2 px-4 bg-accent-soft text-accent rounded-lg text-[13px] font-medium border border-accent/15 hover:border-accent/30 transition-colors"
+                        >
+                            Small
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TYPOGRAPHY ==================== -->
+            <section class="view-section">
+                <div class="section-label">Typography</div>
+
+                <div class="space-y-5">
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Display</span
+                        >
+                        <h1
+                            class="font-heading text-[32px] font-semibold tracking-tighter text-content-primary"
+                        >
+                            學測高頻單字
+                        </h1>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Heading Large</span
+                        >
+                        <h2
+                            class="font-heading text-[22px] font-semibold tracking-tight text-content-primary"
+                        >
+                            Today's Learning
+                        </h2>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Heading Medium</span
+                        >
+                        <h3
+                            class="font-heading text-[18px] font-semibold tracking-tight text-content-primary"
+                        >
+                            Session Complete
+                        </h3>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Body</span
+                        >
+                        <p
+                            class="text-[15px] text-content-primary leading-relaxed"
+                        >
+                            This is regular body text for content and
+                            descriptions.
+                        </p>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Secondary</span
+                        >
+                        <p
+                            class="text-[14px] text-content-secondary leading-relaxed"
+                        >
+                            This is secondary text for less important
+                            information.
+                        </p>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Caption</span
+                        >
+                        <p class="text-[12px] text-content-tertiary">
+                            This is caption text for hints and metadata.
+                        </p>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-content-tertiary"
+                            >Word Display</span
+                        >
+                        <p
+                            class="font-heading text-[36px] font-semibold tracking-tighter text-content-primary"
+                        >
+                            student
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== COLORS ==================== -->
+            <section class="view-section">
+                <div class="section-label">Color Palette</div>
+
+                <div class="space-y-6">
+                    <!-- Surfaces -->
+                    <div>
+                        <div class="text-[11px] text-content-tertiary mb-3">
+                            Surfaces
+                        </div>
+                        <div class="flex gap-3">
+                            <div
+                                class="w-20 h-20 rounded-md bg-surface-primary border border-border flex items-end p-2 shadow-card"
+                            >
+                                <span class="text-[10px] text-content-tertiary"
+                                    >primary</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-surface-secondary flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-content-tertiary"
+                                    >secondary</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-surface-page flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-content-tertiary"
+                                    >page</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div>
+                        <div class="text-[11px] text-content-tertiary mb-3">
+                            Content
+                        </div>
+                        <div class="flex gap-3">
+                            <div
+                                class="w-20 h-20 rounded-md bg-content-primary flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white"
+                                    >primary</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-content-secondary flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white"
+                                    >secondary</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-content-tertiary flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white"
+                                    >tertiary</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SRS -->
+                    <div>
+                        <div class="text-[11px] text-content-tertiary mb-3">
+                            SRS Semantic
+                        </div>
+                        <div class="flex gap-3">
+                            <div
+                                class="w-20 h-20 rounded-md bg-srs-again flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white"
+                                    >again</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-srs-hard flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white">hard</span>
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-srs-good flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white">good</span>
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-srs-easy flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white">easy</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accent -->
+                    <div>
+                        <div class="text-[11px] text-content-tertiary mb-3">
+                            Accent
+                        </div>
+                        <div class="flex gap-3">
+                            <div
+                                class="w-20 h-20 rounded-md bg-accent flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-white"
+                                    >accent</span
+                                >
+                            </div>
+                            <div
+                                class="w-20 h-20 rounded-md bg-accent-soft border border-accent/15 flex items-end p-2"
+                            >
+                                <span class="text-[10px] text-accent"
+                                    >soft</span
+                                >
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </body>
+</html>
