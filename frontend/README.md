@@ -1,94 +1,126 @@
 # GSAT Vocabulary Website - Frontend
 
-This directory contains the frontend application for the GSAT Vocabulary Learning Platform.
+A high-performance vocabulary learning platform for GSAT (General Scholastic Ability Test) preparation, built with modern web technologies.
 
-## Directory Structure
+## Tech Stack
 
-```
-frontend/
-├── index.html                    # Main HTML file
-├── app.js                        # Application logic and state management
-└── README.md                     # This file
-```
+- **Bun** - Fast JavaScript runtime and package manager
+- **Svelte 5** - Reactive UI framework with runes
+- **TypeScript** - Type-safe development
+- **Vite** - Next-generation build tool
+- **Tailwind CSS** - Utility-first CSS framework
 
 ## Features
 
 ### Browse Mode
-- Search and filter vocabulary
+- **Virtual Scrolling** - Efficiently renders 7000+ words without performance degradation
+- Search and filter vocabulary by frequency and part of speech
 - View word details with definitions and examples
 - Listen to pronunciation audio
 - Grid or list view options
 
 ### Flashcard Mode
-- Interactive card flipping
+- Interactive card flipping with smooth animations
 - Mark words as mastered or needs review
-- Audio playback for pronunciation practice
-- Progress tracking with localStorage
+- Auto-play pronunciation
+- Progress tracking with localStorage persistence
+- Export review list functionality
 
 ### Quiz Mode
+- **Multiple Choice** - Definition to word / Word to definition
+- **Spelling Test** - Listen and spell the word
+- **Fill-in-the-Blank** - Context-based learning
+- Retry incorrect answers feature
 
-#### Multiple Choice
-- Definition to word matching
-- Word to definition matching
+## Performance Improvements
 
-#### Spelling Test
-- Listen to audio and spell the word
-- See definition and spell the word
+The main performance optimization is **Virtual Scrolling**. The previous vanilla JS implementation rendered all 7000+ DOM nodes at once, causing:
 
-#### Fill-in-the-Blank
-- Complete sentences with correct words
-- Context-based learning
+- Slow initial render
+- Laggy scrolling
+- High memory usage
+- Full re-renders on filter changes
+
+With virtual scrolling, only ~20-30 visible items are rendered at any time, regardless of list size. Combined with Svelte 5's compiled reactivity, this eliminates the manual DOM manipulation overhead.
+
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── lib/
+│   │   ├── components/
+│   │   │   ├── Header.svelte
+│   │   │   ├── Sidebar.svelte
+│   │   │   ├── BrowseView.svelte
+│   │   │   ├── WordList.svelte      # Virtual scrolling list
+│   │   │   ├── WordDetail.svelte
+│   │   │   ├── FlashcardView.svelte
+│   │   │   └── QuizView.svelte
+│   │   ├── stores/
+│   │   │   ├── app.svelte.ts        # App state (mode, mobile, etc.)
+│   │   │   ├── vocab.svelte.ts      # Vocabulary data & filters
+│   │   │   ├── flashcard.svelte.ts
+│   │   │   └── quiz.svelte.ts
+│   │   ├── api.ts                   # API client with caching
+│   │   └── types.ts                 # TypeScript definitions
+│   ├── App.svelte
+│   └── main.ts
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── svelte.config.js
+```
+
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) v1.0+
+
+### Install Dependencies
+
+```bash
+bun install
+```
+
+### Start Development Server
+
+```bash
+bun run dev
+```
+
+The app will be available at `http://localhost:5173`.
+
+### Type Checking
+
+```bash
+bun run check
+```
+
+### Build for Production
+
+```bash
+bun run build
+```
+
+The output will be in the `dist/` directory.
+
+### Preview Production Build
+
+```bash
+bun run preview
+```
 
 ## Configuration
 
 ### API Endpoint
 
-Edit `app.js` to configure the API base URL:
+The API base URL is configured in `src/lib/api.ts`:
 
-```javascript
-const CONFIG = {
-    API_BASE: 'https://your-worker-url.workers.dev',
-    AUDIO_ENABLED: true,
-    AUDIO_PREFETCH_COUNT: 2
-};
-```
-
-## Development
-
-### Local Development
-
-Since this is a static site, you can serve it with any local server:
-
-```bash
-# Using Python
-python -m http.server 8000
-
-# Using Node.js http-server
-npx http-server
-
-# Using PHP
-php -S localhost:8000
-```
-
-Then open `http://localhost:8000` in your browser.
-
-### File Structure
-
-```javascript
-// app.js structure:
-- CONFIG                  // Application configuration
-- AppLocks                // Request locks to prevent duplicate calls
-- AppState                // Global application state
-  - currentMode           // browse | flashcard | quiz
-  - vocabIndex           // Vocabulary index data
-  - searchIndex          // Search index data
-  - currentFilters       // Active filters
-  - browseState          // Browse mode state
-  - flashcardState       // Flashcard mode state
-  - quizState            // Quiz mode state
-- API functions           // Data fetching functions
-- UI functions            // DOM manipulation functions
-- Event handlers          // User interaction handlers
+```typescript
+const API_BASE = "https://gsat-vocab-api.vic0407lu.workers.dev";
 ```
 
 ## Deployment
@@ -96,102 +128,43 @@ Then open `http://localhost:8000` in your browser.
 ### Cloudflare Pages
 
 ```bash
-# Build (from project root)
-./deploy.sh pages
-
-# Or manually
-wrangler pages deploy frontend --project-name=gsat-vocab
+# Build and deploy
+bun run build
+wrangler pages deploy dist --project-name=gsat-vocab
 ```
 
 ### Alternative Hosting
 
-Since this is a static site, you can deploy to:
+Since this builds to static files, you can deploy to:
 - Netlify
 - Vercel
 - GitHub Pages
 - AWS S3 + CloudFront
 - Any static hosting service
 
-Just deploy the contents of the `frontend/` directory.
-
-## Technology Stack
-
-- **Vanilla JavaScript** - No frameworks, pure JS
-- **Tailwind CSS** - Utility-first CSS (via CDN)
-- **HTML5 Audio API** - Audio playback
-- **LocalStorage API** - Progress persistence
-- **Fetch API** - API communication
-
 ## Browser Support
 
 - Modern browsers (Chrome, Firefox, Safari, Edge)
-- ES6+ features required
+- ES2020+ features required
 - LocalStorage support required
-- Audio API support required
 
-## Features Implementation
-
-### Data Loading
-
-1. Initial load fetches vocabulary index
-2. Search index loaded on demand
-3. Word details loaded lazily on click
-4. Audio files loaded on demand with prefetching
+## Architecture Notes
 
 ### State Management
 
-All state stored in `AppState` object:
-- No external state management library
-- Direct DOM manipulation
-- LocalStorage for persistence
+Uses Svelte 5 runes (`$state`, `$derived`, `$effect`) for reactive state:
+- Global stores export getter functions to access reactive state
+- State mutations through dedicated functions
+- Derived values computed automatically
 
-### Performance Optimizations
+### Virtual Scrolling Implementation
 
-- Lazy loading of word details
-- Audio prefetching for smooth flashcard experience
-- Debounced search input
-- Cached API responses
-- Incremental rendering for large lists
+The `WordList.svelte` component implements virtual scrolling:
+1. Calculates visible range based on scroll position
+2. Only renders items within the visible range + overscan
+3. Uses absolute positioning within a spacer div
+4. Handles both list and grid modes
 
-### Audio Handling
+### API Caching
 
-- Automatic prefetching in flashcard mode
-- Play/pause controls
-- Error handling for missing audio
-- Fallback to text-to-speech (future)
-
-## User Data
-
-All user progress is stored locally using `localStorage`:
-
-```javascript
-// Flashcard progress
-localStorage.getItem('flashcardProgress')
-
-// Quiz results
-localStorage.getItem('quizResults')
-
-// User preferences
-localStorage.getItem('userPreferences')
-```
-
-No server-side user data storage in current version.
-
-## Future Enhancements
-
-- User authentication
-- Cloud sync for progress
-- Offline support with Service Workers
-- Progressive Web App (PWA)
-- Mobile app version
-- Advanced analytics
-- Spaced repetition algorithm
-- Social features (leaderboards, sharing)
-
-## Notes
-
-- All UI text is in Traditional Chinese
-- API responses include both English and Chinese
-- Audio files are served from Cloudflare R2
-- No build process required (vanilla JS)
-- Mobile-responsive design
+The API client includes a simple in-memory cache with TTL to reduce redundant network requests.
