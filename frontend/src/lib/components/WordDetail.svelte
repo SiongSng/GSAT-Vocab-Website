@@ -16,12 +16,30 @@
     let nextOffset = $state(0);
     let totalSentences = $state(0);
     let audioPlayer: HTMLAudioElement | null = null;
+    let showSkeleton = $state(false);
+    let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
     const word = $derived(vocab.selectedWord);
     const selectedLemma = $derived(vocab.selectedLemma);
-    const isLoadingDetail = $derived(
+    const isActuallyLoading = $derived(
         selectedLemma !== null && word?.lemma !== selectedLemma,
     );
+
+    $effect(() => {
+        if (isActuallyLoading) {
+            skeletonTimer = setTimeout(() => {
+                showSkeleton = true;
+            }, 150);
+        } else {
+            if (skeletonTimer) {
+                clearTimeout(skeletonTimer);
+                skeletonTimer = null;
+            }
+            showSkeleton = false;
+        }
+    });
+
+    const isLoadingDetail = $derived(isActuallyLoading && showSkeleton);
 
     const allSentences = $derived.by(() => {
         if (!word?.sentences) return [];

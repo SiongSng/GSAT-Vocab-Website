@@ -228,9 +228,10 @@ export async function generateQuiz(params: {
 }
 
 export function getAudioUrl(lemma: string): string {
-  return `${API_BASE}/api/audio/${encodeURIComponent(lemma)}`;
+  return `${API_BASE}/audio/${encodeURIComponent(lemma)}.mp3`;
 }
 
 export function getSentenceAudioUrl(audioFile: string): string {
-  return `${API_BASE}/api/audio/sentence/${encodeURIComponent(audioFile)}`;
+  const base = (audioFile || "").split("/").pop() || audioFile;
+  return `${API_BASE}/audio/sentences/${encodeURIComponent(base)}`;
 }

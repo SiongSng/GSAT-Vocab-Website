@@ -45,7 +45,6 @@ GSAT-Vocab-Website is a vocabulary learning platform for Taiwan's GSAT (General 
 ```bash
 cd frontend
 bun install        # Install dependencies
-bun run dev        # Start dev server
 bun run build      # Production build
 bun run preview    # Preview production build
 ```
@@ -87,5 +86,6 @@ The word list contains 5000+ items. Key optimizations:
 | `GET /api/vocab/random` | Random word (supports filters) |
 | `GET /api/search-index` | Search index by POS |
 | `GET /api/quiz/generate` | Generate quiz questions |
-| `GET /api/audio/:lemma` | Word pronunciation audio |
 | `GET /api/vocab/:lemma/sentences` | Paginated sentences |
+| `GET /audio/:lemma.mp3` | Word pronunciation audio |
+| `GET /audio/sentences/:filename` | Sentence audio |

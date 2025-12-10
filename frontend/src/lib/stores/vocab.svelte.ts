@@ -7,6 +7,7 @@ import {
   type SearchIndex,
   type WordDetail,
 } from "$lib/api";
+
 import type { PosFilter } from "$lib/types";
 
 let vocabIndex: VocabIndexItem[] = $state.raw([]);
@@ -22,11 +23,7 @@ let freqMin = $state(1);
 let freqMax = $state(20);
 let pos: PosFilter = $state("all");
 
-let isReady = $state(false);
-
 const filteredWords = $derived.by(() => {
-  if (!isReady) return [];
-
   let result = vocabIndex;
 
   if (freqMin > 0 || freqMax < freqRange.max) {
@@ -67,9 +64,7 @@ export function getVocabStore() {
     get isLoading() {
       return isLoading;
     },
-    get isReady() {
-      return isReady;
-    },
+
     get error() {
       return error;
     },
@@ -135,12 +130,6 @@ export async function loadVocabData(): Promise<void> {
       }
       freqRange = { min, max };
     }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        isReady = true;
-      });
-    });
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load vocabulary data";
     console.error("Failed to load vocab data:", e);
