@@ -31,6 +31,31 @@
 - 增加精選例句之音檔
 - 增加選擇題,拼寫測驗,填空測驗與字卡模式
 
+## 專案結構
+
+```
+GSAT-Vocab-Website/
+├── backend/                      # 後端相關程式碼
+│   ├── api/                      # Cloudflare Workers API
+│   │   ├── worker-api.js        # API worker 程式碼
+│   │   └── wrangler.toml        # Cloudflare Workers 配置
+│   ├── scripts/                  # 資料處理腳本
+│   │   ├── ceec_scraper.py      # PDF 爬蟲
+│   │   ├── extract_words.py     # 提取單字並生成 AI 釋義
+│   │   ├── generate_tts_audio.py # 生成單字發音
+│   │   ├── generate_featured_sentence_audio.py # 生成例句音頻
+│   │   ├── split_vocab_details.py # 數據分片
+│   │   └── ...                  # 其他處理腳本
+│   ├── requirements.txt          # Python 依賴
+│   └── README.md                 # 後端說明文件
+├── frontend/                     # 前端應用程式
+│   ├── index.html               # 主頁面
+│   ├── app.js                   # 應用邏輯
+│   └── README.md                # 前端說明文件
+├── deploy.sh                    # 部署腳本
+└── README.md                    # 本文檔
+```
+
 ## 系統架構
 
 ```
@@ -63,6 +88,7 @@ source venv/bin/activate  # macOS/Linux
 # 或 venv\Scripts\activate  # Windows
 
 # 安裝 Python 依賴
+cd backend
 pip install -r requirements.txt
 
 # 下載 spaCy 英文模型
@@ -100,6 +126,9 @@ R2_SECRET_ACCESS_KEY=your-r2-secret-key
 #### 1. 資料收集與處理
 
 ```bash
+# 切換到後端腳本目錄
+cd backend/scripts
+
 # 步驟 1: 下載試題 PDF
 python ceec_scraper.py
 
@@ -156,15 +185,15 @@ done
 #### 6. 部署後端 API
 
 ```bash
-# 步驟 9: 配置 wrangler-api.toml
+# 步驟 9: 配置 backend/api/wrangler.toml
 # 編輯文件，填入正確的 bucket_name 和 KV namespace ID
 
 # 創建 KV Namespace
 wrangler kv:namespace create "VOCAB_CACHE"
-# 記下返回的 ID，更新到 wrangler-api.toml
+# 記下返回的 ID，更新到 backend/api/wrangler.toml
 
 # 部署 Worker
-wrangler deploy --config wrangler-api.toml
+wrangler deploy --config backend/api/wrangler.toml
 # 記下 Worker URL，例如: https://gsat-vocab-api.your-account.workers.dev
 ```
 
@@ -172,13 +201,13 @@ wrangler deploy --config wrangler-api.toml
 
 ```bash
 # 步驟 10: 更新前端 API 配置
-# 編輯 app.js，將 API_BASE 設置為你的 Worker URL
+# 編輯 frontend/app.js，將 API_BASE 設置為你的 Worker URL
 # 例如: const API_BASE = 'https://gsat-vocab-api.your-account.workers.dev';
 
 # 創建部署目錄
 mkdir -p dist
-cp index-v2.html dist/index.html
-cp app.js dist/app.js
+cp frontend/index.html dist/index.html
+cp frontend/app.js dist/app.js
 
 # 部署到 Cloudflare Pages
 wrangler pages deploy dist --project-name=gsat-vocab
@@ -191,39 +220,39 @@ wrangler pages deploy dist --project-name=gsat-vocab
 
 ## 主要文件說明
 
-### 資料處理腳本
+### 資料處理腳本 (`backend/scripts/`)
 
 | 文件 | 功能 | 輸出 |
 |------|------|------|
 | `ceec_scraper.py` | 從大考中心爬取學測英文試題 PDF | `ceec_english_papers/*.pdf` |
 | `extract_words.py` | PDF 提取、NLP 分析、AI 釋義生成 | `vocab_data.json` |
-| `generate_polysemy.py` | 使用 Batch API 進行多義分析（未完成） | `vocab_data_enriched.json` |
+| `generate_polysemy.py` | 使用 Batch API 進行多義分析 | `vocab_data_enriched.json` |
 | `generate_tts_audio.py` | 生成單字發音 | `tts_audio/*.mp3` |
-| `generate_sentence_audio.py` | 生成例句音頻 | `tts_audio/sentences/*.mp3` |
-| `optimize_data_structure.py` | 優化數據結構 | 索引和詳情文件 |
+| `generate_featured_sentence_audio.py` | 生成例句音頻 | `tts_audio/sentences/*.mp3` |
+| `split_vocab_details.py` | 數據分片優化 | 索引和詳情文件 |
 | `r2_up.py` | 上傳音頻至 R2（增量上傳） | - |
-| `json_edt.py` | 單字資料編輯工具 | - |
+| `upload_vocab_details.py` | 上傳數據至 R2 | - |
 
-### 後端文件
+### 後端 API (`backend/api/`)
 
 | 文件 | 功能 |
 |------|------|
 | `worker-api.js` | Cloudflare Workers API 代碼 |
-| `wrangler-api.toml` | Workers 部署配置 |
+| `wrangler.toml` | Workers 部署配置 |
 
-### 前端文件
+### 前端 (`frontend/`)
 
 | 文件 | 功能 |
 |------|------|
-| `index-v2.html` | 新版前端 HTML |
-| `app.js` | 前端應用邏輯 |
+| `index.html` | 主頁面 HTML |
+| `app.js` | 前端應用邏輯與狀態管理 |
 
 ### 部署文件
 
 | 文件 | 功能 |
 |------|------|
 | `deploy.sh` | 自動化部署腳本 |
-| `README-V2.md` | 本文檔 |
+| `README.md` | 本文檔 |
 
 ## API 文檔
 
