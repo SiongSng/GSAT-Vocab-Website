@@ -4,38 +4,30 @@
 
     const srs = getSRSStore();
 
-    const progressPercent = $derived(
-        srs.studyQueue && srs.studyQueue.length > 0
-            ? (srs.currentCardIndex / srs.studyQueue.length) * 100
+    const progressPct = $derived(
+        srs.progress.total > 0
+            ? (srs.progress.current / srs.progress.total) * 100
             : 0,
     );
 
-    const newRemaining = $derived(
-        srs.studyQueue
-            ? srs.studyQueue.filter(
-                  (c, i) => i >= srs.currentCardIndex && c.state === State.New,
-              ).length
-            : 0,
+    const newCount = $derived(
+        srs.studyQueue?.filter(
+            (c, i) => i >= srs.currentCardIndex && c.state === State.New,
+        ).length || 0,
     );
 
-    const learningRemaining = $derived(
-        srs.studyQueue
-            ? srs.studyQueue.filter(
-                  (c, i) =>
-                      i >= srs.currentCardIndex &&
-                      (c.state === State.Learning ||
-                          c.state === State.Relearning),
-              ).length
-            : 0,
+    const learningCount = $derived(
+        srs.studyQueue?.filter(
+            (c, i) =>
+                i >= srs.currentCardIndex &&
+                (c.state === State.Learning || c.state === State.Relearning),
+        ).length || 0,
     );
 
-    const reviewRemaining = $derived(
-        srs.studyQueue
-            ? srs.studyQueue.filter(
-                  (c, i) =>
-                      i >= srs.currentCardIndex && c.state === State.Review,
-              ).length
-            : 0,
+    const reviewCount = $derived(
+        srs.studyQueue?.filter(
+            (c, i) => i >= srs.currentCardIndex && c.state === State.Review,
+        ).length || 0,
     );
 </script>
 
@@ -43,24 +35,22 @@
     <div class="h-1 bg-surface-page rounded-full overflow-hidden mb-3">
         <div
             class="h-full bg-accent/60 rounded-full transition-all duration-300"
-            style="width: {progressPercent}%"
+            style="width: {progressPct}%"
         ></div>
     </div>
-    <div
-        class="flex items-center justify-center gap-4 text-sm text-content-tertiary"
-    >
+    <div class="flex items-center justify-center gap-4 text-sm text-content-tertiary">
         <span class="font-medium text-content-secondary">
             {srs.progress.current} / {srs.progress.total}
         </span>
         <span class="text-border-hover">•</span>
-        {#if newRemaining > 0}
-            <span class="text-srs-easy">{newRemaining} 新</span>
+        {#if newCount > 0}
+            <span class="text-srs-easy">{newCount} 待學</span>
         {/if}
-        {#if learningRemaining > 0}
-            <span class="text-srs-hard">{learningRemaining} 學習中</span>
+        {#if learningCount > 0}
+            <span class="text-srs-hard">{learningCount} 學習中</span>
         {/if}
-        {#if reviewRemaining > 0}
-            <span class="text-srs-again">{reviewRemaining} 複習</span>
+        {#if reviewCount > 0}
+            <span class="text-srs-again">{reviewCount} 待複習</span>
         {/if}
     </div>
 </div>

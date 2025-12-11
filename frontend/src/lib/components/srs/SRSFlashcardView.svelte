@@ -51,8 +51,8 @@
         }
     }
 
-    function handleStart(newCardPool: string[]) {
-        startStudySession({ newLimit: getNewCardLimit(), newCardPool });
+    function handleStart(newCardPool: string[], excludeLemmas: Set<string>) {
+        startStudySession({ newLimit: getNewCardLimit(), newCardPool, excludeLemmas });
         viewState = "studying";
     }
 

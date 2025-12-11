@@ -187,9 +187,11 @@ export function startStudySession(options?: {
   newLimit?: number;
   reviewLimit?: number;
   newCardPool?: string[];
+  excludeLemmas?: Set<string>;
 }): void {
   const now = new Date();
   const queue: SRSCard[] = [];
+  const excludeSet = options?.excludeLemmas ?? new Set();
 
   const newLimit =
     options?.newLimit ??
@@ -199,9 +201,11 @@ export function startStudySession(options?: {
     Math.max(0, store.dailyLimits.reviews - store.reviewsToday);
 
   const learningCards = getLearningCards().filter(
-    (c) => new Date(c.due) <= now,
+    (c) => new Date(c.due) <= now && !excludeSet.has(c.lemma),
   );
-  const reviewCards = getReviewCards(now).slice(0, reviewLimit);
+  const reviewCards = getReviewCards(now)
+    .filter((c) => !excludeSet.has(c.lemma))
+    .slice(0, reviewLimit);
 
   let newCards: SRSCard[];
   if (options?.newCardPool && options.newCardPool.length > 0) {
@@ -210,7 +214,9 @@ export function startStudySession(options?: {
       .filter((c) => poolSet.has(c.lemma))
       .slice(0, newLimit);
   } else {
-    newCards = getNewCards().slice(0, newLimit);
+    newCards = getNewCards()
+      .filter((c) => !excludeSet.has(c.lemma))
+      .slice(0, newLimit);
   }
 
   queue.push(...learningCards);

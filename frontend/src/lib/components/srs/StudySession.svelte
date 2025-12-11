@@ -8,16 +8,20 @@
         showAnswer,
         playCurrentCardAudio,
     } from "$lib/stores/srs.svelte";
+    import { getAppStore } from "$lib/stores/app.svelte";
     import { fetchWordDetail } from "$lib/api";
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
     import ProgressBar from "./ProgressBar.svelte";
 
     const srs = getSRSStore();
+    const app = getAppStore();
 
     let wordDetail: VocabDetail | null = $state(null);
     let isLoadingDetail = $state(false);
     let autoSpeak = $state(true);
+
+    const ratingMap = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
     $effect(() => {
         try {
@@ -64,9 +68,15 @@
     }
 
     function handleKeydown(event: KeyboardEvent) {
-        if (event.key === " " && !srs.isFlipped) {
+        if (event.key === " ") {
             event.preventDefault();
-            showAnswer();
+            if (!srs.isFlipped) {
+                showAnswer();
+            }
+        } else if (srs.isFlipped && event.key >= "1" && event.key <= "4") {
+            event.preventDefault();
+            const index = parseInt(event.key) - 1;
+            handleRate(ratingMap[index]);
         }
     }
 </script>
@@ -85,7 +95,7 @@
 
         {#if srs.isFlipped}
             <div class="mt-5">
-                <RatingButtons onRate={handleRate} />
+                <RatingButtons onRate={handleRate} showHint={!app.isMobile} />
             </div>
         {/if}
 

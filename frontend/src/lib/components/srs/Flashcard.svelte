@@ -1,5 +1,4 @@
 <script lang="ts">
-    import { State } from "ts-fsrs";
     import type { SRSCard } from "$lib/types/srs";
     import type { VocabDetail } from "$lib/types";
     import StateBadge from "./StateBadge.svelte";
@@ -27,12 +26,45 @@
         }
         return "word";
     });
+
+    function highlightWord(text: string, lemma: string): string {
+        const variants = getInflectionVariants(lemma);
+        const pattern = variants
+            .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+            .join("|");
+        const regex = new RegExp(`\\b(${pattern})\\b`, "gi");
+        return text.replace(regex, '<mark class="highlight">$1</mark>');
+    }
+
+    function getInflectionVariants(lemma: string): string[] {
+        const lower = lemma.toLowerCase();
+        const variants = [lemma, lower];
+
+        variants.push(lower + "s");
+        variants.push(lower + "es");
+        variants.push(lower + "ed");
+        variants.push(lower + "ing");
+        variants.push(lower + "er");
+        variants.push(lower + "est");
+        variants.push(lower + "ly");
+
+        if (lower.endsWith("e")) {
+            variants.push(lower.slice(0, -1) + "ing");
+            variants.push(lower + "d");
+        }
+        if (lower.endsWith("y")) {
+            variants.push(lower.slice(0, -1) + "ies");
+            variants.push(lower.slice(0, -1) + "ied");
+        }
+
+        return variants;
+    }
 </script>
 
 <div
     class="flashcard-container perspective-1000 cursor-pointer"
     onclick={onFlip}
-    onkeydown={(e) => e.key === " " && onFlip()}
+    onkeydown={(e) => e.key === "Enter" && onFlip()}
     role="button"
     tabindex="0"
 >
@@ -43,7 +75,7 @@
     >
         <!-- Front -->
         <div
-            class="flashcard-face backface-hidden bg-surface-primary rounded-lg border border-border shadow-card p-8 min-h-[340px] flex flex-col"
+            class="flashcard-face flashcard-front backface-hidden bg-surface-primary rounded-lg border border-border shadow-card p-8 flex flex-col"
         >
             <div class="flex items-center justify-between">
                 <StateBadge state={card.state} />
@@ -72,7 +104,7 @@
             </div>
 
             <div
-                class="flex-1 flex flex-col items-center justify-center text-center"
+                class="flex-1 flex flex-col items-center justify-center text-center py-12"
             >
                 <h2
                     class="text-3xl lg:text-4xl font-semibold tracking-tight text-content-primary mb-2"
@@ -91,7 +123,7 @@
 
         <!-- Back -->
         <div
-            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border shadow-card p-8 min-h-[340px] flex flex-col"
+            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border shadow-card p-8 flex flex-col"
         >
             <div class="flex items-center justify-between mb-5">
                 <StateBadge state={card.state} />
@@ -127,9 +159,9 @@
                 </h2>
             </div>
 
-            <div class="flex-1 space-y-4 overflow-y-auto px-1">
+            <div class="space-y-4 px-1">
                 {#if isLoading}
-                    <div class="flex items-center justify-center h-full">
+                    <div class="flex items-center justify-center py-8">
                         <div class="text-base text-content-tertiary">
                             載入中...
                         </div>
@@ -161,8 +193,18 @@
                             {/if}
                         </div>
                     {/each}
+
+                    {#if wordDetail.sentences?.preview && wordDetail.sentences.preview.length > 0}
+                        <div class="pt-3 mt-3 border-t border-border/50">
+                            {#each wordDetail.sentences.preview.slice(0, 1) as sentence}
+                                <p class="text-sm text-content-secondary leading-relaxed">
+                                    {@html highlightWord(sentence.text, card.lemma)}
+                                </p>
+                            {/each}
+                        </div>
+                    {/if}
                 {:else}
-                    <div class="flex items-center justify-center h-full">
+                    <div class="flex items-center justify-center py-8">
                         <div class="text-base text-content-tertiary">
                             暫無釋義
                         </div>
@@ -191,28 +233,33 @@
     }
 
     .flashcard-inner {
-        position: relative;
-        width: 100%;
-        height: 100%;
+        display: grid;
     }
 
     .flashcard-face {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        top: 0;
-        left: 0;
-    }
-
-    .flashcard-container {
-        min-height: 340px;
+        grid-area: 1 / 1;
+        min-height: 280px;
     }
 
     .flashcard-inner:not(.rotate-y-180) .flashcard-back {
         pointer-events: none;
     }
 
-    .flashcard-inner.rotate-y-180 .flashcard-face:not(.flashcard-back) {
+    .flashcard-inner.rotate-y-180 .flashcard-front {
         pointer-events: none;
+    }
+
+    :global(.highlight) {
+        background: linear-gradient(
+            to top,
+            var(--color-highlight) 0%,
+            var(--color-highlight) 60%,
+            transparent 60%
+        );
+        padding: 0 2px;
+        margin: 0 -2px;
+        border-radius: 2px;
+        font-weight: 500;
+        color: var(--color-content-primary);
     }
 </style>

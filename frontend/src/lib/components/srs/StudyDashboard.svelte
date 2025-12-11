@@ -5,7 +5,7 @@
     import { getNewCards } from "$lib/stores/srs-storage";
 
     interface Props {
-        onStart: (newCardPool: string[]) => void;
+        onStart: (newCardPool: string[], excludeLemmas: Set<string>) => void;
     }
 
     let { onStart }: Props = $props();
@@ -127,6 +127,14 @@
             filteredNewCardPool.length > 0,
     );
 
+    const excludedLemmas = $derived.by(() => {
+        if (!excludePropn) return new Set<string>();
+        const propnLemmas = (vocab.index || [])
+            .filter((w) => w.primary_pos === "PROPN")
+            .map((w) => w.lemma);
+        return new Set(propnLemmas);
+    });
+
     function togglePos(pos: string) {
         const newSet = new Set(selectedPos);
         if (newSet.has(pos)) {
@@ -139,7 +147,7 @@
 
     function handleStart() {
         saveSettings();
-        onStart(filteredNewCardPool);
+        onStart(filteredNewCardPool, excludedLemmas);
     }
 </script>
 

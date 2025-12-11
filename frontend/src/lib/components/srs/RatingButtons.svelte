@@ -4,9 +4,10 @@
 
     interface Props {
         onRate: (rating: Rating) => void;
+        showHint?: boolean;
     }
 
-    let { onRate }: Props = $props();
+    let { onRate, showHint = false }: Props = $props();
 
     const buttons = [
         { rating: Rating.Again, label: "忘記", color: "srs-again" },
@@ -14,16 +15,7 @@
         { rating: Rating.Good, label: "普通", color: "srs-good" },
         { rating: Rating.Easy, label: "簡單", color: "srs-easy" },
     ] as const;
-
-    function handleKeydown(event: KeyboardEvent) {
-        if (event.key >= "1" && event.key <= "4") {
-            const index = parseInt(event.key) - 1;
-            onRate(buttons[index].rating);
-        }
-    }
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class="grid grid-cols-4 gap-2">
     {#each buttons as { rating, label, color }}
@@ -44,9 +36,11 @@
     {/each}
 </div>
 
-<div class="mt-3 text-center">
-    <p class="text-sm text-content-tertiary/50">按 1、2、3、4 快速選擇</p>
-</div>
+{#if showHint}
+    <div class="mt-3 text-center">
+        <p class="text-xs text-content-tertiary/50">1 · 2 · 3 · 4</p>
+    </div>
+{/if}
 
 <style>
     .rating-button[data-color="srs-again"]:hover {
