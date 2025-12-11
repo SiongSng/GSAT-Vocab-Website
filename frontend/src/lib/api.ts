@@ -187,9 +187,9 @@ export async function fetchMoreSentences(
 ): Promise<{
   items: SentencePreview[];
   next_offset: number;
-  total_count: number;
+  total: number;
 }> {
-  const url = `${API_BASE}/api/vocab/${encodeURIComponent(lemma)}/sentences?offset=${offset}&limit=${limit}`;
+  const url = `${API_BASE}/api/vocab/sentences?lemma=${encodeURIComponent(lemma)}&offset=${offset}&limit=${limit}`;
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch sentences: ${response.status}`);

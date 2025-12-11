@@ -40,6 +40,14 @@
         }
     });
 
+    $effect(() => {
+        if (word) {
+            additionalSentences = [];
+            nextOffset = word.sentences?.next_offset ?? 0;
+            totalSentences = word.sentences?.total_count ?? 0;
+        }
+    });
+
     const isLoadingDetail = $derived(isActuallyLoading && showSkeleton);
 
     const allSentences = $derived.by(() => {
@@ -50,6 +58,24 @@
     const hasMoreSentences = $derived(
         word?.sentences ? nextOffset < totalSentences : false,
     );
+
+    function observeSentinel(node: HTMLElement) {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && !isLoadingMoreSentences) {
+                    loadMoreSentences();
+                }
+            },
+            { rootMargin: "100px" },
+        );
+        observer.observe(node);
+
+        return {
+            destroy() {
+                observer.disconnect();
+            },
+        };
+    }
 
     function playWordAudio() {
         if (!word) return;
@@ -88,7 +114,7 @@
             const data = await fetchMoreSentences(word.lemma, nextOffset, 5);
             additionalSentences = [...additionalSentences, ...data.items];
             nextOffset = data.next_offset;
-            totalSentences = data.total_count;
+            totalSentences = data.total;
         } catch (e) {
             console.error("Failed to load more sentences:", e);
         } finally {
@@ -417,9 +443,9 @@
                         </span>
                     </h3>
                     <div class="space-y-2.5">
-                        {#each allSentences as sentence, i}
+                        {#each allSentences as sentence, i (sentence.text)}
                             <div
-                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border"
+                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border animate-fade-in"
                             >
                                 <div class="flex items-start gap-3">
                                     <span
@@ -475,18 +501,12 @@
                     </div>
 
                     {#if hasMoreSentences}
-                        <button
-                            class="mt-4 w-full py-2.5 px-4 bg-surface-primary hover:bg-surface-hover border border-border rounded-lg text-sm text-content-secondary font-medium transition-colors disabled:opacity-50"
-                            onclick={loadMoreSentences}
-                            disabled={isLoadingMoreSentences}
-                            type="button"
+                        <div
+                            use:observeSentinel
+                            class="mt-4 flex items-center justify-center py-6"
                         >
-                            {#if isLoadingMoreSentences}
-                                載入中...
-                            {:else}
-                                載入更多例句
-                            {/if}
-                        </button>
+                            <div class="loading-spinner"></div>
+                        </div>
                     {/if}
                 </div>
             {/if}
@@ -498,14 +518,42 @@
     :global(.highlight) {
         background: linear-gradient(
             to top,
-            rgba(32, 125, 255, 0.15) 0%,
-            rgba(32, 125, 255, 0.15) 45%,
-            transparent 45%
+            rgba(251, 191, 36, 0.35) 0%,
+            rgba(251, 191, 36, 0.35) 60%,
+            transparent 60%
         );
-        padding: 0 2px;
-        margin: 0 -2px;
+        padding: 0 3px;
+        margin: 0 -3px;
         border-radius: 2px;
         font-weight: 500;
+    }
+
+    .animate-fade-in {
+        animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .loading-spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--color-border);
+        border-top-color: var(--color-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     .detail-panel {
