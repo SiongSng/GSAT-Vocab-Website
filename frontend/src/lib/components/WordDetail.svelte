@@ -1,10 +1,11 @@
 <script lang="ts">
-    import { getVocabStore, clearSelectedWord } from "$lib/stores/vocab.svelte";
+    import { tick } from "svelte";
+    import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
     import {
+        fetchMoreSentences,
         getAudioUrl,
         getSentenceAudioUrl,
-        fetchMoreSentences,
         type SentencePreview,
     } from "$lib/api";
 
@@ -59,20 +60,24 @@
         audioPlayer.play().catch(() => {});
     }
 
-    function playSentenceAudio(audioFile: string) {
+    function playSentenceAudio(filename: string) {
         if (!audioPlayer) {
             audioPlayer = new Audio();
         }
-        audioPlayer.src = getSentenceAudioUrl(audioFile);
+        audioPlayer.src = getSentenceAudioUrl(filename);
         audioPlayer.play().catch(() => {});
     }
 
     function handleBackClick() {
-        if (app.isMobile) {
-            closeMobileDetail();
-        } else {
-            clearSelectedWord();
-        }
+        closeMobileDetail();
+        tick().then(() => {
+            const listContainer = document.querySelector(
+                ".word-list-container",
+            );
+            if (listContainer) {
+                listContainer.scrollTop = 0;
+            }
+        });
     }
 
     async function loadMoreSentences() {
@@ -97,25 +102,28 @@
             .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
             .join("|");
         const regex = new RegExp(`\\b(${pattern})\\b`, "gi");
-        return text.replace(regex, '<mark class="highlight">$1</mark>');
+        return text.replace(regex, '<span class="highlight">$1</span>');
     }
 
     function getInflectionVariants(lemma: string): string[] {
         const lower = lemma.toLowerCase();
         const variants = [lemma, lower];
 
+        variants.push(lower + "s");
+        variants.push(lower + "es");
+        variants.push(lower + "ed");
+        variants.push(lower + "ing");
+        variants.push(lower + "er");
+        variants.push(lower + "est");
+        variants.push(lower + "ly");
+
+        if (lower.endsWith("e")) {
+            variants.push(lower.slice(0, -1) + "ing");
+            variants.push(lower + "d");
+        }
         if (lower.endsWith("y")) {
             variants.push(lower.slice(0, -1) + "ies");
             variants.push(lower.slice(0, -1) + "ied");
-        } else if (lower.endsWith("e")) {
-            variants.push(lower + "s");
-            variants.push(lower + "d");
-            variants.push(lower.slice(0, -1) + "ing");
-        } else {
-            variants.push(lower + "s");
-            variants.push(lower + "es");
-            variants.push(lower + "ed");
-            variants.push(lower + "ing");
         }
 
         return variants;
@@ -125,7 +133,6 @@
         const idx = vocab.index.findIndex((w) => w.lemma === lemma);
         return idx >= 0 ? idx + 1 : 0;
     }
-
     $effect(() => {
         if (word) {
             additionalSentences = [];
@@ -136,21 +143,21 @@
 </script>
 
 <section
-    class="detail-panel h-full w-full bg-slate-50 p-6 lg:p-8 overflow-y-auto relative"
+    class="detail-panel h-full w-full bg-surface-page p-6 lg:p-8 overflow-y-auto relative"
 >
     {#if app.isMobile}
         <button
-            class="lg:hidden absolute top-4 left-4 p-2 rounded-full bg-white/60 backdrop-blur-sm hover:bg-slate-200 z-50"
+            class="lg:hidden absolute top-4 left-4 p-2 rounded-md bg-surface-primary/80 backdrop-blur-sm hover:bg-surface-hover border border-border z-50 transition-colors"
             onclick={handleBackClick}
             type="button"
             aria-label="Back to list"
         >
             <svg
-                class="w-6 h-6 text-slate-700"
+                class="w-5 h-5 text-content-secondary"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
-                stroke-width="2"
+                stroke-width="1.5"
                 stroke="currentColor"
             >
                 <path
@@ -163,61 +170,59 @@
     {/if}
 
     {#if !selectedLemma}
-        <div class="h-full flex flex-col justify-center">
-            <h2 class="text-2xl font-bold text-slate-800">
-                歡迎使用單字探索工具
-            </h2>
-            <p class="mt-2 text-slate-500">
-                從左側開始搜尋、篩選，或點擊「隨機一字」。
-            </p>
-            <div class="mt-12 text-center">
+        <div
+            class="h-full flex flex-col items-center justify-center text-center px-4"
+        >
+            <div
+                class="w-16 h-16 rounded-full bg-surface-secondary flex items-center justify-center mb-5"
+            >
                 <svg
-                    class="w-24 h-24 mx-auto text-slate-300"
+                    class="w-8 h-8 text-content-tertiary"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke-width="1"
+                    stroke-width="1.5"
                     stroke="currentColor"
                 >
                     <path
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z"
-                    />
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z"
+                        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
                     />
                 </svg>
-                <p class="mt-4 text-slate-400">
-                    {vocab.isLoading
-                        ? "正在載入數據..."
-                        : "選擇一個單字開始學習"}
-                </p>
             </div>
+            <h2
+                class="text-xl font-semibold tracking-tight text-content-primary mb-2"
+            >
+                歡迎使用單字探索工具
+            </h2>
+            <p class="text-sm text-content-secondary max-w-xs">
+                {vocab.isLoading
+                    ? "正在載入數據..."
+                    : "從左側開始搜尋、篩選，或點擊「隨機一字」"}
+            </p>
         </div>
     {:else if isLoadingDetail}
         <div class="detail-content pt-12 lg:pt-0">
             <div class="flex items-start justify-between mb-6">
                 <div>
                     <div class="flex items-center gap-3 mb-2">
-                        <div class="skeleton-text h-10 w-40"></div>
-                        <div class="skeleton-circle w-10 h-10"></div>
+                        <div class="skeleton-text h-9 w-36"></div>
+                        <div class="skeleton-circle w-9 h-9"></div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <div class="skeleton-text h-4 w-12"></div>
-                        <div class="skeleton-text h-4 w-20"></div>
+                        <div class="skeleton-text h-4 w-10"></div>
+                        <div class="skeleton-text h-4 w-16"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="meanings-section mb-8">
-                <div class="skeleton-text h-6 w-16 mb-4"></div>
-                <div class="space-y-4">
+            <div class="meanings-section mb-6">
+                <div class="skeleton-text h-5 w-14 mb-3"></div>
+                <div class="space-y-3">
                     {#each [1, 2] as _}
                         <div
-                            class="bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                            class="bg-surface-primary rounded-lg p-4 border border-border"
                         >
                             <div class="flex items-center gap-2 mb-2">
                                 <div class="skeleton-text h-5 w-12"></div>
@@ -230,20 +235,20 @@
                 </div>
             </div>
 
-            <div class="pos-distribution-section mb-8">
-                <div class="skeleton-text h-6 w-20 mb-4"></div>
+            <div class="pos-distribution-section mb-6">
+                <div class="skeleton-text h-5 w-16 mb-3"></div>
                 <div
-                    class="bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                    class="bg-surface-primary rounded-lg p-4 border border-border"
                 >
                     <div class="space-y-3">
                         {#each [1, 2, 3] as _}
                             <div>
-                                <div class="flex justify-between mb-1">
+                                <div class="flex justify-between mb-1.5">
+                                    <div class="skeleton-text h-4 w-14"></div>
                                     <div class="skeleton-text h-4 w-16"></div>
-                                    <div class="skeleton-text h-4 w-20"></div>
                                 </div>
                                 <div
-                                    class="h-2 bg-slate-100 rounded-full overflow-hidden"
+                                    class="h-1.5 bg-surface-secondary rounded-full overflow-hidden"
                                 >
                                     <div
                                         class="skeleton-bar h-full rounded-full"
@@ -256,14 +261,14 @@
             </div>
 
             <div class="sentences-section">
-                <div class="skeleton-text h-6 w-24 mb-4"></div>
-                <div class="space-y-3">
+                <div class="skeleton-text h-5 w-20 mb-3"></div>
+                <div class="space-y-2.5">
                     {#each [1, 2, 3] as _}
                         <div
-                            class="bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                            class="bg-surface-primary rounded-lg p-4 border border-border"
                         >
                             <div class="flex items-start gap-3">
-                                <div class="skeleton-text h-4 w-4 mt-1"></div>
+                                <div class="skeleton-text h-4 w-4 mt-0.5"></div>
                                 <div class="flex-1">
                                     <div
                                         class="skeleton-text h-4 w-full mb-2"
@@ -282,18 +287,18 @@
                 <div>
                     <div class="flex items-center gap-3 mb-2">
                         <h2
-                            class="text-3xl lg:text-4xl font-bold text-indigo-700"
+                            class="text-2xl lg:text-3xl font-semibold tracking-tight text-accent"
                         >
                             {word.lemma}
                         </h2>
                         <button
-                            class="p-2 rounded-full hover:bg-slate-200 transition-colors"
+                            class="p-2 rounded-md hover:bg-surface-hover transition-colors"
                             onclick={playWordAudio}
                             title="播放發音"
                             type="button"
                         >
                             <svg
-                                class="w-6 h-6 text-slate-600"
+                                class="w-5 h-5 text-content-tertiary hover:text-content-secondary transition-colors"
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
                                 viewBox="0 0 24 24"
@@ -308,38 +313,42 @@
                             </svg>
                         </button>
                     </div>
-                    <div class="flex items-center gap-2 text-sm text-slate-500">
+                    <div
+                        class="flex items-center gap-2 text-sm text-content-tertiary"
+                    >
                         <span>#{getRank(word.lemma)}</span>
-                        <span>•</span>
+                        <span class="text-border-hover">•</span>
                         <span>出現 {word.count} 次</span>
                     </div>
                 </div>
             </div>
 
             {#if word.meanings && word.meanings.length > 0}
-                <div class="meanings-section mb-8">
-                    <h3 class="text-lg font-semibold text-slate-800 mb-4">
+                <div class="meanings-section mb-6">
+                    <h3
+                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
+                    >
                         詞義
                     </h3>
-                    <div class="space-y-4">
+                    <div class="space-y-2.5">
                         {#each word.meanings as meaning, i}
                             <div
-                                class="meaning-item bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                                class="meaning-item bg-surface-primary rounded-lg p-4 border border-border"
                             >
                                 <div class="flex items-center gap-2 mb-2">
                                     <span
-                                        class="text-xs font-medium px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded"
+                                        class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded"
                                     >
                                         {meaning.pos}
                                     </span>
-                                    <span class="text-xs text-slate-400"
+                                    <span class="text-xs text-content-tertiary"
                                         >#{i + 1}</span
                                     >
                                 </div>
-                                <p class="text-slate-700 mb-1">
+                                <p class="text-content-primary mb-1">
                                     {meaning.zh_def}
                                 </p>
-                                <p class="text-sm text-slate-500">
+                                <p class="text-sm text-content-secondary">
                                     {meaning.en_def}
                                 </p>
                             </div>
@@ -349,12 +358,14 @@
             {/if}
 
             {#if word.pos_distribution && Object.keys(word.pos_distribution).length > 0}
-                <div class="pos-distribution-section mb-8">
-                    <h3 class="text-lg font-semibold text-slate-800 mb-4">
+                <div class="pos-distribution-section mb-6">
+                    <h3
+                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
+                    >
                         詞性分布
                     </h3>
                     <div
-                        class="bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                        class="bg-surface-primary rounded-lg p-4 border border-border"
                     >
                         <div class="space-y-3">
                             {#each Object.entries(word.pos_distribution).sort((a, b) => b[1] - a[1]) as [pos, count]}
@@ -366,20 +377,21 @@
                                 )}
                                 <div class="pos-bar">
                                     <div
-                                        class="flex justify-between text-sm mb-1"
+                                        class="flex justify-between text-sm mb-1.5"
                                     >
-                                        <span class="font-medium text-slate-700"
+                                        <span
+                                            class="font-medium text-content-primary"
                                             >{pos}</span
                                         >
-                                        <span class="text-slate-500"
+                                        <span class="text-content-tertiary"
                                             >{count} ({percentage}%)</span
                                         >
                                     </div>
                                     <div
-                                        class="h-2 bg-slate-100 rounded-full overflow-hidden"
+                                        class="h-1.5 bg-surface-page rounded-full overflow-hidden"
                                     >
                                         <div
-                                            class="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                                            class="h-full bg-accent rounded-full transition-all duration-300"
                                             style="width: {percentage}%"
                                         ></div>
                                     </div>
@@ -392,24 +404,31 @@
 
             {#if allSentences.length > 0}
                 <div class="sentences-section">
-                    <h3 class="text-lg font-semibold text-slate-800 mb-4">
+                    <h3
+                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
+                    >
                         例句
-                        <span class="text-sm font-normal text-slate-500">
-                            ({allSentences.length}/{totalSentences})
+                        <span
+                            class="text-content-tertiary font-normal normal-case"
+                        >
+                            ({allSentences.length}/{totalSentences ||
+                                word.sentences?.total_count ||
+                                0})
                         </span>
                     </h3>
-                    <div class="space-y-3">
+                    <div class="space-y-2.5">
                         {#each allSentences as sentence, i}
                             <div
-                                class="sentence-item bg-white rounded-lg p-4 shadow-sm border border-slate-100"
+                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border"
                             >
                                 <div class="flex items-start gap-3">
-                                    <span class="text-xs text-slate-400 mt-1"
+                                    <span
+                                        class="text-xs text-content-tertiary mt-0.5 font-medium"
                                         >{i + 1}</span
                                     >
-                                    <div class="flex-1">
+                                    <div class="flex-1 min-w-0">
                                         <p
-                                            class="text-slate-700 leading-relaxed"
+                                            class="text-content-primary leading-relaxed"
                                         >
                                             {@html highlightWord(
                                                 sentence.text,
@@ -418,7 +437,7 @@
                                         </p>
                                         {#if sentence.source}
                                             <p
-                                                class="text-xs text-slate-400 mt-2"
+                                                class="text-xs text-content-tertiary mt-2"
                                             >
                                                 — {sentence.source}
                                             </p>
@@ -426,7 +445,7 @@
                                     </div>
                                     {#if sentence.audio_file}
                                         <button
-                                            class="p-1.5 rounded-full hover:bg-slate-100 transition-colors flex-shrink-0"
+                                            class="p-1.5 rounded-md hover:bg-surface-hover transition-colors flex-shrink-0"
                                             onclick={() =>
                                                 playSentenceAudio(
                                                     sentence.audio_file!,
@@ -435,7 +454,7 @@
                                             type="button"
                                         >
                                             <svg
-                                                class="w-5 h-5 text-slate-500"
+                                                class="w-4 h-4 text-content-tertiary"
                                                 xmlns="http://www.w3.org/2000/svg"
                                                 fill="none"
                                                 viewBox="0 0 24 24"
@@ -457,7 +476,7 @@
 
                     {#if hasMoreSentences}
                         <button
-                            class="mt-4 w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-600 font-medium transition-colors disabled:opacity-50"
+                            class="mt-4 w-full py-2.5 px-4 bg-surface-primary hover:bg-surface-hover border border-border rounded-lg text-sm text-content-secondary font-medium transition-colors disabled:opacity-50"
                             onclick={loadMoreSentences}
                             disabled={isLoadingMoreSentences}
                             type="button"
@@ -477,15 +496,21 @@
 
 <style>
     :global(.highlight) {
-        background-color: rgb(254 249 195);
-        padding: 0.125rem 0.25rem;
-        border-radius: 0.25rem;
+        background: linear-gradient(
+            to top,
+            rgba(32, 125, 255, 0.15) 0%,
+            rgba(32, 125, 255, 0.15) 45%,
+            transparent 45%
+        );
+        padding: 0 2px;
+        margin: 0 -2px;
+        border-radius: 2px;
         font-weight: 500;
     }
 
     .detail-panel {
         scrollbar-width: thin;
-        scrollbar-color: rgb(203 213 225) transparent;
+        scrollbar-color: var(--color-border-hover) transparent;
     }
 
     .detail-panel::-webkit-scrollbar {
@@ -497,32 +522,32 @@
     }
 
     .detail-panel::-webkit-scrollbar-thumb {
-        background-color: rgb(203 213 225);
+        background-color: var(--color-border-hover);
         border-radius: 3px;
     }
 
     .detail-panel::-webkit-scrollbar-thumb:hover {
-        background-color: rgb(148 163 184);
+        background-color: var(--color-content-tertiary);
     }
 
     .skeleton-text {
         background: linear-gradient(
             90deg,
-            rgb(226 232 240) 25%,
-            rgb(241 245 249) 50%,
-            rgb(226 232 240) 75%
+            var(--color-surface-secondary) 25%,
+            var(--color-surface-page) 50%,
+            var(--color-surface-secondary) 75%
         );
         background-size: 200% 100%;
         animation: shimmer 2.5s infinite;
-        border-radius: 0.25rem;
+        border-radius: 4px;
     }
 
     .skeleton-circle {
         background: linear-gradient(
             90deg,
-            rgb(226 232 240) 25%,
-            rgb(241 245 249) 50%,
-            rgb(226 232 240) 75%
+            var(--color-surface-secondary) 25%,
+            var(--color-surface-page) 50%,
+            var(--color-surface-secondary) 75%
         );
         background-size: 200% 100%;
         animation: shimmer 2.5s infinite;
@@ -532,9 +557,9 @@
     .skeleton-bar {
         background: linear-gradient(
             90deg,
-            rgb(199 210 254) 25%,
-            rgb(224 231 255) 50%,
-            rgb(199 210 254) 75%
+            var(--color-accent-soft) 25%,
+            rgba(32, 125, 255, 0.05) 50%,
+            var(--color-accent-soft) 75%
         );
         background-size: 200% 100%;
         animation: shimmer 2.5s infinite;

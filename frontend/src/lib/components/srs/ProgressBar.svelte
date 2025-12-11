@@ -47,7 +47,7 @@
         ></div>
     </div>
     <div
-        class="flex items-center justify-center gap-4 text-[12px] text-content-tertiary"
+        class="flex items-center justify-center gap-4 text-sm text-content-tertiary"
     >
         <span class="font-medium text-content-secondary">
             {srs.progress.current} / {srs.progress.total}

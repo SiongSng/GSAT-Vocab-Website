@@ -56,7 +56,7 @@
                     aria-label="播放發音"
                 >
                     <svg
-                        class="w-5 h-5 text-content-tertiary"
+                        class="w-6 h-6 text-content-tertiary"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -75,17 +75,17 @@
                 class="flex-1 flex flex-col items-center justify-center text-center"
             >
                 <h2
-                    class="font-heading text-[36px] font-semibold tracking-tighter text-content-primary mb-2"
+                    class="text-3xl lg:text-4xl font-semibold tracking-tight text-content-primary mb-2"
                 >
                     {card.lemma}
                 </h2>
-                <p class="text-[14px] text-content-tertiary lowercase">
+                <p class="text-base text-content-tertiary lowercase">
                     {primaryPos}
                 </p>
             </div>
 
             <div class="text-center">
-                <p class="text-[12px] text-content-tertiary/60">點擊翻牌</p>
+                <p class="text-sm text-content-tertiary/60">點擊翻牌</p>
             </div>
         </div>
 
@@ -104,7 +104,7 @@
                     aria-label="播放發音"
                 >
                     <svg
-                        class="w-5 h-5 text-content-tertiary"
+                        class="w-6 h-6 text-content-tertiary"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -121,7 +121,7 @@
 
             <div class="text-center mb-5">
                 <h2
-                    class="font-heading text-[22px] font-semibold tracking-tight text-content-primary"
+                    class="text-2xl font-semibold tracking-tight text-content-primary"
                 >
                     {card.lemma}
                 </h2>
@@ -130,7 +130,7 @@
             <div class="flex-1 space-y-4 overflow-y-auto px-1">
                 {#if isLoading}
                     <div class="flex items-center justify-center h-full">
-                        <div class="text-[14px] text-content-tertiary">
+                        <div class="text-base text-content-tertiary">
                             載入中...
                         </div>
                     </div>
@@ -143,18 +143,18 @@
                                 : ""}
                         >
                             <span
-                                class="inline-block px-2 py-0.5 text-[11px] font-medium rounded bg-surface-page text-content-tertiary mb-2 lowercase"
+                                class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mb-2 lowercase"
                             >
                                 {meaning.pos}
                             </span>
                             <p
-                                class="text-[15px] text-content-primary leading-relaxed"
+                                class="text-base text-content-primary leading-relaxed"
                             >
                                 {meaning.zh_def}
                             </p>
                             {#if meaning.en_def}
                                 <p
-                                    class="text-[13px] text-content-tertiary mt-1 leading-relaxed"
+                                    class="text-sm text-content-tertiary mt-1 leading-relaxed"
                                 >
                                     {meaning.en_def}
                                 </p>
@@ -163,7 +163,7 @@
                     {/each}
                 {:else}
                     <div class="flex items-center justify-center h-full">
-                        <div class="text-[14px] text-content-tertiary">
+                        <div class="text-base text-content-tertiary">
                             暫無釋義
                         </div>
                     </div>

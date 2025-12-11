@@ -115,11 +115,35 @@
     onscroll={handleScroll}
 >
     {#if words.length === 0}
-        <p class="p-4 text-slate-500 text-center">找不到符合條件的單詞</p>
+        <div
+            class="flex flex-col items-center justify-center h-full px-4 py
+-12"
+        >
+            <div
+                class="w-12 h-12 rounded-full bg-surface-secondary flex items-center justify-center mb-4"
+            >
+                <svg
+                    class="w-6 h-6 text-content-tertiary"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                    />
+                </svg>
+            </div>
+            <p class="text-sm text-content-secondary text-center">
+                找不到符合條件的單詞
+            </p>
+        </div>
     {:else if isGridMode}
         <div class="virtual-scroll-wrapper" style="height: {totalHeight}px;">
             <div
-                class="grid-container grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-2"
+                class="grid-container grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-3"
                 style="transform: translateY({offsetY}px);"
             >
                 {#each visibleWords as word (word.lemma)}
@@ -146,32 +170,35 @@
                     >
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="font-semibold text-slate-800"
+                                <span class="font-semibold text-content-primary"
                                     >{word.lemma}</span
                                 >
-                                <span class="text-xs font-medium text-slate-500"
+                                <span
+                                    class="text-xs font-medium text-content-tertiary"
                                     >{word.primary_pos}</span
                                 >
                                 {#if word.meaning_count > 1}
                                     <span
-                                        class="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded"
+                                        class="text-xs px-1.5 py-0.5 bg-accent-soft text-accent rounded font-medium"
                                     >
                                         {word.meaning_count}義
                                     </span>
                                 {/if}
                             </div>
                             {#if word.zh_preview}
-                                <p class="text-xs text-slate-600 mt-1 truncate">
+                                <p
+                                    class="text-xs text-content-secondary mt-1 truncate"
+                                >
                                     {word.zh_preview.slice(0, 40)}...
                                 </p>
                             {/if}
                         </div>
                         <div class="flex items-center gap-3 flex-shrink-0">
-                            <span class="text-xs text-slate-400"
+                            <span class="text-xs text-content-tertiary"
                                 >#{getRank(word.lemma)}</span
                             >
                             <span
-                                class="text-sm font-mono bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full"
+                                class="text-xs font-mono bg-surface-page text-content-secondary px-2 py-0.5 rounded-full"
                             >
                                 {word.count}
                             </span>
@@ -188,6 +215,25 @@
         height: 100%;
         overflow-y: auto;
         contain: strict;
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-border-hover) transparent;
+    }
+
+    .word-list-container::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .word-list-container::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .word-list-container::-webkit-scrollbar-thumb {
+        background-color: var(--color-border-hover);
+        border-radius: 3px;
+    }
+
+    .word-list-container::-webkit-scrollbar-thumb:hover {
+        background-color: var(--color-content-tertiary);
     }
 
     .virtual-scroll-wrapper {
@@ -205,10 +251,10 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0.75rem 1rem;
+        padding: 0.875rem 1rem;
         cursor: pointer;
-        border-bottom: 1px solid rgb(241 245 249);
-        background-color: white;
+        border-bottom: 1px solid var(--color-border);
+        background-color: var(--color-surface-primary);
         text-align: left;
         transition: background-color 0.15s ease;
         height: 72px;
@@ -216,36 +262,35 @@
     }
 
     .list-item:hover {
-        background-color: rgb(241 245 249);
+        background-color: var(--color-surface-hover);
     }
 
     .list-item:global(.active-item) {
-        background-color: rgb(238 242 255);
+        background-color: var(--color-accent-soft);
     }
 
     .browse-cell {
         padding: 0.5rem 0.75rem;
-        background-color: white;
-        border-radius: 0.5rem;
+        background-color: var(--color-surface-primary);
+        border-radius: 6px;
         font-size: 0.875rem;
         font-weight: 500;
-        color: rgb(51 65 85);
-        border: 1px solid rgb(226 232 240);
+        color: var(--color-content-primary);
+        border: 1px solid var(--color-border);
         cursor: pointer;
         transition: all 0.15s ease;
         text-align: center;
     }
 
     .browse-cell:hover {
-        background-color: rgb(241 245 249);
-        border-color: rgb(199 210 254);
-        transform: translateY(-1px);
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-border-hover);
     }
 
     .browse-cell:global(.active-item) {
-        background-color: rgb(238 242 255);
-        border-color: rgb(129 140 248);
-        color: rgb(67 56 202);
+        background-color: var(--color-accent-soft);
+        border-color: var(--color-accent);
+        color: var(--color-accent);
     }
 
     .grid-container {

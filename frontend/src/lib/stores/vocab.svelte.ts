@@ -15,6 +15,7 @@ let searchIndex: SearchIndex | null = $state.raw(null);
 let selectedWord: WordDetail | null = $state.raw(null);
 let selectedLemma: string | null = $state(null);
 let isLoading = $state(false);
+let isLoadingDetail = $state(false);
 let error: string | null = $state(null);
 let freqRange = $state({ min: 1, max: 6359 });
 
@@ -58,13 +59,18 @@ export function getVocabStore() {
     get selectedWord() {
       return selectedWord;
     },
+    get selectedWordDetail() {
+      return selectedWord;
+    },
     get selectedLemma() {
       return selectedLemma;
     },
     get isLoading() {
       return isLoading;
     },
-
+    get isLoadingDetail() {
+      return isLoadingDetail;
+    },
     get error() {
       return error;
     },
@@ -146,15 +152,19 @@ export async function selectWord(lemma: string): Promise<void> {
   const cached = getCachedWordDetail(lemma);
   if (cached) {
     selectedWord = cached;
+    isLoadingDetail = false;
     return;
   }
 
+  isLoadingDetail = true;
   try {
     const detail = await fetchWordDetail(lemma);
     selectedWord = detail;
   } catch (e) {
     console.error("Failed to load word detail:", e);
     selectedWord = null;
+  } finally {
+    isLoadingDetail = false;
   }
 }
 

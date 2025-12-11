@@ -50,47 +50,45 @@
     class="bg-surface-primary rounded-lg border border-border p-7 max-w-lg mx-auto"
 >
     <div class="text-center mb-7">
-        <div class="text-[32px] mb-2">🎉</div>
-        <h2
-            class="font-heading text-[20px] font-semibold tracking-tight text-content-primary"
-        >
+        <div class="text-4xl mb-2">🎉</div>
+        <h2 class="text-xl font-semibold tracking-tight text-content-primary">
             學習完成
         </h2>
-        <p class="text-[14px] text-content-tertiary mt-1">今天辛苦了！</p>
+        <p class="text-base text-content-tertiary mt-1">今天辛苦了！</p>
     </div>
 
     <div class="grid grid-cols-2 gap-3 mb-6">
         <div class="p-4 rounded-md bg-surface-page/60 text-center">
             <div
-                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                class="text-2xl font-semibold text-content-primary tracking-tight"
             >
                 {srs.sessionStats.cardsStudied}
             </div>
-            <div class="text-[12px] text-content-tertiary mt-1">已複習卡片</div>
+            <div class="text-sm text-content-tertiary mt-1">已複習卡片</div>
         </div>
         <div class="p-4 rounded-md bg-surface-page/60 text-center">
             <div
-                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                class="text-2xl font-semibold text-content-primary tracking-tight"
             >
                 {correctRate}%
             </div>
-            <div class="text-[12px] text-content-tertiary mt-1">正確率</div>
+            <div class="text-sm text-content-tertiary mt-1">正確率</div>
         </div>
         <div class="p-4 rounded-md bg-surface-page/60 text-center">
             <div
-                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                class="text-2xl font-semibold text-content-primary tracking-tight"
             >
                 {sessionDuration}
             </div>
-            <div class="text-[12px] text-content-tertiary mt-1">學習時間</div>
+            <div class="text-sm text-content-tertiary mt-1">學習時間</div>
         </div>
         <div class="p-4 rounded-md bg-surface-page/60 text-center">
             <div
-                class="text-[24px] font-semibold text-content-primary tracking-tight"
+                class="text-2xl font-semibold text-content-primary tracking-tight"
             >
                 {srs.sessionStats.easyCount + srs.sessionStats.goodCount}
             </div>
-            <div class="text-[12px] text-content-tertiary mt-1">已掌握</div>
+            <div class="text-sm text-content-tertiary mt-1">已掌握</div>
         </div>
     </div>
 
@@ -98,10 +96,10 @@
         <div
             class="p-4 rounded-md border border-border/60 bg-surface-secondary/30 mb-6"
         >
-            <div class="text-[12px] font-medium text-content-secondary mb-2">
+            <div class="text-sm font-medium text-content-secondary mb-2">
                 還有更多卡片
             </div>
-            <div class="flex gap-5 text-[13px]">
+            <div class="flex gap-5 text-base">
                 {#if srs.deckStats.reviewCount > 0}
                     <span class="text-srs-again"
                         >{srs.deckStats.reviewCount} 待複習</span
@@ -125,7 +123,7 @@
         {#if hasMoreCards}
             <button
                 onclick={handleContinue}
-                class="flex-1 py-2.5 px-5 bg-content-primary text-white rounded-lg text-[14px] font-medium hover:opacity-90 transition-opacity"
+                class="flex-1 py-2.5 px-5 bg-content-primary text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity"
             >
                 繼續學習
             </button>
@@ -134,7 +132,7 @@
             onclick={onDone}
             class="{hasMoreCards
                 ? ''
-                : 'flex-1'} py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-[14px] font-medium border border-border hover:border-border-hover transition-colors"
+                : 'flex-1'} py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-base font-medium border border-border hover:border-border-hover transition-colors"
         >
             完成
         </button>

@@ -22,6 +22,22 @@ GSAT-Vocab-Website is a vocabulary learning platform for Taiwan's GSAT (General 
 - `FlashcardView.svelte` - Flashcard study mode
 - `QuizView.svelte` - Quiz generation and interaction
 
+#### Design System (`/frontend/DESIGN_SYSTEM.md`)
+
+The frontend uses a Heptabase/Notion-inspired design system with custom CSS tokens. Key aspects:
+
+- **Color tokens**: `surface-*`, `content-*`, `border`, `accent`, `srs-*`
+- **Philosophy**: Light borders over heavy shadows, subtle interactions
+- **Components**: Cards, buttons, chips, form controls all follow consistent patterns
+
+Refer to `frontend/DESIGN_SYSTEM.md` for complete specification including:
+- Color system with Tailwind class mappings
+- Typography scale and hierarchy
+- Component patterns (buttons, cards, chips, list items)
+- Form control styling
+- State management (hover, focus, active, disabled)
+- Migration guide from legacy Slate/Indigo colors
+
 #### State Management (`/frontend/src/lib/stores`)
 
 - `vocab.svelte.ts` - Vocabulary index, word selection, filtering

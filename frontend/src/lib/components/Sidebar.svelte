@@ -101,7 +101,7 @@
 
 {#if app.isSidebarOpen && app.isMobile}
     <button
-        class="fixed inset-0 bg-black/30 z-30 lg:hidden"
+        class="fixed inset-0 bg-black/20 z-30 lg:hidden"
         onclick={handleOverlayClick}
         aria-label="Close sidebar"
         type="button"
@@ -109,13 +109,13 @@
 {/if}
 
 <aside
-    class="sidebar h-full bg-white border-r border-slate-200 p-4 flex flex-col space-y-6 overflow-y-auto transition-transform duration-300 ease-in-out"
+    class="sidebar h-full bg-surface-primary border-r border-border p-4 flex flex-col space-y-5 overflow-y-auto transition-transform duration-300 ease-in-out"
     class:translate-x-0={app.isSidebarOpen || !app.isMobile}
     class:-translate-x-full={!app.isSidebarOpen && app.isMobile}
 >
     <div class="relative">
         <svg
-            class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -131,7 +131,7 @@
         <input
             type="text"
             placeholder="搜尋單字..."
-            class="w-full bg-slate-100 border border-slate-200 rounded-md py-2 pl-10 pr-4 focus:ring-2 focus:ring-indigo-500 focus:outline-none focus:border-indigo-500 transition"
+            class="w-full bg-surface-secondary border-none rounded-md py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-accent/20 focus:outline-none transition placeholder:text-content-tertiary"
             value={searchValue}
             oninput={handleSearchInput}
         />
@@ -139,10 +139,12 @@
 
     <div>
         <div class="flex justify-between items-center mb-2">
-            <h3 class="text-xs font-semibold uppercase text-slate-500">
+            <h3
+                class="text-xs font-medium text-content-tertiary uppercase tracking-wide"
+            >
                 按頻率篩選
             </h3>
-            <span class="text-xs font-mono text-indigo-600">
+            <span class="text-xs font-medium text-accent">
                 {freqMinValue}-{freqMaxValue}
             </span>
         </div>
@@ -152,7 +154,7 @@
             max={vocab.freqRange.max}
             bind:value={freqMinValue}
             onchange={handleFreqMinChange}
-            class="freq-slider w-full mb-2"
+            class="w-full mb-2"
         />
         <input
             type="range"
@@ -160,12 +162,12 @@
             max={vocab.freqRange.max}
             bind:value={freqMaxValue}
             onchange={handleFreqMaxChange}
-            class="freq-slider w-full"
+            class="w-full"
         />
         <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
             <input
                 type="number"
-                class="w-full px-2 py-1 border rounded"
+                class="w-full px-2.5 py-1.5 text-sm"
                 min={vocab.freqRange.min}
                 max={vocab.freqRange.max}
                 bind:value={freqMinValue}
@@ -174,7 +176,7 @@
             />
             <input
                 type="number"
-                class="w-full px-2 py-1 border rounded"
+                class="w-full px-2.5 py-1.5 text-sm"
                 min={vocab.freqRange.min}
                 max={vocab.freqRange.max}
                 bind:value={freqMaxValue}
@@ -192,7 +194,9 @@
     </div>
 
     <div>
-        <h3 class="text-xs font-semibold uppercase text-slate-500 mb-2">
+        <h3
+            class="text-xs font-medium text-content-tertiary uppercase tracking-wide mb-2"
+        >
             按詞性分類
         </h3>
         <div class="grid grid-cols-2 gap-2 text-sm">
@@ -211,14 +215,14 @@
 
     <div>
         <button
-            class="w-full bg-indigo-600 text-white font-semibold rounded-md py-2.5 hover:bg-indigo-700 active:bg-indigo-800 transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+            class="w-full bg-content-primary text-white font-medium rounded-lg py-2.5 hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             onclick={handleRandomWord}
             disabled={isLoadingRandom}
             type="button"
         >
             {#if isLoadingRandom}
                 <svg
-                    class="w-5 h-5 animate-spin"
+                    class="w-4 h-4 animate-spin"
                     viewBox="0 0 24 24"
                     fill="none"
                 >
@@ -238,7 +242,7 @@
                 </svg>
             {:else}
                 <svg
-                    class="w-5 h-5"
+                    class="w-4 h-4"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -258,63 +262,31 @@
 </aside>
 
 <style>
-    .freq-slider {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 100%;
-        height: 6px;
-        background: rgb(226 232 240);
-        border-radius: 3px;
-        outline: none;
-    }
-
-    .freq-slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        background: rgb(99 102 241);
-        border-radius: 50%;
-        cursor: pointer;
-        transition: transform 0.15s ease;
-    }
-
-    .freq-slider::-webkit-slider-thumb:hover {
-        transform: scale(1.2);
-    }
-
-    .freq-slider::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        background: rgb(99 102 241);
-        border-radius: 50%;
-        cursor: pointer;
-        border: none;
-    }
-
     .filter-btn {
         padding: 0.5rem 0.75rem;
-        background-color: rgb(241 245 249);
-        border-radius: 0.375rem;
+        background-color: var(--color-surface-page);
+        border-radius: 6px;
         font-weight: 500;
-        color: rgb(71 85 105);
+        font-size: 0.875rem;
+        color: var(--color-content-secondary);
         transition: all 0.15s ease;
         cursor: pointer;
         border: 1px solid transparent;
     }
 
     .filter-btn:hover {
-        background-color: rgb(226 232 240);
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-border);
     }
 
     .filter-btn.active {
-        background-color: rgb(238 242 255);
-        color: rgb(79 70 229);
-        border-color: rgb(165 180 252);
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+        border-color: transparent;
     }
 
     .sidebar {
-        width: 16rem;
+        width: 15rem;
         min-width: 200px;
         flex-shrink: 0;
     }
@@ -326,7 +298,7 @@
             left: 0;
             z-index: 40;
             width: 80%;
-            max-width: 20rem;
+            max-width: 18rem;
         }
     }
 </style>

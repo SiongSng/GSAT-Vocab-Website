@@ -19,16 +19,16 @@
     <div class="browse-content">
         <main class="word-list-section">
             <div class="results-header">
-                <p class="text-sm text-slate-500">
+                <p class="text-sm text-content-secondary">
                     {#if vocab.isLoading}
                         正在載入數據...
                     {:else}
                         找到 {vocab.filteredWords.length} 個符合條件的單詞
                     {/if}
                 </p>
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1">
                     <button
-                        class="lg:hidden p-1.5 rounded hover:bg-slate-100"
+                        class="lg:hidden p-1.5 rounded-md hover:bg-surface-hover transition-colors"
                         onclick={toggleSidebar}
                         title="顯示篩選器"
                         type="button"
@@ -39,7 +39,7 @@
                             viewBox="0 0 24 24"
                             stroke-width="1.5"
                             stroke="currentColor"
-                            class="w-5 h-5 text-slate-600"
+                            class="w-5 h-5 text-content-tertiary"
                         >
                             <path
                                 stroke-linecap="round"
@@ -49,8 +49,11 @@
                         </svg>
                     </button>
                     <button
-                        class="p-1.5 rounded hover:bg-slate-100"
-                        class:bg-slate-200={app.isGridMode}
+                        class="p-1.5 rounded-md transition-colors"
+                        class:bg-accent-soft={app.isGridMode}
+                        class:text-accent={app.isGridMode}
+                        class:hover:bg-surface-hover={!app.isGridMode}
+                        class:text-content-tertiary={!app.isGridMode}
                         onclick={toggleGridMode}
                         title="切換網格視圖"
                         type="button"
@@ -61,12 +64,13 @@
                             viewBox="0 0 24 24"
                             stroke-width="1.5"
                             stroke="currentColor"
-                            class="w-5 h-5 text-slate-600"
+                            class="w-5 h-5"
                         >
                             <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
-                                d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25A2.25 2.25 0 0 1 13.5 8.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
+                                d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25A2.25 2.25 0 0 1 13.5 8.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.
+25 0 0 1 13.5 18v-2.25Z"
                             />
                         </svg>
                     </button>
@@ -82,7 +86,8 @@
         </main>
 
         <div
-            class="detail-wrapper"
+            class="detail-wrapper
+"
             class:mobile-active={app.isMobileDetailOpen}
         >
             <WordDetail />
@@ -112,15 +117,15 @@
         min-width: 280px;
         max-width: 320px;
         height: 100%;
-        background-color: white;
-        border-right: 1px solid rgb(226 232 240);
+        background-color: var(--color-surface-primary);
+        border-right: 1px solid var(--color-border);
         flex-shrink: 0;
     }
 
     .results-header {
         flex-shrink: 0;
-        padding: 1rem;
-        border-bottom: 1px solid rgb(226 232 240);
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid var(--color-border);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -160,7 +165,7 @@
             z-index: 20;
             transform: translateX(100%);
             transition: transform 0.3s ease-in-out;
-            background-color: rgb(248 250 252);
+            background-color: var(--color-surface-page);
         }
 
         .detail-wrapper.mobile-active {

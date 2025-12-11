@@ -10,7 +10,7 @@
 </script>
 
 <header
-    class="flex-shrink-0 bg-white/80 backdrop-blur-sm border-b border-slate-200 p-3 px-4 sm:px-6 flex items-center justify-between z-20"
+    class="flex-shrink-0 bg-surface-primary/80 backdrop-blur-sm border-b border-border p-3 px-4 sm:px-6 flex items-center justify-between z-20"
 >
     <div class="flex items-center gap-3">
         <svg
@@ -19,7 +19,7 @@
             viewBox="0 0 24 24"
             stroke-width="1.5"
             stroke="currentColor"
-            class="w-7 h-7 text-indigo-600"
+            class="w-7 h-7 text-accent"
         >
             <path
                 stroke-linecap="round"
@@ -33,17 +33,17 @@
             />
         </svg>
         <button
-            class="text-xl font-bold text-slate-800 cursor-pointer hover:text-indigo-600 transition-colors"
+            class="text-xl font-semibold tracking-tight text-content-primary cursor-pointer hover:text-accent transition-colors"
             onclick={() => handleModeChange("browse")}
         >
             學測高頻單字
         </button>
     </div>
 
-    <div class="flex items-center gap-2 sm:gap-4">
+    <div class="flex items-center gap-1 sm:gap-2">
         <button
-            class="mode-btn p-2 rounded-md hover:bg-slate-200 transition-colors"
-            class:bg-indigo-100={app.mode === "browse"}
+            class="mode-btn p-2 rounded-md transition-all"
+            class:active={app.mode === "browse"}
             onclick={() => handleModeChange("browse")}
             title="瀏覽模式"
         >
@@ -53,7 +53,7 @@
                 viewBox="0 0 24 24"
                 stroke-width="1.5"
                 stroke="currentColor"
-                class="w-6 h-6"
+                class="w-5 h-5"
             >
                 <path
                     stroke-linecap="round"
@@ -64,8 +64,8 @@
         </button>
 
         <button
-            class="mode-btn p-2 rounded-md hover:bg-slate-200 transition-colors"
-            class:bg-indigo-100={app.mode === "flashcard"}
+            class="mode-btn p-2 rounded-md transition-all"
+            class:active={app.mode === "flashcard"}
             onclick={() => handleModeChange("flashcard")}
             title="字卡模式"
         >
@@ -75,7 +75,7 @@
                 viewBox="0 0 24 24"
                 stroke-width="1.5"
                 stroke="currentColor"
-                class="w-6 h-6"
+                class="w-5 h-5"
             >
                 <path
                     stroke-linecap="round"
@@ -86,8 +86,8 @@
         </button>
 
         <button
-            class="mode-btn p-2 rounded-md hover:bg-slate-200 transition-colors"
-            class:bg-indigo-100={app.mode === "quiz"}
+            class="mode-btn p-2 rounded-md transition-all"
+            class:active={app.mode === "quiz"}
             onclick={() => handleModeChange("quiz")}
             title="測驗模式"
         >
@@ -97,7 +97,7 @@
                 viewBox="0 0 24 24"
                 stroke-width="1.5"
                 stroke="currentColor"
-                class="w-6 h-6"
+                class="w-5 h-5"
             >
                 <path
                     stroke-linecap="round"
@@ -108,3 +108,19 @@
         </button>
     </div>
 </header>
+
+<style>
+    .mode-btn {
+        color: var(--color-content-tertiary);
+    }
+
+    .mode-btn:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-content-secondary);
+    }
+
+    .mode-btn.active {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+</style>

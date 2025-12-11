@@ -33,11 +33,11 @@
             data-color={color}
         >
             <span
-                class="text-[14px] font-medium text-content-secondary transition-colors"
+                class="text-base font-medium text-content-secondary transition-colors"
             >
                 {label}
             </span>
-            <span class="text-[11px] text-content-tertiary mt-1">
+            <span class="text-sm text-content-tertiary mt-1">
                 {getIntervalText(rating)}
             </span>
         </button>
@@ -45,7 +45,7 @@
 </div>
 
 <div class="mt-3 text-center">
-    <p class="text-[11px] text-content-tertiary/50">按 1、2、3、4 快速選擇</p>
+    <p class="text-sm text-content-tertiary/50">按 1、2、3、4 快速選擇</p>
 </div>
 
 <style>

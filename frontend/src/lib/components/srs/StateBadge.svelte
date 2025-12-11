@@ -35,6 +35,6 @@
     });
 </script>
 
-<span class="px-2.5 py-1 text-[11px] font-medium rounded-full {config.classes}">
+<span class="px-2.5 py-1 text-xs font-medium rounded-full {config.classes}">
     {config.label}
 </span>
