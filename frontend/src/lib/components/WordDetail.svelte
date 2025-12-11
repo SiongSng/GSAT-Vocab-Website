@@ -2,12 +2,8 @@
     import { tick } from "svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
-    import {
-        fetchMoreSentences,
-        getAudioUrl,
-        getSentenceAudioUrl,
-        type SentencePreview,
-    } from "$lib/api";
+    import { fetchMoreSentences, type SentencePreview } from "$lib/api";
+    import { speakText } from "$lib/tts";
 
     const vocab = getVocabStore();
     const app = getAppStore();
@@ -17,6 +13,8 @@
     let nextOffset = $state(0);
     let totalSentences = $state(0);
     let audioPlayer: HTMLAudioElement | null = null;
+    let isPlayingWord = $state(false);
+    let playingSentenceIndex = $state<number | null>(null);
     let showSkeleton = $state(false);
     let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -77,21 +75,34 @@
         };
     }
 
-    function playWordAudio() {
-        if (!word) return;
-        if (!audioPlayer) {
-            audioPlayer = new Audio();
+    async function playWordAudio() {
+        if (!word || isPlayingWord) return;
+        isPlayingWord = true;
+        try {
+            const url = await speakText(word.lemma);
+            if (!audioPlayer) audioPlayer = new Audio();
+            audioPlayer.src = url;
+            audioPlayer.onended = () => (isPlayingWord = false);
+            audioPlayer.onerror = () => (isPlayingWord = false);
+            await audioPlayer.play();
+        } catch {
+            isPlayingWord = false;
         }
-        audioPlayer.src = getAudioUrl(word.lemma);
-        audioPlayer.play().catch(() => {});
     }
 
-    function playSentenceAudio(filename: string) {
-        if (!audioPlayer) {
-            audioPlayer = new Audio();
+    async function playSentenceAudio(text: string, index: number) {
+        if (playingSentenceIndex === index) return;
+        playingSentenceIndex = index;
+        try {
+            const url = await speakText(text);
+            if (!audioPlayer) audioPlayer = new Audio();
+            audioPlayer.src = url;
+            audioPlayer.onended = () => (playingSentenceIndex = null);
+            audioPlayer.onerror = () => (playingSentenceIndex = null);
+            await audioPlayer.play();
+        } catch {
+            playingSentenceIndex = null;
         }
-        audioPlayer.src = getSentenceAudioUrl(filename);
-        audioPlayer.play().catch(() => {});
     }
 
     function handleBackClick() {
@@ -319,6 +330,7 @@
                         </h2>
                         <button
                             class="p-2 rounded-md hover:bg-surface-hover transition-colors"
+                            class:animate-pulse={isPlayingWord}
                             onclick={playWordAudio}
                             title="播放發音"
                             type="button"
@@ -457,32 +469,32 @@
                                             </p>
                                         {/if}
                                     </div>
-                                    {#if sentence.audio_file}
-                                        <button
-                                            class="p-1.5 rounded-md hover:bg-surface-hover transition-colors flex-shrink-0"
-                                            onclick={() =>
-                                                playSentenceAudio(
-                                                    sentence.audio_file!,
-                                                )}
-                                            title="播放例句"
-                                            type="button"
+                                    <button
+                                        class="p-1.5 rounded-md hover:bg-surface-hover transition-colors flex-shrink-0"
+                                        class:animate-pulse={playingSentenceIndex === i}
+                                        onclick={() =>
+                                            playSentenceAudio(
+                                                sentence.text,
+                                                i,
+                                            )}
+                                        title="播放例句"
+                                        type="button"
+                                    >
+                                        <svg
+                                            class="w-4 h-4 text-content-tertiary"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke-width="1.5"
+                                            stroke="currentColor"
                                         >
-                                            <svg
-                                                class="w-4 h-4 text-content-tertiary"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke-width="1.5"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                                                />
-                                            </svg>
-                                        </button>
-                                    {/if}
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+                                            />
+                                        </svg>
+                                    </button>
                                 </div>
                             </div>
                         {/each}
