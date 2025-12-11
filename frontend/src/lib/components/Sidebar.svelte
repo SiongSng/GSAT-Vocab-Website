@@ -290,7 +290,8 @@
     @media (max-width: 1023px) {
         .sidebar {
             position: absolute;
-            inset-y: 0;
+            top: 0;
+            bottom: 0;
             left: 0;
             z-index: 40;
             width: 80%;

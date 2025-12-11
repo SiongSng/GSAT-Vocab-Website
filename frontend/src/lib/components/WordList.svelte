@@ -54,8 +54,6 @@
         scrollTop = target.scrollTop;
     }
 
-    const itemHeight = $derived(isGridMode ? GRID_ITEM_HEIGHT : ITEM_HEIGHT);
-
     const gridColumns = $derived.by(() => {
         if (!isGridMode) return 1;
         if (containerHeight < 640) return 2;
@@ -90,7 +88,7 @@
 
     $effect(() => {
         const selectedLemma = vocab.selectedLemma;
-        const _ = words;
+        void words;
 
         tick().then(() => {
             if (listContainer) {

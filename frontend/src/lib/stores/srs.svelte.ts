@@ -210,13 +210,13 @@ export function startStudySession(options?: {
   let newCards: SRSCard[];
   if (options?.newCardPool && options.newCardPool.length > 0) {
     const poolSet = new Set(options.newCardPool);
-    newCards = getNewCards()
-      .filter((c) => poolSet.has(c.lemma))
-      .slice(0, newLimit);
+    const candidates = getNewCards().filter((c) => poolSet.has(c.lemma));
+    shuffleArray(candidates);
+    newCards = candidates.slice(0, newLimit);
   } else {
-    newCards = getNewCards()
-      .filter((c) => !excludeSet.has(c.lemma))
-      .slice(0, newLimit);
+    const candidates = getNewCards().filter((c) => !excludeSet.has(c.lemma));
+    shuffleArray(candidates);
+    newCards = candidates.slice(0, newLimit);
   }
 
   queue.push(...learningCards);
@@ -261,6 +261,7 @@ export function showAnswer(): void {
 
 export async function rateCard(rating: Rating): Promise<void> {
   if (!store.currentCard || !store.schedulingInfo) return;
+  if (rating === Rating.Manual) return;
 
   const recordLog = store.schedulingInfo[rating];
   if (!recordLog) return;
@@ -342,6 +343,7 @@ export function endStudySession(): void {
 
 export function getIntervalText(rating: Rating): string {
   if (!store.schedulingInfo) return "";
+  if (rating === Rating.Manual) return "";
 
   const recordLog = store.schedulingInfo[rating];
   if (!recordLog) return "";

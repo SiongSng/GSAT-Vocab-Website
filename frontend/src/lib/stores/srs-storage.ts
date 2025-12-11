@@ -142,12 +142,11 @@ async function flushToIndexedDB(): Promise<void> {
   const tx = database.transaction(CARDS_STORE, "readwrite");
   const store = tx.objectStore(CARDS_STORE);
 
-  const promises = Array.from(cardsCache.values()).map((card) =>
-    store.put(card)
+  const promises: Promise<IDBValidKey>[] = Array.from(cardsCache.values()).map(
+    (card) => store.put(card)
   );
-  promises.push(tx.done as Promise<unknown>);
-
   await Promise.all(promises);
+  await tx.done;
 }
 
 export async function forceSave(): Promise<void> {
