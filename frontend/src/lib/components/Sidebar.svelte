@@ -139,9 +139,7 @@
 
     <div>
         <div class="flex justify-between items-center mb-2">
-            <h3
-                class="text-xs font-medium text-content-tertiary uppercase tracking-wide"
-            >
+            <h3 class="text-xs font-semibold text-section-header">
                 按頻率篩選
             </h3>
             <span class="text-xs font-medium text-accent">
@@ -194,9 +192,7 @@
     </div>
 
     <div>
-        <h3
-            class="text-xs font-medium text-content-tertiary uppercase tracking-wide mb-2"
-        >
+        <h3 class="text-xs font-semibold text-section-header mb-2">
             按詞性分類
         </h3>
         <div class="grid grid-cols-2 gap-2 text-sm">

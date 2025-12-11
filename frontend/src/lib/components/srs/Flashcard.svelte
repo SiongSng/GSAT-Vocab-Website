@@ -43,7 +43,7 @@
     >
         <!-- Front -->
         <div
-            class="flashcard-face backface-hidden bg-surface-primary rounded-lg border border-border p-8 min-h-[340px] flex flex-col"
+            class="flashcard-face backface-hidden bg-surface-primary rounded-lg border border-border shadow-card p-8 min-h-[340px] flex flex-col"
         >
             <div class="flex items-center justify-between">
                 <StateBadge state={card.state} />
@@ -91,7 +91,7 @@
 
         <!-- Back -->
         <div
-            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border p-8 min-h-[340px] flex flex-col"
+            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border shadow-card p-8 min-h-[340px] flex flex-col"
         >
             <div class="flex items-center justify-between mb-5">
                 <StateBadge state={card.state} />

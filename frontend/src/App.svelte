@@ -68,11 +68,11 @@
     }
 
     :global(::-webkit-scrollbar-thumb) {
-        background-color: rgba(0, 0, 0, 0.15);
+        background-color: var(--color-scrollbar);
         border-radius: 3px;
     }
 
     :global(::-webkit-scrollbar-thumb:hover) {
-        background-color: rgba(0, 0, 0, 0.25);
+        background-color: var(--color-scrollbar-hover);
     }
 </style>

@@ -351,15 +351,11 @@
 
             {#if word.meanings && word.meanings.length > 0}
                 <div class="meanings-section mb-6">
-                    <h3
-                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
-                    >
-                        詞義
-                    </h3>
+                    <h3 class="section-header">詞義</h3>
                     <div class="space-y-2.5">
                         {#each word.meanings as meaning, i}
                             <div
-                                class="meaning-item bg-surface-primary rounded-lg p-4 border border-border"
+                                class="meaning-item bg-surface-primary rounded-lg p-4 border border-border shadow-card transition-shadow hover:shadow-card-hover"
                             >
                                 <div class="flex items-center gap-2 mb-2">
                                     <span
@@ -385,13 +381,9 @@
 
             {#if word.pos_distribution && Object.keys(word.pos_distribution).length > 0}
                 <div class="pos-distribution-section mb-6">
-                    <h3
-                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
-                    >
-                        詞性分布
-                    </h3>
+                    <h3 class="section-header">詞性分布</h3>
                     <div
-                        class="bg-surface-primary rounded-lg p-4 border border-border"
+                        class="bg-surface-primary rounded-lg p-4 border border-border shadow-card"
                     >
                         <div class="space-y-3">
                             {#each Object.entries(word.pos_distribution).sort((a, b) => b[1] - a[1]) as [pos, count]}
@@ -430,13 +422,9 @@
 
             {#if allSentences.length > 0}
                 <div class="sentences-section">
-                    <h3
-                        class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide"
-                    >
+                    <h3 class="section-header">
                         例句
-                        <span
-                            class="text-content-tertiary font-normal normal-case"
-                        >
+                        <span class="text-content-tertiary font-normal">
                             ({allSentences.length}/{totalSentences ||
                                 word.sentences?.total_count ||
                                 0})
@@ -445,7 +433,7 @@
                     <div class="space-y-2.5">
                         {#each allSentences as sentence, i (sentence.text)}
                             <div
-                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border animate-fade-in"
+                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border shadow-card animate-fade-in"
                             >
                                 <div class="flex items-start gap-3">
                                     <span
@@ -518,8 +506,8 @@
     :global(.highlight) {
         background: linear-gradient(
             to top,
-            rgba(251, 191, 36, 0.35) 0%,
-            rgba(251, 191, 36, 0.35) 60%,
+            var(--color-highlight) 0%,
+            var(--color-highlight) 60%,
             transparent 60%
         );
         padding: 0 3px;

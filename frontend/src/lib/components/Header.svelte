@@ -15,22 +15,12 @@
     <div class="flex items-center gap-3">
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="1.5"
-            stroke="currentColor"
-            class="w-7 h-7 text-accent"
+            viewBox="0 0 32 32"
+            class="w-7 h-7"
         >
-            <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m12 14 9-5-9-5-9 5 9 5Z"
-            />
-            <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M12 14v7m-9-5v7m18-7v7"
-            />
+            <rect x="4" y="6" width="18" height="14" rx="2" fill="currentColor" class="text-accent/25" />
+            <rect x="7" y="9" width="18" height="14" rx="2" fill="currentColor" class="text-accent/50" />
+            <rect x="10" y="12" width="18" height="14" rx="2" fill="currentColor" class="text-accent" />
         </svg>
         <button
             class="text-xl font-semibold tracking-tight text-content-primary cursor-pointer hover:text-accent transition-colors"
@@ -117,6 +107,11 @@
     .mode-btn:hover {
         background-color: var(--color-surface-hover);
         color: var(--color-content-secondary);
+    }
+
+    .mode-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
     }
 
     .mode-btn.active {

@@ -613,12 +613,12 @@
 
     .quiz-option.correct {
         border-color: var(--color-srs-good);
-        background-color: rgba(129, 199, 132, 0.1);
+        background-color: var(--color-srs-good-soft);
     }
 
     .quiz-option.incorrect {
         border-color: var(--color-srs-again);
-        background-color: rgba(229, 115, 115, 0.1);
+        background-color: var(--color-srs-again-soft);
     }
 
     .quiz-option:disabled {
@@ -653,6 +653,7 @@
         background-color: var(--color-surface-primary);
         border-radius: 8px;
         border: 1px solid var(--color-border);
+        box-shadow: var(--shadow-card);
         text-align: left;
         transition: all 0.15s ease;
         cursor: pointer;
@@ -661,5 +662,11 @@
     .quiz-type-card:hover {
         border-color: var(--color-border-hover);
         background-color: var(--color-surface-secondary);
+        box-shadow: var(--shadow-card-hover);
+    }
+
+    .quiz-type-card:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
     }
 </style>

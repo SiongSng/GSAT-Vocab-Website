@@ -50,34 +50,39 @@
 
 <style>
     .rating-button[data-color="srs-again"]:hover {
-        border-color: rgba(229, 115, 115, 0.3);
-        background-color: rgba(229, 115, 115, 0.05);
+        border-color: var(--color-srs-again-border);
+        background-color: var(--color-srs-again-soft);
     }
     .rating-button[data-color="srs-again"]:hover span:first-child {
-        color: #e57373;
+        color: var(--color-srs-again);
     }
 
     .rating-button[data-color="srs-hard"]:hover {
-        border-color: rgba(255, 183, 77, 0.3);
-        background-color: rgba(255, 183, 77, 0.05);
+        border-color: var(--color-srs-hard-border);
+        background-color: var(--color-srs-hard-soft);
     }
     .rating-button[data-color="srs-hard"]:hover span:first-child {
-        color: #ffb74d;
+        color: var(--color-srs-hard);
     }
 
     .rating-button[data-color="srs-good"]:hover {
-        border-color: rgba(129, 199, 132, 0.3);
-        background-color: rgba(129, 199, 132, 0.05);
+        border-color: var(--color-srs-good-border);
+        background-color: var(--color-srs-good-soft);
     }
     .rating-button[data-color="srs-good"]:hover span:first-child {
-        color: #81c784;
+        color: var(--color-srs-good);
     }
 
     .rating-button[data-color="srs-easy"]:hover {
-        border-color: rgba(100, 181, 246, 0.3);
-        background-color: rgba(100, 181, 246, 0.05);
+        border-color: var(--color-srs-easy-border);
+        background-color: var(--color-srs-easy-soft);
     }
     .rating-button[data-color="srs-easy"]:hover span:first-child {
-        color: #64b5f6;
+        color: var(--color-srs-easy);
+    }
+
+    .rating-button:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
     }
 </style>

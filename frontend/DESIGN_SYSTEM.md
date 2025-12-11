@@ -1,6 +1,13 @@
 # GSAT Vocab Website Design System
 
-A comprehensive design specification based on Heptabase/Notion-inspired aesthetics. This document serves as the single source of truth for UI consistency across all components.
+A comprehensive design specification based on Heptabase/Notion-inspired aesthetics with a **learning-centered approach**. This document serves as the single source of truth for UI consistency across all components.
+
+## Core Philosophy: Learning-Centered Design
+
+- **Reduce cognitive load**: Clean visual hierarchy lets learners focus on vocabulary content
+- **Reinforce memory connections**: Visual flow guides word → meaning → context associations
+- **Positive feedback loops**: SRS states provide accomplishment without pressure
+- **Focus mode**: Minimize distractions during Flashcard/Quiz sessions
 
 ---
 
@@ -21,8 +28,8 @@ A comprehensive design specification based on Heptabase/Notion-inspired aestheti
 
 ## Design Principles
 
-### 1. Light Borders Over Heavy Shadows
-Use subtle borders (`border border-border`) instead of heavy box shadows. Shadows should only be used for floating elements like dropdowns or modals.
+### 1. Light Shadows with Borders
+Cards use subtle shadows (`shadow-card`) combined with thin borders for gentle depth. Hover states deepen the shadow slightly (`shadow-card-hover`).
 
 ### 2. Subtle Interactions
 Hover states should be barely perceptible but still provide feedback. Use `bg-surface-hover` (rgba(0,0,0,0.04)) for ghost interactions.
@@ -82,6 +89,18 @@ All colors are defined as CSS custom properties in `app.css`.
 | `--color-srs-hard` | `#ffb74d` | Needs review states |
 | `--color-srs-good` | `#81c784` | Success/correct states |
 | `--color-srs-easy` | `#64b5f6` | Easy/new states |
+| `--color-srs-*-soft` | `rgba(..., 0.1)` | Soft backgrounds for hover states |
+| `--color-srs-*-border` | `rgba(..., 0.3)` | Border colors for hover states |
+
+### Utility Colors
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--color-highlight` | `rgba(251, 191, 36, 0.35)` | Word highlighting in sentences |
+| `--color-scrollbar` | `rgba(0, 0, 0, 0.15)` | Scrollbar thumb |
+| `--color-scrollbar-hover` | `rgba(0, 0, 0, 0.25)` | Scrollbar thumb hover |
+| `--color-section-header` | `#9b9b9b` | Section header text |
+| `--color-content-primary-hover` | `#1a1a1a` | Primary button hover |
 
 ### Tailwind Class Mapping
 
@@ -131,12 +150,17 @@ bg-srs-easy            /* Info button */
 | Label | `text-sm` | `font-medium` (500) | - | `.text-sm.font-medium` |
 | Small/Caption | `text-xs` | `font-medium` (500) | `tracking-wide` | `.text-xs.font-medium` |
 
-### Section Headers Pattern
+### Section Headers Pattern (Notion-style)
+
+Use sentence-case with muted color instead of ALL-CAPS:
 
 ```html
-<h3 class="text-sm font-medium text-content-secondary mb-3 uppercase tracking-wide">
-  Section Title
-</h3>
+<h3 class="section-header">Section Title</h3>
+```
+
+Or with Tailwind classes:
+```html
+<h3 class="text-sm font-semibold text-section-header mb-3">Section Title</h3>
 ```
 
 ---
@@ -184,23 +208,24 @@ Always use `1px` borders (Tailwind default `border`).
 
 ## Shadows
 
-### Design Philosophy
+### Elevation System
 
-Prefer borders over shadows. Use shadows sparingly.
+Cards and interactive elements use a graduated shadow system for subtle depth:
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--shadow-card` | `0 0 0 1px hsla(0,0%,6%,0.05), 0 2px 4px hsla(0,0%,6%,0.1)` | Elevated cards (rarely used) |
-| `--shadow-float` | `0 10px 30px rgba(0,0,0,0.06)` | Dropdowns, modals |
+| `--shadow-sm` | `0 1px 2px rgba(0, 0, 0, 0.04)` | Button hover states |
+| `--shadow-card` | `0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04)` | Cards, panels |
+| `--shadow-card-hover` | `0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.06)` | Card hover states |
+| `--shadow-float` | `0 4px 12px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04)` | Dropdowns, modals |
 
-### Preferred Pattern
+### Card Pattern
 
 ```html
-<!-- DO: Use border for cards -->
-<div class="bg-surface-primary rounded-lg border border-border">...</div>
-
-<!-- DON'T: Use heavy shadows -->
-<div class="bg-white rounded-xl shadow-lg">...</div>
+<!-- Cards have subtle shadow + border, deepen on hover -->
+<div class="bg-surface-primary rounded-lg border border-border shadow-card hover:shadow-card-hover transition-shadow">
+  ...
+</div>
 ```
 
 ---
@@ -210,7 +235,7 @@ Prefer borders over shadows. Use shadows sparingly.
 ### Cards
 
 ```html
-<div class="bg-surface-primary rounded-lg border border-border p-6">
+<div class="bg-surface-primary rounded-lg border border-border shadow-card p-6 hover:shadow-card-hover transition-shadow">
   <h3 class="text-lg font-semibold tracking-tight text-content-primary mb-4">
     Card Title
   </h3>
@@ -222,10 +247,12 @@ Prefer borders over shadows. Use shadows sparingly.
 
 #### Primary Button (Dark)
 ```html
-<button class="px-5 py-2.5 bg-content-primary text-white font-medium rounded-md hover:opacity-90 transition-opacity">
+<button class="btn btn-primary">
   Primary Action
 </button>
 ```
+
+Button hover uses color shift (not opacity) and subtle shadow for tactile feedback.
 
 #### Accent Button (Blue)
 ```html
@@ -409,14 +436,19 @@ Spinners are hidden by default for cleaner appearance.
 
 ### Focus States
 
-All interactive elements use:
+All interactive elements use a visible focus ring for keyboard accessibility:
+
 ```css
-focus:outline-none focus:ring-2 focus:ring-accent-soft
+/* Double-ring focus style */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
+}
 ```
 
-Or via the global CSS:
-```css
-box-shadow: 0 0 0 2px var(--color-accent-soft);
+Or use the utility class:
+```html
+<button class="focus-ring">Interactive Element</button>
 ```
 
 ### Active/Selected States
@@ -537,14 +569,14 @@ Apply to scrollable containers:
 
 ## Text Highlighting
 
-For highlighting words in sentences:
+For highlighting words in sentences (uses design token):
 
 ```css
 .highlight {
   background: linear-gradient(
     to top,
-    rgba(32, 125, 255, 0.15) 0%,
-    rgba(32, 125, 255, 0.15) 45%,
+    var(--color-highlight) 0%,
+    var(--color-highlight) 45%,
     transparent 45%
   );
   padding: 0 2px;
@@ -561,11 +593,13 @@ For highlighting words in sentences:
 When creating new components, verify:
 
 - [ ] Uses `bg-surface-primary` for cards/panels (not `bg-white`)
-- [ ] Uses `border border-border` (not `shadow-lg`)
+- [ ] Uses `border border-border shadow-card` for cards
 - [ ] Uses `rounded-lg` for cards, `rounded-md` for buttons/inputs
 - [ ] Text colors use `text-content-*` tokens
-- [ ] Interactive elements have hover/focus states
-- [ ] Buttons follow the established patterns
+- [ ] Interactive elements have hover/focus-visible states
+- [ ] Buttons use `.btn-*` classes or follow established patterns
 - [ ] Spacing uses consistent values (p-6, gap-3, etc.)
 - [ ] Loading states use skeleton or spinner patterns
 - [ ] Empty states are handled gracefully
+- [ ] SRS-related colors use `--color-srs-*` tokens (never hardcoded)
+- [ ] Section headers use sentence-case with `text-section-header`

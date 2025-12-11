@@ -25,9 +25,26 @@
     --color-srs-good: #81c784;
     --color-srs-easy: #64b5f6;
 
-    --shadow-card:
-        0 0 0 1px hsla(0, 0%, 6%, 0.05), 0 2px 4px hsla(0, 0%, 6%, 0.1);
-    --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
+    --color-srs-again-soft: rgba(229, 115, 115, 0.1);
+    --color-srs-again-border: rgba(229, 115, 115, 0.3);
+    --color-srs-hard-soft: rgba(255, 183, 77, 0.1);
+    --color-srs-hard-border: rgba(255, 183, 77, 0.3);
+    --color-srs-good-soft: rgba(129, 199, 132, 0.1);
+    --color-srs-good-border: rgba(129, 199, 132, 0.3);
+    --color-srs-easy-soft: rgba(100, 181, 246, 0.1);
+    --color-srs-easy-border: rgba(100, 181, 246, 0.3);
+
+    --color-highlight: rgba(251, 191, 36, 0.35);
+    --color-scrollbar: rgba(0, 0, 0, 0.15);
+    --color-scrollbar-hover: rgba(0, 0, 0, 0.25);
+
+    --color-content-primary-hover: #1a1a1a;
+    --color-section-header: #9b9b9b;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    --shadow-float: 0 4px 12px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
     --shadow-image: 0 8px 24px rgba(0, 0, 0, 0.12);
 
     --radius-sm: 4px;
@@ -216,8 +233,8 @@ input[type="number"] {
 .highlight {
     background: linear-gradient(
         to top,
-        rgba(255, 230, 0, 0.4) 0%,
-        rgba(255, 230, 0, 0.4) 45%,
+        var(--color-highlight) 0%,
+        var(--color-highlight) 45%,
         transparent 45%
     );
     padding: 0 2px;
@@ -251,7 +268,13 @@ input[type="number"] {
 }
 
 .btn-primary:hover:not(:disabled) {
-    opacity: 0.9;
+    background-color: var(--color-content-primary-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-content-primary);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -296,10 +319,14 @@ input[type="number"] {
     background-color: var(--color-surface-primary);
     border: 1px solid var(--color-border);
     border-radius: 8px;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
+.card:hover,
 .card-hover:hover {
     border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-card-hover);
 }
 
 .card-interactive {
@@ -310,15 +337,14 @@ input[type="number"] {
 .card-interactive:hover {
     border-color: var(--color-border-hover);
     background-color: var(--color-surface-secondary);
+    box-shadow: var(--shadow-card-hover);
 }
 
-/* Section header style */
+/* Section header style - Notion-style sentence case */
 .section-header {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--color-content-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-section-header);
     margin-bottom: 0.75rem;
 }
 
@@ -372,9 +398,10 @@ input[type="number"] {
 }
 
 /* Focus ring utility */
-.focus-ring:focus {
+.focus-ring:focus,
+.focus-ring:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px var(--color-accent-soft);
+    box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
 }
 
 /* Transition utilities */
