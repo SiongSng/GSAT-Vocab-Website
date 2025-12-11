@@ -38,6 +38,7 @@ interface SRSStore {
   dailyLimits: DailyLimits;
   newCardsStudiedToday: number;
   reviewsToday: number;
+  statsVersion: number;
 }
 
 const store: SRSStore = $state({
@@ -52,6 +53,7 @@ const store: SRSStore = $state({
   dailyLimits: { ...DEFAULT_DAILY_LIMITS },
   newCardsStudiedToday: 0,
   reviewsToday: 0,
+  statsVersion: 0,
 });
 
 function createEmptySessionStats(): StudySessionStats {
@@ -66,13 +68,20 @@ function createEmptySessionStats(): StudySessionStats {
 }
 
 const deckStats = $derived<DeckStats>({
-  newCount: store.initialized ? getNewCards().length : 0,
-  learningCount: store.initialized ? getLearningCards().length : 0,
-  reviewCount: store.initialized ? getReviewCards().length : 0,
-  relearningCount: store.initialized
-    ? getAllCards().filter((c) => c.state === State.Relearning).length
-    : 0,
-  totalDue: store.initialized ? getDueCards().length : 0,
+  newCount:
+    store.initialized && store.statsVersion >= 0 ? getNewCards().length : 0,
+  learningCount:
+    store.initialized && store.statsVersion >= 0
+      ? getLearningCards().length
+      : 0,
+  reviewCount:
+    store.initialized && store.statsVersion >= 0 ? getReviewCards().length : 0,
+  relearningCount:
+    store.initialized && store.statsVersion >= 0
+      ? getAllCards().filter((c) => c.state === State.Relearning).length
+      : 0,
+  totalDue:
+    store.initialized && store.statsVersion >= 0 ? getDueCards().length : 0,
 });
 
 export function getSRSStore() {
@@ -293,6 +302,7 @@ export async function rateCard(rating: Rating): Promise<void> {
     store.studyQueue.push(updatedCard);
   }
 
+  store.statsVersion++;
   moveToNextCard();
 }
 
@@ -317,6 +327,7 @@ export function endStudySession(): void {
   store.currentCardIndex = 0;
   store.isFlipped = false;
   store.schedulingInfo = null;
+  store.statsVersion++;
   forceSave();
 }
 
