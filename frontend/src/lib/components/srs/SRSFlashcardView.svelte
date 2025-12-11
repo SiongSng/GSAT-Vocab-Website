@@ -38,17 +38,25 @@
         }
     });
 
-    function handleStart(words: string[]) {
-        startStudySession({ customWords: words });
+    function getNewCardLimit(): number {
+        try {
+            const saved = localStorage.getItem("gsat_srs_study_settings");
+            if (saved) {
+                const settings = JSON.parse(saved);
+                return settings.newCardLimit ?? 20;
+            }
+            return 20;
+        } catch {
+            return 20;
+        }
+    }
+
+    function handleStart(newCardPool: string[]) {
+        startStudySession({ newLimit: getNewCardLimit(), newCardPool });
         viewState = "studying";
     }
 
-    function handleContinueStudy(words: string[]) {
-        startStudySession({ customWords: words });
-        viewState = "studying";
-    }
-
-    function handleDone() {
+    function handleBackToDashboard() {
         endStudySession();
         viewState = "dashboard";
     }
@@ -65,10 +73,7 @@
         {:else if viewState === "studying" && !srs.isComplete}
             <StudySession />
         {:else if viewState === "complete" || srs.isComplete}
-            <SessionComplete
-                onContinue={handleContinueStudy}
-                onDone={handleDone}
-            />
+            <SessionComplete onBackToDashboard={handleBackToDashboard} />
         {/if}
     </div>
 </div>

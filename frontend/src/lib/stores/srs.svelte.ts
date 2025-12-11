@@ -186,33 +186,36 @@ export function addWordsToSRS(lemmas: string[]): void {
 export function startStudySession(options?: {
   newLimit?: number;
   reviewLimit?: number;
-  customWords?: string[];
+  newCardPool?: string[];
 }): void {
   const now = new Date();
   const queue: SRSCard[] = [];
 
-  if (options?.customWords && options.customWords.length > 0) {
-    for (const lemma of options.customWords) {
-      const card = ensureCard(lemma);
-      queue.push(card);
-    }
+  const newLimit =
+    options?.newLimit ??
+    Math.max(0, store.dailyLimits.newCards - store.newCardsStudiedToday);
+  const reviewLimit =
+    options?.reviewLimit ??
+    Math.max(0, store.dailyLimits.reviews - store.reviewsToday);
+
+  const learningCards = getLearningCards().filter(
+    (c) => new Date(c.due) <= now,
+  );
+  const reviewCards = getReviewCards(now).slice(0, reviewLimit);
+
+  let newCards: SRSCard[];
+  if (options?.newCardPool && options.newCardPool.length > 0) {
+    const poolSet = new Set(options.newCardPool);
+    newCards = getNewCards()
+      .filter((c) => poolSet.has(c.lemma))
+      .slice(0, newLimit);
   } else {
-    const newLimit =
-      options?.newLimit ??
-      store.dailyLimits.newCards - store.newCardsStudiedToday;
-    const reviewLimit =
-      options?.reviewLimit ?? store.dailyLimits.reviews - store.reviewsToday;
-
-    const newCards = getNewCards().slice(0, Math.max(0, newLimit));
-    const reviewCards = getReviewCards(now).slice(0, Math.max(0, reviewLimit));
-    const learningCards = getLearningCards().filter(
-      (c) => new Date(c.due) <= now,
-    );
-
-    queue.push(...learningCards);
-    queue.push(...reviewCards);
-    queue.push(...newCards);
+    newCards = getNewCards().slice(0, newLimit);
   }
+
+  queue.push(...learningCards);
+  queue.push(...reviewCards);
+  queue.push(...newCards);
 
   shuffleArray(queue);
 

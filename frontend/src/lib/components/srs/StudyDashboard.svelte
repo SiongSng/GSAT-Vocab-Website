@@ -2,9 +2,10 @@
     import { getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
+    import { getNewCards } from "$lib/stores/srs-storage";
 
     interface Props {
-        onStart: (words: string[]) => void;
+        onStart: (newCardPool: string[]) => void;
     }
 
     let { onStart }: Props = $props();
@@ -13,13 +14,72 @@
     const vocab = getVocabStore();
     const app = getAppStore();
 
-    let wordCount = $state(20);
-    let selectedPos = $state<Set<string>>(new Set());
-    let freqMin = $state(1);
-    let freqMax = $state(100);
-    let excludePropn = $state(true);
-    let autoSpeak = $state(true);
+    const STORAGE_KEY = "gsat_srs_study_settings";
+
+    interface StudySettings {
+        newCardLimit: number;
+        selectedPos: string[];
+        freqMin: number;
+        freqMax: number;
+        excludePropn: boolean;
+        autoSpeak: boolean;
+    }
+
+    const defaultSettings: StudySettings = {
+        newCardLimit: 20,
+        selectedPos: [],
+        freqMin: 1,
+        freqMax: 100,
+        excludePropn: true,
+        autoSpeak: true,
+    };
+
+    let newCardLimit = $state(defaultSettings.newCardLimit);
+    let selectedPos = $state<Set<string>>(new Set(defaultSettings.selectedPos));
+    let freqMin = $state(defaultSettings.freqMin);
+    let freqMax = $state(defaultSettings.freqMax);
+    let excludePropn = $state(defaultSettings.excludePropn);
+    let autoSpeak = $state(defaultSettings.autoSpeak);
     let showSettings = $state(false);
+
+    function loadSettings(): void {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const settings: StudySettings = JSON.parse(saved);
+                newCardLimit =
+                    settings.newCardLimit ?? defaultSettings.newCardLimit;
+                selectedPos = new Set(
+                    settings.selectedPos ?? defaultSettings.selectedPos,
+                );
+                freqMin = settings.freqMin ?? defaultSettings.freqMin;
+                freqMax = settings.freqMax ?? defaultSettings.freqMax;
+                excludePropn =
+                    settings.excludePropn ?? defaultSettings.excludePropn;
+                autoSpeak = settings.autoSpeak ?? defaultSettings.autoSpeak;
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    function saveSettings(): void {
+        try {
+            const settings: StudySettings = {
+                newCardLimit,
+                selectedPos: Array.from(selectedPos),
+                freqMin,
+                freqMax,
+                excludePropn,
+                autoSpeak,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        } catch {
+            // ignore
+        }
+    }
+
+    loadSettings();
 
     const posOptions = ["NOUN", "VERB", "ADJ", "ADV"];
     const posLabels: Record<string, string> = {
@@ -29,8 +89,14 @@
         ADV: "副詞",
     };
 
-    const filteredPool = $derived.by(() => {
+    const newCardLemmas = $derived.by(() => {
+        return new Set(getNewCards().map((c) => c.lemma));
+    });
+
+    const filteredNewCardPool = $derived.by(() => {
         let pool = vocab.index || [];
+
+        pool = pool.filter((w) => newCardLemmas.has(w.lemma));
 
         if (selectedPos.size > 0) {
             pool = pool.filter((w) => selectedPos.has(w.primary_pos));
@@ -42,10 +108,24 @@
 
         pool = pool.filter((w) => w.count >= freqMin && w.count <= freqMax);
 
-        return pool;
+        return pool.map((w) => w.lemma);
     });
 
-    const actualWordCount = $derived(Math.min(wordCount, filteredPool.length));
+    const actualNewCardCount = $derived(
+        Math.min(newCardLimit, filteredNewCardPool.length),
+    );
+
+    const todayTotal = $derived(
+        srs.deckStats.reviewCount +
+            srs.deckStats.learningCount +
+            actualNewCardCount,
+    );
+
+    const hasCardsToStudy = $derived(
+        srs.deckStats.reviewCount > 0 ||
+            srs.deckStats.learningCount > 0 ||
+            filteredNewCardPool.length > 0,
+    );
 
     function togglePos(pos: string) {
         const newSet = new Set(selectedPos);
@@ -58,26 +138,12 @@
     }
 
     function handleStart() {
-        const pool = filteredPool;
-        const count = Math.min(wordCount, pool.length);
-        const shuffled = [...pool].sort(() => Math.random() - 0.5);
-        const selectedWords = shuffled.slice(0, count).map((w) => w.lemma);
-
-        try {
-            localStorage.setItem(
-                "gsat_srs_auto_speak",
-                autoSpeak ? "true" : "false",
-            );
-        } catch {
-            // ignore
-        }
-
-        onStart(selectedWords);
+        saveSettings();
+        onStart(filteredNewCardPool);
     }
 </script>
 
 <div class="flex flex-col lg:flex-row gap-5">
-    <!-- Stats Panel -->
     <div
         class="bg-surface-primary rounded-lg border border-border p-6 lg:p-7 flex-1"
     >
@@ -96,7 +162,7 @@
                 >
                     {srs.deckStats.reviewCount}
                 </div>
-                <div class="text-sm text-content-secondary mt-1.5">複習</div>
+                <div class="text-sm text-content-secondary mt-1.5">待複習</div>
                 <div
                     class="w-1.5 h-1.5 rounded-full bg-srs-again/70 mx-auto mt-2 lg:mt-3"
                 ></div>
@@ -120,7 +186,7 @@
                 <div
                     class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight"
                 >
-                    {srs.deckStats.newCount}
+                    {filteredNewCardPool.length}
                 </div>
                 <div class="text-sm text-content-secondary mt-1.5">新卡片</div>
                 <div
@@ -129,7 +195,6 @@
             </div>
         </div>
 
-        <!-- Mobile: Toggle Settings Button -->
         {#if app.isMobile}
             <button
                 onclick={() => (showSettings = !showSettings)}
@@ -154,31 +219,42 @@
             </button>
         {/if}
 
-        <!-- Mobile: Collapsible Settings -->
         {#if app.isMobile && showSettings}
             <div class="border-t border-border pt-4 mb-4">
                 {@render settingsContent()}
             </div>
         {/if}
 
-        <!-- Start Button -->
         <button
             onclick={handleStart}
-            disabled={filteredPool.length === 0}
+            disabled={!hasCardsToStudy}
             class="w-full py-3 px-5 bg-content-primary text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
         >
-            開始學習
-            {#if actualWordCount > 0}
-                <span class="text-white/60 ml-1.5">{actualWordCount}</span>
+            {#if hasCardsToStudy}
+                開始學習
+                <span class="text-white/60 ml-1.5">約 {todayTotal} 張</span>
+            {:else}
+                今日已完成
             {/if}
         </button>
 
-        <div class="text-sm text-content-tertiary text-center mt-3">
-            符合條件：{filteredPool.length} 張卡片
-        </div>
+        {#if hasCardsToStudy}
+            <div class="text-sm text-content-tertiary text-center mt-3">
+                {#if srs.deckStats.learningCount > 0}
+                    {srs.deckStats.learningCount} 張學習中
+                {/if}
+                {#if srs.deckStats.reviewCount > 0}
+                    {#if srs.deckStats.learningCount > 0}+{/if}
+                    {srs.deckStats.reviewCount} 張複習
+                {/if}
+                {#if actualNewCardCount > 0}
+                    {#if srs.deckStats.learningCount > 0 || srs.deckStats.reviewCount > 0}+{/if}
+                    最多 {actualNewCardCount} 張新卡片
+                {/if}
+            </div>
+        {/if}
     </div>
 
-    <!-- Desktop: Settings Panel -->
     {#if !app.isMobile}
         <div
             class="bg-surface-primary rounded-lg border border-border p-6 lg:p-7 flex-1 max-w-md"
@@ -197,26 +273,29 @@
     <div class="space-y-5">
         <div>
             <label
-                for="word-count"
+                for="new-card-limit"
                 class="block text-sm font-medium text-content-secondary mb-2"
             >
-                卡片數量
+                每次新卡片上限
             </label>
             <input
-                id="word-count"
+                id="new-card-limit"
                 type="number"
-                bind:value={wordCount}
-                min="1"
+                bind:value={newCardLimit}
+                min="0"
                 max="100"
                 class="w-full px-3.5 py-2.5 text-sm bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
             />
+            <p class="text-xs text-content-tertiary mt-1.5">
+                設為 0 則只複習已學過的卡片
+            </p>
         </div>
 
         <div>
             <span
                 class="block text-sm font-medium text-content-secondary mb-2.5"
             >
-                詞性篩選
+                新卡片詞性
             </span>
             <div class="flex flex-wrap gap-2">
                 <button
@@ -245,7 +324,7 @@
 
         <div>
             <span class="block text-sm font-medium text-content-secondary mb-2">
-                出現頻率
+                新卡片出現頻率
             </span>
             <div class="flex gap-3 items-center">
                 <input

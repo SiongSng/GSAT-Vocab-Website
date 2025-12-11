@@ -1,16 +1,13 @@
 <script lang="ts">
     import { getSRSStore } from "$lib/stores/srs.svelte";
-    import { getVocabStore } from "$lib/stores/vocab.svelte";
 
     interface Props {
-        onContinue: (words: string[]) => void;
-        onDone: () => void;
+        onBackToDashboard: () => void;
     }
 
-    let { onContinue, onDone }: Props = $props();
+    let { onBackToDashboard }: Props = $props();
 
     const srs = getSRSStore();
-    const vocab = getVocabStore();
 
     const sessionDuration = $derived.by(() => {
         const start = srs.sessionStats.startTime;
@@ -36,14 +33,6 @@
             srs.deckStats.learningCount > 0 ||
             srs.deckStats.reviewCount > 0,
     );
-
-    function handleContinue() {
-        const pool = vocab.index || [];
-        const filtered = pool.filter((w) => w.primary_pos !== "PROPN");
-        const shuffled = [...filtered].sort(() => Math.random() - 0.5);
-        const words = shuffled.slice(0, 20).map((w) => w.lemma);
-        onContinue(words);
-    }
 </script>
 
 <div
@@ -100,14 +89,14 @@
                 還有更多卡片
             </div>
             <div class="flex gap-5 text-base">
-                {#if srs.deckStats.reviewCount > 0}
-                    <span class="text-srs-again"
-                        >{srs.deckStats.reviewCount} 待複習</span
-                    >
-                {/if}
                 {#if srs.deckStats.learningCount > 0}
                     <span class="text-srs-hard"
                         >{srs.deckStats.learningCount} 學習中</span
+                    >
+                {/if}
+                {#if srs.deckStats.reviewCount > 0}
+                    <span class="text-srs-again"
+                        >{srs.deckStats.reviewCount} 待複習</span
                     >
                 {/if}
                 {#if srs.deckStats.newCount > 0}
@@ -119,22 +108,10 @@
         </div>
     {/if}
 
-    <div class="flex gap-3">
-        {#if hasMoreCards}
-            <button
-                onclick={handleContinue}
-                class="flex-1 py-2.5 px-5 bg-content-primary text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity"
-            >
-                繼續學習
-            </button>
-        {/if}
-        <button
-            onclick={onDone}
-            class="{hasMoreCards
-                ? ''
-                : 'flex-1'} py-2.5 px-5 bg-surface-page text-content-secondary rounded-lg text-base font-medium border border-border hover:border-border-hover transition-colors"
-        >
-            完成
-        </button>
-    </div>
+    <button
+        onclick={onBackToDashboard}
+        class="w-full py-2.5 px-5 bg-content-primary text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity"
+    >
+        {hasMoreCards ? "繼續學習" : "完成"}
+    </button>
 </div>
