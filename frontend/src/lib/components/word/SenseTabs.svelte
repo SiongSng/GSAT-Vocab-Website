@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { VocabSense } from "$lib/types/vocab";
     import { speakText } from "$lib/tts";
+    import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
 
     interface Props {
         senses: VocabSense[];
@@ -24,39 +25,6 @@
     function truncateDef(def: string, maxLen: number = 8): string {
         if (def.length <= maxLen) return def;
         return def.slice(0, maxLen) + "…";
-    }
-
-    function highlightWord(text: string, word: string): string {
-        const variants = getInflectionVariants(word);
-        const pattern = variants
-            .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-            .join("|");
-        const regex = new RegExp(`\\b(${pattern})\\b`, "gi");
-        return text.replace(regex, '<span class="highlight">$1</span>');
-    }
-
-    function getInflectionVariants(word: string): string[] {
-        const lower = word.toLowerCase();
-        const variants = [word, lower];
-
-        variants.push(lower + "s");
-        variants.push(lower + "es");
-        variants.push(lower + "ed");
-        variants.push(lower + "ing");
-        variants.push(lower + "er");
-        variants.push(lower + "est");
-        variants.push(lower + "ly");
-
-        if (lower.endsWith("e")) {
-            variants.push(lower.slice(0, -1) + "ing");
-            variants.push(lower + "d");
-        }
-        if (lower.endsWith("y")) {
-            variants.push(lower.slice(0, -1) + "ies");
-            variants.push(lower.slice(0, -1) + "ied");
-        }
-
-        return variants;
     }
 
     async function playSentenceAudio(text: string, index: number) {
@@ -184,7 +152,10 @@
                                 <p
                                     class="text-content-primary leading-relaxed"
                                 >
-                                    {@html highlightWord(example.text, lemma)}
+                                    <ClickableWord
+                                        text={example.text}
+                                        highlightWord={lemma}
+                                    />
                                 </p>
                                 <div
                                     class="flex items-center justify-between mt-3"
@@ -235,28 +206,13 @@
                     <p
                         class="text-sm text-content-secondary italic leading-relaxed"
                     >
-                        {@html highlightWord(
-                            activeSense.generated_example,
-                            lemma,
-                        )}
+                        <ClickableWord
+                            text={activeSense.generated_example}
+                            highlightWord={lemma}
+                        />
                     </p>
                 </div>
             {/if}
         </div>
     {/if}
 </div>
-
-<style>
-    :global(.highlight) {
-        background: linear-gradient(
-            to top,
-            var(--color-highlight) 0%,
-            var(--color-highlight) 60%,
-            transparent 60%
-        );
-        padding: 0 2px;
-        margin: 0 -2px;
-        border-radius: 2px;
-        font-weight: 500;
-    }
-</style>

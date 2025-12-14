@@ -3,6 +3,7 @@ import { getRouterStore, navigate } from "./router.svelte";
 
 interface AppStore {
   isSidebarOpen: boolean;
+  isFilterCollapsed: boolean;
   isGridMode: boolean;
   isMobile: boolean;
   isMobileDetailOpen: boolean;
@@ -10,6 +11,7 @@ interface AppStore {
 
 const store: AppStore = $state({
   isSidebarOpen: false,
+  isFilterCollapsed: false,
   isGridMode: false,
   isMobile: false,
   isMobileDetailOpen: false,
@@ -38,6 +40,9 @@ export function getAppStore() {
     },
     get isSidebarOpen() {
       return store.isSidebarOpen;
+    },
+    get isFilterCollapsed() {
+      return store.isFilterCollapsed;
     },
     get isGridMode() {
       return store.isGridMode;
@@ -74,6 +79,14 @@ export function toggleSidebar(): void {
 
 export function closeSidebar(): void {
   store.isSidebarOpen = false;
+}
+
+export function toggleFilterCollapsed(): void {
+  store.isFilterCollapsed = !store.isFilterCollapsed;
+}
+
+export function setFilterCollapsed(collapsed: boolean): void {
+  store.isFilterCollapsed = collapsed;
 }
 
 export function toggleGridMode(): void {

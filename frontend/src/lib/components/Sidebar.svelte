@@ -9,7 +9,7 @@
         setTestedOnly,
         resetFilters,
     } from "$lib/stores/vocab.svelte";
-    import { getAppStore, closeSidebar } from "$lib/stores/app.svelte";
+    import { getAppStore, closeSidebar, toggleFilterCollapsed } from "$lib/stores/app.svelte";
     import type { PosFilter, VocabTypeFilter } from "$lib/types";
 
     const filters = getFilters();
@@ -95,22 +95,70 @@
     ></button>
 {/if}
 
-<aside
-    class="sidebar h-full bg-surface-primary border-r border-border flex flex-col transition-transform duration-300 ease-in-out"
-    class:translate-x-0={app.isSidebarOpen || !app.isMobile}
-    class:-translate-x-full={!app.isSidebarOpen && app.isMobile}
->
-    <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
-        <div class="flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-content-primary">篩選條件</h2>
-            <button
-                class="text-xs text-accent hover:underline"
-                onclick={handleReset}
-                type="button"
-            >
-                重設
-            </button>
-        </div>
+{#if !app.isMobile && app.isFilterCollapsed}
+    <button
+        class="sidebar-collapsed"
+        onclick={toggleFilterCollapsed}
+        type="button"
+        title="展開篩選"
+    >
+        <svg
+            class="w-5 h-5"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+        >
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
+            />
+        </svg>
+    </button>
+{:else}
+    <aside
+        class="sidebar h-full bg-surface-primary border-r border-border flex flex-col transition-transform duration-300 ease-in-out"
+        class:translate-x-0={app.isSidebarOpen || !app.isMobile}
+        class:-translate-x-full={!app.isSidebarOpen && app.isMobile}
+    >
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-content-primary">篩選條件</h2>
+                <div class="flex items-center gap-2">
+                    <button
+                        class="text-xs text-accent hover:underline"
+                        onclick={handleReset}
+                        type="button"
+                    >
+                        重設
+                    </button>
+                    {#if !app.isMobile}
+                        <button
+                            class="p-1 rounded hover:bg-surface-hover text-content-tertiary"
+                            onclick={toggleFilterCollapsed}
+                            type="button"
+                            title="收合篩選"
+                        >
+                            <svg
+                                class="w-4 h-4"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke-width="1.5"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"
+                                />
+                            </svg>
+                        </button>
+                    {/if}
+                </div>
+            </div>
 
         <div class="relative">
             <svg
@@ -275,8 +323,27 @@
         </div>
     </div>
 </aside>
+{/if}
 
 <style>
+    .sidebar-collapsed {
+        height: 100%;
+        width: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--color-surface-primary);
+        border-right: 1px solid var(--color-border);
+        color: var(--color-content-tertiary);
+        transition: all 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .sidebar-collapsed:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-content-secondary);
+    }
+
     .section-header {
         font-size: 0.8125rem;
         font-weight: 600;

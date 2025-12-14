@@ -1433,11 +1433,11 @@ function handleWordSelect(lemma: string) {
 
 ### Phase 4: Global Word Lookup (Week 4-5)
 
-- [ ] Create `ClickableWord` component
-- [ ] Build word lookup store and state management
-- [ ] Implement desktop sidebar lookup panel
-- [ ] Implement mobile bottom sheet lookup
-- [ ] Integrate with all text display components
+- [x] Create `ClickableWord` component
+- [x] Build word lookup store and state management
+- [x] Implement desktop sidebar lookup panel
+- [x] Implement mobile bottom sheet lookup
+- [x] Integrate with all text display components
 
 ### Phase 5: SRS System Upgrade (Week 5-7)
 

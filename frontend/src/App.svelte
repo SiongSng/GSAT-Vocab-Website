@@ -5,6 +5,8 @@
     import SRSFlashcardView from "$lib/components/srs/SRSFlashcardView.svelte";
     import QuizView from "$lib/components/QuizView.svelte";
     import LoadingOverlay from "$lib/components/LoadingOverlay.svelte";
+    import QuickLookupSidebar from "$lib/components/lookup/QuickLookupSidebar.svelte";
+    import QuickLookupSheet from "$lib/components/lookup/QuickLookupSheet.svelte";
     import { getAppStore, setMobile } from "$lib/stores/app.svelte";
     import {
         loadVocabData,
@@ -65,6 +67,9 @@
         {/if}
     </main>
 </div>
+
+<QuickLookupSidebar />
+<QuickLookupSheet />
 
 <style>
     .app {
