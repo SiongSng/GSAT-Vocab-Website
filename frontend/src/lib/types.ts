@@ -39,11 +39,32 @@ export type ViewMode = 'browse' | 'flashcard' | 'quiz';
 
 export type PosFilter = 'all' | 'NOUN' | 'VERB' | 'ADJ' | 'ADV' | 'PROPN';
 
+export type VocabTypeFilter = 'all' | 'word' | 'phrase' | 'pattern';
+
+export type TierFilter = 'all' | 'tested' | 'translation' | 'phrase' | 'pattern' | 'basic';
+
+export type SortOption =
+  | 'importance_desc'
+  | 'importance_asc'
+  | 'count_desc'
+  | 'count_asc'
+  | 'year_spread_desc'
+  | 'alphabetical_asc'
+  | 'alphabetical_desc'
+  | 'level_asc'
+  | 'level_desc';
+
 export interface Filters {
   searchTerm: string;
   freqMin: number;
   freqMax: number;
   pos: PosFilter;
+  type: VocabTypeFilter;
+  tier: TierFilter;
+  levels: number[];
+  officialOnly: boolean;
+  testedOnly: boolean;
+  sortBy: SortOption;
 }
 
 export interface FlashcardState {
