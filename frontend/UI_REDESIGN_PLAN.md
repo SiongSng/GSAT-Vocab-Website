@@ -1425,11 +1425,11 @@ function handleWordSelect(lemma: string) {
 
 ### Phase 3: Word Detail Overhaul (Week 3-4)
 
-- [ ] Implement multi-sense tab interface
-- [ ] Create collapsible section components
-- [ ] Add statistics visualization (year distribution chart)
-- [ ] Implement confusion notes display
-- [ ] Add related words (synonyms/antonyms/derived) section
+- [x] Implement multi-sense tab interface
+- [x] Create collapsible section components
+- [x] Add statistics visualization (year distribution chart)
+- [x] Implement confusion notes display
+- [x] Add related words (synonyms/antonyms/derived) section
 
 ### Phase 4: Global Word Lookup (Week 4-5)
 

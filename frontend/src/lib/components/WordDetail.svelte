@@ -1,15 +1,20 @@
 <script lang="ts">
     import { tick } from "svelte";
-    import { getVocabStore } from "$lib/stores/vocab.svelte";
+    import { getVocabStore, selectWord } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
     import { speakText } from "$lib/tts";
+    import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
+    import SenseTabs from "$lib/components/word/SenseTabs.svelte";
+    import StatisticsSection from "$lib/components/word/StatisticsSection.svelte";
+    import ConfusionNotes from "$lib/components/word/ConfusionNotes.svelte";
+    import RelatedWords from "$lib/components/word/RelatedWords.svelte";
+    import RootAnalysis from "$lib/components/word/RootAnalysis.svelte";
 
     const vocab = getVocabStore();
     const app = getAppStore();
 
     let audioPlayer: HTMLAudioElement | null = null;
     let isPlayingWord = $state(false);
-    let playingSentenceIndex = $state<number | null>(null);
     let showSkeleton = $state(false);
     let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -35,16 +40,15 @@
 
     const isLoadingDetail = $derived(isActuallyLoading && showSkeleton);
 
-    const allExamples = $derived.by(() => {
-        if (!entry?.senses) return [];
-        return entry.senses.flatMap((sense, senseIdx) =>
-            sense.examples.map((ex) => ({
-                text: ex.text,
-                source: `${ex.source.year} ${ex.source.exam_type}`,
-                senseIdx,
-            })),
-        );
-    });
+    const hasConfusionNotes = $derived(
+        entry?.confusion_notes && entry.confusion_notes.length > 0,
+    );
+    const hasRootInfo = $derived(entry?.root_info !== null);
+    const hasRelatedWords = $derived(
+        (entry?.synonyms && entry.synonyms.length > 0) ||
+            (entry?.antonyms && entry.antonyms.length > 0) ||
+            (entry?.derived_forms && entry.derived_forms.length > 0),
+    );
 
     async function playWordAudio() {
         if (!entry || isPlayingWord) return;
@@ -61,21 +65,6 @@
         }
     }
 
-    async function playSentenceAudio(text: string, index: number) {
-        if (playingSentenceIndex === index) return;
-        playingSentenceIndex = index;
-        try {
-            const url = await speakText(text);
-            if (!audioPlayer) audioPlayer = new Audio();
-            audioPlayer.src = url;
-            audioPlayer.onended = () => (playingSentenceIndex = null);
-            audioPlayer.onerror = () => (playingSentenceIndex = null);
-            await audioPlayer.play();
-        } catch {
-            playingSentenceIndex = null;
-        }
-    }
-
     function handleBackClick() {
         closeMobileDetail();
         tick().then(() => {
@@ -88,58 +77,21 @@
         });
     }
 
-    function highlightWord(text: string, lemma: string): string {
-        const variants = getInflectionVariants(lemma);
-        const pattern = variants
-            .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-            .join("|");
-        const regex = new RegExp(`\\b(${pattern})\\b`, "gi");
-        return text.replace(regex, '<span class="highlight">$1</span>');
-    }
-
-    function getInflectionVariants(lemma: string): string[] {
-        const lower = lemma.toLowerCase();
-        const variants = [lemma, lower];
-
-        variants.push(lower + "s");
-        variants.push(lower + "es");
-        variants.push(lower + "ed");
-        variants.push(lower + "ing");
-        variants.push(lower + "er");
-        variants.push(lower + "est");
-        variants.push(lower + "ly");
-
-        if (lower.endsWith("e")) {
-            variants.push(lower.slice(0, -1) + "ing");
-            variants.push(lower + "d");
-        }
-        if (lower.endsWith("y")) {
-            variants.push(lower.slice(0, -1) + "ies");
-            variants.push(lower.slice(0, -1) + "ied");
-        }
-
-        return variants;
-    }
-
-    function getRank(lemma: string): number {
-        const idx = vocab.index.findIndex((w) => w.lemma === lemma);
-        return idx >= 0 ? idx + 1 : 0;
+    function handleRelatedWordClick(lemma: string) {
+        selectWord(lemma);
     }
 
     function formatLevel(level: number | null): string {
         if (level === null) return "";
-        return `Level ${level}`;
+        return `L${level}`;
     }
 
-    function formatTier(tier: string): string {
-        const tierMap: Record<string, string> = {
-            tested: "考題詞彙",
-            translation: "翻譯詞彙",
-            phrase: "片語",
-            pattern: "句型",
-            basic: "基礎",
-        };
-        return tierMap[tier] ?? tier;
+    function formatImportance(frequency: {
+        ml_score: number | null;
+        weighted_score: number;
+    }): string {
+        const score = frequency.ml_score ?? frequency.weighted_score / 30;
+        return `${Math.round(score * 100)}%`;
     }
 </script>
 
@@ -259,6 +211,7 @@
         </div>
     {:else if entry}
         <div class="detail-content pt-12 lg:pt-0">
+            <!-- Header -->
             <div class="flex items-start justify-between mb-6">
                 <div>
                     <div class="flex items-center gap-3 mb-2">
@@ -290,218 +243,91 @@
                             </svg>
                         </button>
                     </div>
-                    <div class="flex items-center gap-2 flex-wrap text-sm">
-                        <span class="text-content-tertiary">#{getRank(entry.lemma)}</span>
-                        <span class="text-border-hover">·</span>
-                        <span class="text-content-tertiary">出現 {entry.frequency.total_occurrences} 次</span>
+                    <div class="flex items-center gap-1.5 flex-wrap text-sm">
                         {#if entry.level !== null}
+                            <span class="text-content-tertiary"
+                                >{formatLevel(entry.level)}</span
+                            >
                             <span class="text-border-hover">·</span>
-                            <span class="text-content-tertiary">{formatLevel(entry.level)}</span>
                         {/if}
                         {#if entry.in_official_list}
-                            <span class="px-1.5 py-0.5 text-xs font-medium bg-accent-soft text-accent rounded">官方詞彙</span>
+                            <span class="text-accent">官方</span>
+                            <span class="text-border-hover">·</span>
                         {/if}
-                        <span class="px-1.5 py-0.5 text-xs font-medium bg-surface-secondary text-content-secondary rounded">{formatTier(entry.tier)}</span>
+                        <span class="text-content-tertiary"
+                            >重要 {formatImportance(entry.frequency)}</span
+                        >
                     </div>
                 </div>
             </div>
 
+            <!-- Sense Tabs -->
             {#if entry.senses && entry.senses.length > 0}
-                <div class="meanings-section mb-6">
-                    <h3 class="section-header">詞義</h3>
-                    <div class="space-y-2.5">
-                        {#each entry.senses as sense, i}
-                            <div
-                                class="meaning-item bg-surface-primary rounded-lg p-4 border border-border shadow-card transition-shadow hover:shadow-card-hover"
-                            >
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span
-                                        class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded"
-                                    >
-                                        {sense.pos}
-                                    </span>
-                                    <span class="text-xs text-content-tertiary">#{i + 1}</span>
-                                    {#if sense.tested_in_exam}
-                                        <span class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded">曾考</span>
-                                    {/if}
-                                </div>
-                                <p class="text-content-primary mb-1">
-                                    {sense.zh_def}
-                                </p>
-                                <p class="text-sm text-content-secondary">
-                                    {sense.en_def}
-                                </p>
-                                {#if sense.generated_example}
-                                    <p class="text-sm text-content-tertiary mt-2 italic">
-                                        {sense.generated_example}
-                                    </p>
-                                {/if}
-                            </div>
-                        {/each}
-                    </div>
+                <div class="senses-section mb-6">
+                    <SenseTabs senses={entry.senses} lemma={entry.lemma} />
                 </div>
             {/if}
 
-            {#if entry.confusion_notes && entry.confusion_notes.length > 0}
-                <div class="confusion-section mb-6">
-                    <h3 class="section-header">易混淆詞</h3>
-                    <div class="space-y-2.5">
-                        {#each entry.confusion_notes as note}
-                            <div class="bg-surface-primary rounded-lg p-4 border border-border shadow-card">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="font-medium text-srs-hard">{note.confused_with}</span>
-                                </div>
-                                <p class="text-sm text-content-secondary mb-2">{note.distinction}</p>
-                                <p class="text-xs text-content-tertiary italic">{note.memory_tip}</p>
-                            </div>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
+            <!-- Collapsible Sections -->
+            <div class="collapsible-sections space-y-1 border-t border-border pt-4">
+                <!-- Statistics -->
+                <CollapsibleSection
+                    title="統計數據"
+                    icon="chart"
+                    defaultOpen={false}
+                >
+                    <StatisticsSection
+                        frequency={entry.frequency}
+                        senses={entry.senses}
+                    />
+                </CollapsibleSection>
 
-            {#if entry.root_info}
-                <div class="root-section mb-6">
-                    <h3 class="section-header">記憶策略</h3>
-                    <div class="bg-surface-primary rounded-lg p-4 border border-border shadow-card">
-                        {#if entry.root_info.root_breakdown}
-                            <p class="text-sm text-content-primary mb-2">
-                                <span class="font-medium">字根拆解：</span>{entry.root_info.root_breakdown}
-                            </p>
-                        {/if}
-                        <p class="text-sm text-content-secondary">{entry.root_info.memory_strategy}</p>
-                    </div>
-                </div>
-            {/if}
+                <!-- Root Analysis -->
+                {#if hasRootInfo && entry.root_info}
+                    <CollapsibleSection
+                        title="字根分析"
+                        icon="puzzle"
+                        defaultOpen={false}
+                    >
+                        <RootAnalysis rootInfo={entry.root_info} />
+                    </CollapsibleSection>
+                {/if}
 
-            {#if entry.synonyms && entry.synonyms.length > 0}
-                <div class="related-section mb-6">
-                    <h3 class="section-header">同義詞</h3>
-                    <div class="flex flex-wrap gap-2">
-                        {#each entry.synonyms as syn}
-                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{syn}</span>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
+                <!-- Confusion Notes -->
+                {#if hasConfusionNotes}
+                    <CollapsibleSection
+                        title="易混淆詞彙"
+                        icon="warning"
+                        defaultOpen={false}
+                    >
+                        <ConfusionNotes
+                            notes={entry.confusion_notes}
+                            currentLemma={entry.lemma}
+                        />
+                    </CollapsibleSection>
+                {/if}
 
-            {#if entry.antonyms && entry.antonyms.length > 0}
-                <div class="related-section mb-6">
-                    <h3 class="section-header">反義詞</h3>
-                    <div class="flex flex-wrap gap-2">
-                        {#each entry.antonyms as ant}
-                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{ant}</span>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
-
-            {#if entry.derived_forms && entry.derived_forms.length > 0}
-                <div class="related-section mb-6">
-                    <h3 class="section-header">衍生詞</h3>
-                    <div class="flex flex-wrap gap-2">
-                        {#each entry.derived_forms as form}
-                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{form}</span>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
-
-            {#if allExamples.length > 0}
-                <div class="sentences-section">
-                    <h3 class="section-header">
-                        考古題例句
-                        <span class="text-content-tertiary font-normal">
-                            ({allExamples.length})
-                        </span>
-                    </h3>
-                    <div class="space-y-2.5">
-                        {#each allExamples as example, i (example.text)}
-                            <div
-                                class="sentence-item bg-surface-primary rounded-lg p-4 border border-border shadow-card animate-fade-in"
-                            >
-                                <div class="flex items-start gap-3">
-                                    <span
-                                        class="text-xs text-content-tertiary mt-0.5 font-medium"
-                                        >{i + 1}</span
-                                    >
-                                    <div class="flex-1 min-w-0">
-                                        <p
-                                            class="text-content-primary leading-relaxed"
-                                        >
-                                            {@html highlightWord(
-                                                example.text,
-                                                entry.lemma,
-                                            )}
-                                        </p>
-                                        <p
-                                            class="text-xs text-content-tertiary mt-2"
-                                        >
-                                            — {example.source}
-                                        </p>
-                                    </div>
-                                    <button
-                                        class="p-1.5 rounded-md hover:bg-surface-hover transition-colors flex-shrink-0"
-                                        class:animate-pulse={playingSentenceIndex === i}
-                                        onclick={() =>
-                                            playSentenceAudio(
-                                                example.text,
-                                                i,
-                                            )}
-                                        title="播放例句"
-                                        type="button"
-                                    >
-                                        <svg
-                                            class="w-4 h-4 text-content-tertiary"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                                            />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
+                <!-- Related Words -->
+                {#if hasRelatedWords}
+                    <CollapsibleSection
+                        title="相關詞彙"
+                        icon="link"
+                        defaultOpen={false}
+                    >
+                        <RelatedWords
+                            synonyms={entry.synonyms}
+                            antonyms={entry.antonyms}
+                            derivedForms={entry.derived_forms}
+                            onWordClick={handleRelatedWordClick}
+                        />
+                    </CollapsibleSection>
+                {/if}
+            </div>
         </div>
     {/if}
 </section>
 
 <style>
-    :global(.highlight) {
-        background: linear-gradient(
-            to top,
-            var(--color-highlight) 0%,
-            var(--color-highlight) 60%,
-            transparent 60%
-        );
-        padding: 0 3px;
-        margin: 0 -3px;
-        border-radius: 2px;
-        font-weight: 500;
-    }
-
-    .animate-fade-in {
-        animation: fadeIn 0.25s ease-out;
-    }
-
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-        }
-        to {
-            opacity: 1;
-        }
-    }
-
     .detail-panel {
         scrollbar-width: thin;
         scrollbar-color: var(--color-border-hover) transparent;
