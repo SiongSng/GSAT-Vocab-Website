@@ -1,6 +1,6 @@
 <script lang="ts">
     import { tick } from "svelte";
-    import type { VocabIndexItem } from "$lib/api";
+    import type { VocabIndexItem } from "$lib/types/vocab";
     import { getAppStore, openMobileDetail } from "$lib/stores/app.svelte";
     import { selectWordAndNavigate, getVocabStore } from "$lib/stores/vocab.svelte";
 

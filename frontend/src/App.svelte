@@ -4,8 +4,13 @@
     import BrowseView from "$lib/components/BrowseView.svelte";
     import SRSFlashcardView from "$lib/components/srs/SRSFlashcardView.svelte";
     import QuizView from "$lib/components/QuizView.svelte";
+    import LoadingOverlay from "$lib/components/LoadingOverlay.svelte";
     import { getAppStore, setMobile } from "$lib/stores/app.svelte";
-    import { loadVocabData, syncWordFromRoute } from "$lib/stores/vocab.svelte";
+    import {
+        loadVocabData,
+        syncWordFromRoute,
+        getVocabStore,
+    } from "$lib/stores/vocab.svelte";
     import {
         initRouter,
         destroyRouter,
@@ -14,6 +19,7 @@
 
     const app = getAppStore();
     const router = getRouterStore();
+    const vocab = getVocabStore();
 
     $effect(() => {
         router.route;
@@ -39,6 +45,10 @@
         };
     });
 </script>
+
+{#if vocab.loadProgress}
+    <LoadingOverlay progress={vocab.loadProgress} />
+{/if}
 
 <div
     class="app h-full flex flex-col bg-surface-page text-content-primary antialiased"
