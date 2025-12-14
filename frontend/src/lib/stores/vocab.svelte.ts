@@ -9,6 +9,7 @@ import {
 } from "$lib/api";
 
 import type { PosFilter } from "$lib/types";
+import { getRouterStore, navigate } from "./router.svelte";
 
 let vocabIndex: VocabIndexItem[] = $state.raw([]);
 let searchIndex: SearchIndex | null = $state.raw(null);
@@ -165,6 +166,21 @@ export async function selectWord(lemma: string): Promise<void> {
     selectedWord = null;
   } finally {
     isLoadingDetail = false;
+  }
+}
+
+export async function selectWordAndNavigate(lemma: string): Promise<void> {
+  navigate({ name: "word", params: { lemma } });
+  await selectWord(lemma);
+}
+
+export function syncWordFromRoute(): void {
+  const router = getRouterStore();
+  if (router.route.name === "word") {
+    const lemma = router.route.params.lemma;
+    if (lemma && lemma !== selectedLemma) {
+      selectWord(lemma);
+    }
   }
 }
 

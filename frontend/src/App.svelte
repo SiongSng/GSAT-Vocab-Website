@@ -5,11 +5,24 @@
     import SRSFlashcardView from "$lib/components/srs/SRSFlashcardView.svelte";
     import QuizView from "$lib/components/QuizView.svelte";
     import { getAppStore, setMobile } from "$lib/stores/app.svelte";
-    import { loadVocabData } from "$lib/stores/vocab.svelte";
+    import { loadVocabData, syncWordFromRoute } from "$lib/stores/vocab.svelte";
+    import {
+        initRouter,
+        destroyRouter,
+        getRouterStore,
+    } from "$lib/stores/router.svelte";
 
     const app = getAppStore();
+    const router = getRouterStore();
+
+    $effect(() => {
+        router.route;
+        syncWordFromRoute();
+    });
 
     onMount(() => {
+        initRouter();
+
         const mediaQuery = window.matchMedia("(max-width: 1023px)");
         setMobile(mediaQuery.matches);
 
@@ -21,6 +34,7 @@
         loadVocabData();
 
         return () => {
+            destroyRouter();
             mediaQuery.removeEventListener("change", handleMediaChange);
         };
     });

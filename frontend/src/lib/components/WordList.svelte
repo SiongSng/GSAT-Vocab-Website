@@ -2,7 +2,7 @@
     import { tick } from "svelte";
     import type { VocabIndexItem } from "$lib/api";
     import { getAppStore, openMobileDetail } from "$lib/stores/app.svelte";
-    import { selectWord, getVocabStore } from "$lib/stores/vocab.svelte";
+    import { selectWordAndNavigate, getVocabStore } from "$lib/stores/vocab.svelte";
 
     const ITEM_HEIGHT = 72;
     const GRID_ITEM_HEIGHT = 40;
@@ -39,7 +39,7 @@
     }
 
     async function handleWordClick(word: VocabIndexItem) {
-        await selectWord(word.lemma);
+        await selectWordAndNavigate(word.lemma);
         if (app.isMobile) {
             openMobileDetail();
         }

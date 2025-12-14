@@ -1,7 +1,7 @@
 import type { ViewMode } from "$lib/types";
+import { getRouterStore, navigate } from "./router.svelte";
 
 interface AppStore {
-  mode: ViewMode;
   isSidebarOpen: boolean;
   isGridMode: boolean;
   isMobile: boolean;
@@ -9,17 +9,32 @@ interface AppStore {
 }
 
 const store: AppStore = $state({
-  mode: "browse",
   isSidebarOpen: false,
   isGridMode: false,
   isMobile: false,
   isMobileDetailOpen: false,
 });
 
+function deriveMode(): ViewMode {
+  const router = getRouterStore();
+  const routeName = router.route.name;
+
+  if (routeName === "browse" || routeName === "word") {
+    return "browse";
+  }
+  if (routeName === "flashcard" || routeName === "flashcard-session") {
+    return "flashcard";
+  }
+  if (routeName === "quiz" || routeName === "quiz-session") {
+    return "quiz";
+  }
+  return "browse";
+}
+
 export function getAppStore() {
   return {
     get mode() {
-      return store.mode;
+      return deriveMode();
     },
     get isSidebarOpen() {
       return store.isSidebarOpen;
@@ -37,7 +52,17 @@ export function getAppStore() {
 }
 
 export function setMode(mode: ViewMode): void {
-  store.mode = mode;
+  switch (mode) {
+    case "browse":
+      navigate({ name: "browse" });
+      break;
+    case "flashcard":
+      navigate({ name: "flashcard" });
+      break;
+    case "quiz":
+      navigate({ name: "quiz" });
+      break;
+  }
   if (mode !== "browse") {
     store.isMobileDetailOpen = false;
   }
