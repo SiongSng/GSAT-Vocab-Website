@@ -1,12 +1,15 @@
-import { openDB, type IDBPDatabase } from "idb";
+import { openDB, type IDBPDatabase, deleteDB } from "idb";
 import type { SRSCard, SRSReviewLog } from "$lib/types/srs";
+import { createCardKey } from "$lib/types/srs";
 import { createEmptyCard, State } from "ts-fsrs";
 
-const DB_NAME = "gsat-vocab-srs";
+const DB_NAME = "gsat-vocab-srs-v2";
 const DB_VERSION = 1;
 const CARDS_STORE = "cards";
 const LOGS_STORE = "logs";
 const META_STORE = "meta";
+
+const OLD_DB_NAME = "gsat-vocab-srs";
 
 interface SRSDatabase {
   cards: SRSCard;
@@ -27,15 +30,16 @@ async function getDB(): Promise<IDBPDatabase<SRSDatabase>> {
     upgrade(database) {
       if (!database.objectStoreNames.contains(CARDS_STORE)) {
         const cardsStore = database.createObjectStore(CARDS_STORE, {
-          keyPath: "lemma",
+          keyPath: ["lemma", "sense_id"],
         });
         cardsStore.createIndex("due", "due");
         cardsStore.createIndex("state", "state");
+        cardsStore.createIndex("lemma", "lemma");
       }
 
       if (!database.objectStoreNames.contains(LOGS_STORE)) {
         const logsStore = database.createObjectStore(LOGS_STORE, {
-          keyPath: ["lemma", "review"],
+          keyPath: ["lemma", "sense_id", "review"],
         });
         logsStore.createIndex("lemma", "lemma");
         logsStore.createIndex("review", "review");
@@ -50,14 +54,67 @@ async function getDB(): Promise<IDBPDatabase<SRSDatabase>> {
   return db;
 }
 
-export async function initStorage(): Promise<void> {
-  const database = await getDB();
-  const cards = await database.getAll(CARDS_STORE);
-  cardsCache = new Map(cards.map((card) => [card.lemma, card]));
+async function migrateFromOldDB(): Promise<boolean> {
+  try {
+    const databases = await indexedDB.databases();
+    const oldExists = databases.some(d => d.name === OLD_DB_NAME);
+    if (!oldExists) return false;
+
+    const oldDB = await openDB(OLD_DB_NAME, 1);
+    const oldCards = await oldDB.getAll("cards");
+    oldDB.close();
+
+    if (oldCards.length === 0) {
+      await deleteDB(OLD_DB_NAME);
+      return false;
+    }
+
+    const database = await getDB();
+    const tx = database.transaction(CARDS_STORE, "readwrite");
+    const store = tx.objectStore(CARDS_STORE);
+
+    for (const oldCard of oldCards) {
+      const migratedCard: SRSCard = {
+        ...oldCard,
+        sense_id: "primary",
+      };
+      await store.put(migratedCard);
+    }
+
+    await tx.done;
+    await deleteDB(OLD_DB_NAME);
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function getCard(lemma: string): SRSCard | undefined {
-  return cardsCache.get(lemma);
+export async function initStorage(): Promise<void> {
+  const database = await getDB();
+
+  const migrated = await migrateFromOldDB();
+  if (migrated) {
+    const cards = await database.getAll(CARDS_STORE);
+    cardsCache = new Map(cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]));
+  } else {
+    const cards = await database.getAll(CARDS_STORE);
+    cardsCache = new Map(cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]));
+  }
+}
+
+export function getCard(lemma: string, senseId: string): SRSCard | undefined {
+  return cardsCache.get(createCardKey(lemma, senseId));
+}
+
+export function getCardsByLemma(lemma: string): SRSCard[] {
+  const cards: SRSCard[] = [];
+  for (const card of cardsCache.values()) {
+    if (card.lemma === lemma) {
+      cards.push(card);
+    }
+  }
+  return cards;
 }
 
 export function getAllCards(): SRSCard[] {
@@ -88,27 +145,29 @@ export function getReviewCards(now: Date = new Date()): SRSCard[] {
   );
 }
 
-export function createCard(lemma: string): SRSCard {
+export function createCard(lemma: string, senseId: string): SRSCard {
   const baseCard = createEmptyCard();
   const card: SRSCard = {
     ...baseCard,
     lemma,
+    sense_id: senseId,
   };
   return card;
 }
 
-export function ensureCard(lemma: string): SRSCard {
-  let card = getCard(lemma);
+export function ensureCard(lemma: string, senseId: string): SRSCard {
+  const key = createCardKey(lemma, senseId);
+  let card = cardsCache.get(key);
   if (!card) {
-    card = createCard(lemma);
-    cardsCache.set(lemma, card);
+    card = createCard(lemma, senseId);
+    cardsCache.set(key, card);
     scheduleSave();
   }
   return card;
 }
 
 export function updateCard(card: SRSCard): void {
-  cardsCache.set(card.lemma, card);
+  cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
   scheduleSave();
 }
 
@@ -117,9 +176,13 @@ export async function addReviewLog(log: SRSReviewLog): Promise<void> {
   await database.add(LOGS_STORE, log);
 }
 
-export async function getReviewLogs(lemma: string): Promise<SRSReviewLog[]> {
+export async function getReviewLogs(lemma: string, senseId?: string): Promise<SRSReviewLog[]> {
   const database = await getDB();
-  return database.getAllFromIndex(LOGS_STORE, "lemma", lemma);
+  const allLogs = await database.getAllFromIndex(LOGS_STORE, "lemma", lemma);
+  if (senseId) {
+    return allLogs.filter(log => log.sense_id === senseId);
+  }
+  return allLogs;
 }
 
 export async function getAllReviewLogs(): Promise<SRSReviewLog[]> {
@@ -178,4 +241,28 @@ export async function clearAllData(): Promise<void> {
 
 export function getCacheSize(): number {
   return cardsCache.size;
+}
+
+export function hasCardForLemma(lemma: string): boolean {
+  for (const card of cardsCache.values()) {
+    if (card.lemma === lemma) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function getPrimaryCard(lemma: string): SRSCard | undefined {
+  const cards = getCardsByLemma(lemma);
+  return cards.find(c => c.sense_id === "primary") || cards[0];
+}
+
+export function getStableSenseCards(lemma: string, stabilityThreshold: number = 10): SRSCard[] {
+  return getCardsByLemma(lemma).filter(card => card.stability >= stabilityThreshold);
+}
+
+export function shouldUnlockSecondarySenses(lemma: string): boolean {
+  const primaryCard = getCard(lemma, "primary");
+  if (!primaryCard) return false;
+  return primaryCard.stability >= 10 && primaryCard.state === State.Review;
 }

@@ -11,6 +11,8 @@ import {
   updateCard,
   addReviewLog,
   forceSave,
+  hasCardForLemma,
+  getCardsByLemma,
 } from "./srs-storage";
 import type {
   SRSCard,
@@ -20,7 +22,8 @@ import type {
   DailyLimits,
 } from "$lib/types/srs";
 import { DEFAULT_DAILY_LIMITS } from "$lib/types/srs";
-import { getAudioUrl } from "$lib/api";
+import { speakText, preloadAudio } from "$lib/tts";
+import type { VocabEntry, VocabSense } from "$lib/types/vocab";
 
 export { Rating, State };
 
@@ -30,6 +33,7 @@ interface SRSStore {
   initialized: boolean;
   isStudying: boolean;
   currentCard: SRSCard | null;
+  currentSense: VocabSense | null;
   currentCardIndex: number;
   studyQueue: SRSCard[];
   isFlipped: boolean;
@@ -45,6 +49,7 @@ const store: SRSStore = $state({
   initialized: false,
   isStudying: false,
   currentCard: null,
+  currentSense: null,
   currentCardIndex: 0,
   studyQueue: [],
   isFlipped: false,
@@ -94,6 +99,9 @@ export function getSRSStore() {
     },
     get currentCard() {
       return store.currentCard;
+    },
+    get currentSense() {
+      return store.currentSense;
     },
     get currentCardIndex() {
       return store.currentCardIndex;
@@ -177,10 +185,18 @@ function getTodayKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+export function addWordToSRS(lemma: string, senseId: string = "primary"): void {
+  ensureCard(lemma, senseId);
+}
+
 export function addWordsToSRS(lemmas: string[]): void {
   for (const lemma of lemmas) {
-    ensureCard(lemma);
+    ensureCard(lemma, "primary");
   }
+}
+
+export function addSenseToSRS(lemma: string, senseId: string): void {
+  ensureCard(lemma, senseId);
 }
 
 export function startStudySession(options?: {
@@ -235,14 +251,30 @@ export function startStudySession(options?: {
     setCurrentCard(queue[0]);
   } else {
     store.currentCard = null;
+    store.currentSense = null;
     store.schedulingInfo = null;
   }
 }
 
+const PRELOAD_AHEAD = 3;
+
+function preloadUpcomingAudio(): void {
+  const startIdx = store.currentCardIndex;
+  const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
+  const lemmas = store.studyQueue.slice(startIdx, endIdx).map((c) => c.lemma);
+  preloadAudio(lemmas);
+}
+
 function setCurrentCard(card: SRSCard): void {
   store.currentCard = card;
+  store.currentSense = null;
   store.isFlipped = false;
   computeSchedulingInfo(card);
+  preloadUpcomingAudio();
+}
+
+export function setCurrentSense(sense: VocabSense | null): void {
+  store.currentSense = sense;
 }
 
 function computeSchedulingInfo(card: SRSCard): void {
@@ -274,6 +306,7 @@ export async function rateCard(rating: Rating): Promise<void> {
   const updatedCard: SRSCard = {
     ...newCard,
     lemma: store.currentCard.lemma,
+    sense_id: store.currentCard.sense_id,
   };
 
   updateCard(updatedCard);
@@ -281,6 +314,7 @@ export async function rateCard(rating: Rating): Promise<void> {
   const reviewLog: SRSReviewLog = {
     ...log,
     lemma: store.currentCard.lemma,
+    sense_id: store.currentCard.sense_id,
   };
   await addReviewLog(reviewLog);
 
@@ -321,10 +355,11 @@ function moveToNextCard(): void {
 
   if (store.currentCardIndex < store.studyQueue.length) {
     const nextCard = store.studyQueue[store.currentCardIndex];
-    const freshCard = getCard(nextCard.lemma) || nextCard;
+    const freshCard = getCard(nextCard.lemma, nextCard.sense_id) || nextCard;
     setCurrentCard(freshCard);
   } else {
     store.currentCard = null;
+    store.currentSense = null;
     store.schedulingInfo = null;
     store.sessionStats.endTime = new Date();
   }
@@ -333,6 +368,7 @@ function moveToNextCard(): void {
 export function endStudySession(): void {
   store.isStudying = false;
   store.currentCard = null;
+  store.currentSense = null;
   store.studyQueue = [];
   store.currentCardIndex = 0;
   store.isFlipped = false;
@@ -394,13 +430,18 @@ function shuffleArray<T>(array: T[]): void {
 
 let audioPlayer: HTMLAudioElement | null = null;
 
-export function playCurrentCardAudio(): void {
+export async function playCurrentCardAudio(): Promise<void> {
   if (!store.currentCard) return;
-  if (!audioPlayer) {
-    audioPlayer = new Audio();
+  try {
+    const url = await speakText(store.currentCard.lemma);
+    if (!audioPlayer) {
+      audioPlayer = new Audio();
+    }
+    audioPlayer.src = url;
+    await audioPlayer.play();
+  } catch {
+    // ignore audio playback errors
   }
-  audioPlayer.src = getAudioUrl(store.currentCard.lemma);
-  audioPlayer.play().catch(() => {});
 }
 
 export function getRemainingNewCards(): number {
@@ -409,4 +450,38 @@ export function getRemainingNewCards(): number {
 
 export function getRemainingReviews(): number {
   return Math.max(0, store.dailyLimits.reviews - store.reviewsToday);
+}
+
+export function getUniqueLemmaCount(): number {
+  const lemmas = new Set<string>();
+  for (const card of getAllCards()) {
+    lemmas.add(card.lemma);
+  }
+  return lemmas.size;
+}
+
+export function getCardsForLemma(lemma: string): SRSCard[] {
+  return getCardsByLemma(lemma);
+}
+
+export function getLemmaHasCard(lemma: string): boolean {
+  return hasCardForLemma(lemma);
+}
+
+export function findSenseForCard(card: SRSCard, entry: VocabEntry | null): VocabSense | null {
+  if (!entry || !entry.senses || entry.senses.length === 0) return null;
+
+  if (card.sense_id === "primary") {
+    return entry.senses[0];
+  }
+
+  const sense = entry.senses.find(s => s.sense_id === card.sense_id);
+  return sense || entry.senses[0];
+}
+
+export function getSenseIndex(entry: VocabEntry | null, senseId: string): number {
+  if (!entry || !entry.senses) return 0;
+  if (senseId === "primary") return 0;
+  const idx = entry.senses.findIndex(s => s.sense_id === senseId);
+  return idx >= 0 ? idx : 0;
 }

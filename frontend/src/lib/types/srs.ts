@@ -4,10 +4,21 @@ export { State, Rating };
 
 export interface SRSCard extends FSRSCard {
   lemma: string;
+  sense_id: string;
 }
 
 export interface SRSReviewLog extends FSRSReviewLog {
   lemma: string;
+  sense_id: string;
+}
+
+export function createCardKey(lemma: string, senseId: string): string {
+  return `${lemma}::${senseId}`;
+}
+
+export function parseCardKey(key: string): { lemma: string; sense_id: string } {
+  const [lemma, sense_id] = key.split("::");
+  return { lemma, sense_id: sense_id || "" };
 }
 
 export interface DeckStats {

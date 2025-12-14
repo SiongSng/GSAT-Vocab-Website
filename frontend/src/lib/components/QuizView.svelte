@@ -11,7 +11,7 @@
         type QuizConfig,
     } from "$lib/stores/quiz.svelte";
     import { getVocabStore, getFilters } from "$lib/stores/vocab.svelte";
-    import { getAudioUrl } from "$lib/api";
+    import { speakText } from "$lib/tts";
 
     const quiz = getQuizStore();
     const vocab = getVocabStore();
@@ -97,12 +97,17 @@
         spellingInput = "";
     }
 
-    function playAudio(lemma: string) {
-        if (!audioPlayer) {
-            audioPlayer = new Audio();
+    async function playAudio(lemma: string) {
+        try {
+            const url = await speakText(lemma);
+            if (!audioPlayer) {
+                audioPlayer = new Audio();
+            }
+            audioPlayer.src = url;
+            await audioPlayer.play();
+        } catch {
+            // ignore audio playback errors
         }
-        audioPlayer.src = getAudioUrl(lemma);
-        audioPlayer.play().catch(() => {});
     }
 
     function getOptionClass(

@@ -53,9 +53,9 @@
             <div class="results-header">
                 <p class="text-sm text-content-secondary">
                     {#if vocab.isLoading}
-                        正在載入數據...
+                        載入中...
                     {:else}
-                        找到 {vocab.filteredWords.length} 個符合條件的單詞
+                        {vocab.filteredWords.length} 個結果
                     {/if}
                 </p>
                 <div class="flex items-center gap-1">

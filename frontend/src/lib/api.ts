@@ -38,12 +38,3 @@ export async function generateQuiz(params: {
   const data = await response.json();
   return data.questions || data;
 }
-
-export function getAudioUrl(lemma: string): string {
-  return `${API_BASE}/audio/${encodeURIComponent(lemma)}.mp3`;
-}
-
-export function getSentenceAudioUrl(audioFile: string): string {
-  const base = (audioFile || "").split("/").pop() || audioFile;
-  return `${API_BASE}/audio/sentences/${encodeURIComponent(base)}`;
-}

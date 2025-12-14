@@ -2,7 +2,8 @@
     import type { SRSCard } from "$lib/types/srs";
     import type { VocabEntry } from "$lib/types/vocab";
     import StateBadge from "./StateBadge.svelte";
-    import { playCurrentCardAudio } from "$lib/stores/srs.svelte";
+    import { playCurrentCardAudio, findSenseForCard, getSenseIndex } from "$lib/stores/srs.svelte";
+    import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
 
     interface Props {
         card: SRSCard;
@@ -14,60 +15,56 @@
 
     let { card, vocabEntry, isFlipped, isLoading, onFlip }: Props = $props();
 
-    const primaryPos = $derived.by(() => {
-        if (vocabEntry?.senses?.[0]?.pos) {
-            return vocabEntry.senses[0].pos;
-        }
-        if (vocabEntry?.pos && vocabEntry.pos.length > 0) {
-            return vocabEntry.pos[0];
-        }
-        return "word";
+    const currentSense = $derived.by(() => {
+        return findSenseForCard(card, vocabEntry);
     });
 
-    const firstExample = $derived.by(() => {
-        if (!vocabEntry?.senses) return null;
-        for (const sense of vocabEntry.senses) {
-            if (sense.examples.length > 0) {
-                return sense.examples[0].text;
-            }
-            if (sense.generated_example) {
-                return sense.generated_example;
-            }
+    const senseIndex = $derived.by(() => {
+        return getSenseIndex(vocabEntry, card.sense_id);
+    });
+
+    const totalSenses = $derived(vocabEntry?.senses?.length ?? 0);
+
+    const currentExample = $derived.by(() => {
+        if (!currentSense) return null;
+        if (currentSense.examples.length > 0) {
+            const randomIdx = Math.floor(Math.random() * currentSense.examples.length);
+            return {
+                text: currentSense.examples[randomIdx].text,
+                source: currentSense.examples[randomIdx].source,
+            };
+        }
+        if (currentSense.generated_example) {
+            return {
+                text: currentSense.generated_example,
+                source: null,
+            };
         }
         return null;
     });
 
-    function highlightWord(text: string, lemma: string): string {
-        const variants = getInflectionVariants(lemma);
-        const pattern = variants
-            .map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-            .join("|");
-        const regex = new RegExp(`\\b(${pattern})\\b`, "gi");
-        return text.replace(regex, '<mark class="highlight">$1</mark>');
-    }
-
-    function getInflectionVariants(lemma: string): string[] {
-        const lower = lemma.toLowerCase();
-        const variants = [lemma, lower];
-
-        variants.push(lower + "s");
-        variants.push(lower + "es");
-        variants.push(lower + "ed");
-        variants.push(lower + "ing");
-        variants.push(lower + "er");
-        variants.push(lower + "est");
-        variants.push(lower + "ly");
-
-        if (lower.endsWith("e")) {
-            variants.push(lower.slice(0, -1) + "ing");
-            variants.push(lower + "d");
-        }
-        if (lower.endsWith("y")) {
-            variants.push(lower.slice(0, -1) + "ies");
-            variants.push(lower.slice(0, -1) + "ied");
-        }
-
-        return variants;
+    function formatSource(source: { year: number; exam_type: string; section_type: string; question_number?: number } | null): string {
+        if (!source) return "AI 生成例句";
+        const examTypeMap: Record<string, string> = {
+            gsat: "學測",
+            gsat_makeup: "學測補考",
+            ast: "指考",
+            ast_makeup: "指考補考",
+            gsat_trial: "學測試辦",
+            gsat_ref: "參考試卷",
+        };
+        const sectionMap: Record<string, string> = {
+            vocabulary: "詞彙題",
+            cloze: "克漏字",
+            discourse: "文意選填",
+            structure: "句型",
+            reading: "閱讀測驗",
+            translation: "翻譯",
+            mixed: "綜合",
+        };
+        const examType = examTypeMap[source.exam_type] || source.exam_type;
+        const section = sectionMap[source.section_type] || source.section_type;
+        return `${source.year} ${examType}・${section}`;
     }
 </script>
 
@@ -121,9 +118,11 @@
                 >
                     {card.lemma}
                 </h2>
-                <p class="text-base text-content-tertiary lowercase">
-                    {primaryPos}
-                </p>
+                {#if currentSense}
+                    <p class="text-base text-content-tertiary lowercase">
+                        {currentSense.pos}
+                    </p>
+                {/if}
             </div>
 
             <div class="text-center">
@@ -133,10 +132,17 @@
 
         <!-- Back -->
         <div
-            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border shadow-card p-8 flex flex-col"
+            class="flashcard-face flashcard-back backface-hidden rotate-y-180 bg-surface-primary rounded-lg border border-border shadow-card p-8 flex flex-col overflow-hidden"
         >
-            <div class="flex items-center justify-between mb-5">
-                <StateBadge state={card.state} />
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <StateBadge state={card.state} />
+                    {#if totalSenses > 1}
+                        <span class="text-xs text-content-tertiary bg-surface-page px-2 py-0.5 rounded">
+                            涵義 {senseIndex + 1}/{totalSenses}
+                        </span>
+                    {/if}
+                </div>
                 <button
                     onclick={(e) => {
                         e.stopPropagation();
@@ -161,56 +167,62 @@
                 </button>
             </div>
 
-            <div class="text-center mb-5">
+            <div class="text-center mb-4">
                 <h2
                     class="text-2xl font-semibold tracking-tight text-content-primary"
                 >
                     {card.lemma}
                 </h2>
+                {#if currentSense}
+                    <span
+                        class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mt-1 lowercase"
+                    >
+                        {currentSense.pos}
+                    </span>
+                {/if}
             </div>
 
-            <div class="space-y-4 px-1">
+            <div class="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
                 {#if isLoading}
                     <div class="flex items-center justify-center py-8">
                         <div class="text-base text-content-tertiary">
                             載入中...
                         </div>
                     </div>
-                {:else if vocabEntry?.senses && vocabEntry.senses.length > 0}
-                    {#each vocabEntry.senses.slice(0, 3) as sense, i}
-                        <div
-                            class={i <
-                            Math.min(vocabEntry.senses.length, 3) - 1
-                                ? "pb-4 border-b border-border/60"
-                                : ""}
-                        >
-                            <span
-                                class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mb-2 lowercase"
-                            >
-                                {sense.pos}
-                            </span>
-                            <p
-                                class="text-base text-content-primary leading-relaxed"
-                            >
-                                {sense.zh_def}
+                {:else if currentSense}
+                    <div class="space-y-4">
+                        <div class="border-b border-border/60 pb-4">
+                            <p class="text-base text-content-primary leading-relaxed">
+                                {currentSense.zh_def}
                             </p>
-                            {#if sense.en_def}
-                                <p
-                                    class="text-sm text-content-tertiary mt-1 leading-relaxed"
-                                >
-                                    {sense.en_def}
+                            {#if currentSense.en_def}
+                                <p class="text-sm text-content-tertiary mt-1 leading-relaxed">
+                                    {currentSense.en_def}
                                 </p>
                             {/if}
                         </div>
-                    {/each}
 
-                    {#if firstExample}
-                        <div class="pt-3 mt-3 border-t border-border/50">
-                            <p class="text-sm text-content-secondary leading-relaxed">
-                                {@html highlightWord(firstExample, card.lemma)}
-                            </p>
-                        </div>
-                    {/if}
+                        {#if currentExample}
+                            <div class="space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                                        {currentExample.source ? "真實考題" : "學習例句"}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-content-secondary leading-relaxed">
+                                    <ClickableWord text={currentExample.text} highlightWord={card.lemma} />
+                                </p>
+                                {#if currentExample.source}
+                                    <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                        </svg>
+                                        {formatSource(currentExample.source)}
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
+                    </div>
                 {:else}
                     <div class="flex items-center justify-center py-8">
                         <div class="text-base text-content-tertiary">
@@ -246,7 +258,8 @@
 
     .flashcard-face {
         grid-area: 1 / 1;
-        min-height: 280px;
+        min-height: 320px;
+        max-height: 480px;
     }
 
     .flashcard-inner:not(.rotate-y-180) .flashcard-back {
@@ -255,19 +268,5 @@
 
     .flashcard-inner.rotate-y-180 .flashcard-front {
         pointer-events: none;
-    }
-
-    :global(.highlight) {
-        background: linear-gradient(
-            to top,
-            var(--color-highlight) 0%,
-            var(--color-highlight) 60%,
-            transparent 60%
-        );
-        padding: 0 2px;
-        margin: 0 -2px;
-        border-radius: 2px;
-        font-weight: 500;
-        color: var(--color-content-primary);
     }
 </style>

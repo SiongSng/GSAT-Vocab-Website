@@ -2,7 +2,9 @@
     import { getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { getNewCards } from "$lib/stores/srs-storage";
+    import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
+    import { State } from "ts-fsrs";
+    import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
 
     interface Props {
         onStart: (newCardPool: string[], excludeLemmas: Set<string>) => void;
@@ -18,28 +20,19 @@
 
     interface StudySettings {
         newCardLimit: number;
-        selectedPos: string[];
-        freqMin: number;
-        freqMax: number;
-        excludePropn: boolean;
         autoSpeak: boolean;
+        smartMode: boolean;
     }
 
     const defaultSettings: StudySettings = {
         newCardLimit: 20,
-        selectedPos: [],
-        freqMin: 1,
-        freqMax: 100,
-        excludePropn: true,
         autoSpeak: true,
+        smartMode: true,
     };
 
     let newCardLimit = $state(defaultSettings.newCardLimit);
-    let selectedPos = $state<Set<string>>(new Set(defaultSettings.selectedPos));
-    let freqMin = $state(defaultSettings.freqMin);
-    let freqMax = $state(defaultSettings.freqMax);
-    let excludePropn = $state(defaultSettings.excludePropn);
     let autoSpeak = $state(defaultSettings.autoSpeak);
+    let smartMode = $state(defaultSettings.smartMode);
     let showSettings = $state(false);
 
     function loadSettings(): void {
@@ -47,16 +40,9 @@
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
                 const settings: StudySettings = JSON.parse(saved);
-                newCardLimit =
-                    settings.newCardLimit ?? defaultSettings.newCardLimit;
-                selectedPos = new Set(
-                    settings.selectedPos ?? defaultSettings.selectedPos,
-                );
-                freqMin = settings.freqMin ?? defaultSettings.freqMin;
-                freqMax = settings.freqMax ?? defaultSettings.freqMax;
-                excludePropn =
-                    settings.excludePropn ?? defaultSettings.excludePropn;
+                newCardLimit = settings.newCardLimit ?? defaultSettings.newCardLimit;
                 autoSpeak = settings.autoSpeak ?? defaultSettings.autoSpeak;
+                smartMode = settings.smartMode ?? defaultSettings.smartMode;
             }
         } catch {
             // ignore
@@ -67,11 +53,8 @@
         try {
             const settings: StudySettings = {
                 newCardLimit,
-                selectedPos: Array.from(selectedPos),
-                freqMin,
-                freqMax,
-                excludePropn,
                 autoSpeak,
+                smartMode,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
         } catch {
@@ -81,32 +64,37 @@
 
     loadSettings();
 
-    const posOptions = ["NOUN", "VERB", "ADJ", "ADV"];
-    const posLabels: Record<string, string> = {
-        NOUN: "名詞",
-        VERB: "動詞",
-        ADJ: "形容詞",
-        ADV: "副詞",
-    };
+    $effect(() => {
+        newCardLimit;
+        autoSpeak;
+        smartMode;
+        saveSettings();
+    });
 
     const newCardLemmas = $derived.by(() => {
         return new Set(getNewCards().map((c) => c.lemma));
+    });
+
+    const learnedLemmaCount = $derived.by(() => {
+        const cards = getAllCards();
+        const learnedLemmas = new Set<string>();
+        for (const card of cards) {
+            if (card.state !== State.New) {
+                learnedLemmas.add(card.lemma);
+            }
+        }
+        return learnedLemmas.size;
     });
 
     const filteredNewCardPool = $derived.by(() => {
         let pool = vocab.index || [];
 
         pool = pool.filter((w) => newCardLemmas.has(w.lemma));
+        pool = pool.filter((w) => w.primary_pos !== "PROPN");
 
-        if (selectedPos.size > 0) {
-            pool = pool.filter((w) => selectedPos.has(w.primary_pos));
+        if (smartMode) {
+            pool = pool.sort((a, b) => b.importance_score - a.importance_score);
         }
-
-        if (excludePropn) {
-            pool = pool.filter((w) => w.primary_pos !== "PROPN");
-        }
-
-        pool = pool.filter((w) => w.count >= freqMin && w.count <= freqMax);
 
         return pool.map((w) => w.lemma);
     });
@@ -128,78 +116,74 @@
     );
 
     const excludedLemmas = $derived.by(() => {
-        if (!excludePropn) return new Set<string>();
         const propnLemmas = (vocab.index || [])
             .filter((w) => w.primary_pos === "PROPN")
             .map((w) => w.lemma);
         return new Set(propnLemmas);
     });
 
-    function togglePos(pos: string) {
-        const newSet = new Set(selectedPos);
-        if (newSet.has(pos)) {
-            newSet.delete(pos);
-        } else {
-            newSet.add(pos);
-        }
-        selectedPos = newSet;
-    }
-
     function handleStart() {
-        saveSettings();
         onStart(filteredNewCardPool, excludedLemmas);
     }
 </script>
 
 <div class="flex flex-col lg:flex-row gap-5">
     <div
-        class="bg-surface-primary rounded-lg border border-border p-6 lg:p-7 flex-1"
+        class="bg-surface-primary rounded-lg border border-border p-6 lg:p-8 flex-[1.5]"
     >
         <h2
-            class="text-xl lg:text-2xl font-semibold tracking-tight text-content-primary mb-6"
+            class="text-xl lg:text-2xl font-semibold tracking-tight text-content-primary mb-8"
         >
             今日學習
         </h2>
 
-        <div class="grid grid-cols-3 gap-3 mb-6">
-            <div
-                class="text-center py-4 lg:py-5 px-2 lg:px-3 rounded-md bg-surface-page/60"
-            >
-                <div
-                    class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight"
-                >
+        <div class="grid grid-cols-4 gap-3 lg:gap-4 mb-8">
+            <div class="text-center py-4 lg:py-5 px-2 rounded-lg bg-surface-page/60">
+                <div class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight leading-none">
                     {srs.deckStats.reviewCount}
                 </div>
-                <div class="text-sm text-content-secondary mt-1.5">待複習</div>
-                <div
-                    class="w-1.5 h-1.5 rounded-full bg-srs-again/70 mx-auto mt-2 lg:mt-3"
-                ></div>
+                <div class="flex items-center justify-center gap-1 text-xs lg:text-sm text-content-secondary mt-1.5">
+                    <span>待複習</span>
+                    <HelpTooltip text="已學會的卡片，到了排程的複習時間" />
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full bg-srs-again/70 mx-auto mt-2.5"></div>
             </div>
-            <div
-                class="text-center py-4 lg:py-5 px-2 lg:px-3 rounded-md bg-surface-page/60"
-            >
-                <div
-                    class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight"
-                >
+            <div class="text-center py-4 lg:py-5 px-2 rounded-lg bg-surface-page/60">
+                <div class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight leading-none">
                     {srs.deckStats.learningCount}
                 </div>
-                <div class="text-sm text-content-secondary mt-1.5">學習中</div>
-                <div
-                    class="w-1.5 h-1.5 rounded-full bg-srs-hard/70 mx-auto mt-2 lg:mt-3"
-                ></div>
+                <div class="flex items-center justify-center gap-1 text-xs lg:text-sm text-content-secondary mt-1.5">
+                    <span>學習中</span>
+                    <HelpTooltip text="剛開始學的卡片，還在短間隔複習階段" />
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full bg-srs-hard/70 mx-auto mt-2.5"></div>
             </div>
-            <div
-                class="text-center py-4 lg:py-5 px-2 lg:px-3 rounded-md bg-surface-page/60"
-            >
-                <div
-                    class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight"
-                >
+            <div class="text-center py-4 lg:py-5 px-2 rounded-lg bg-surface-page/60">
+                <div class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight leading-none">
                     {filteredNewCardPool.length}
                 </div>
-                <div class="text-sm text-content-secondary mt-1.5">新卡片</div>
-                <div
-                    class="w-1.5 h-1.5 rounded-full bg-srs-easy/70 mx-auto mt-2 lg:mt-3"
-                ></div>
+                <div class="flex items-center justify-center gap-1 text-xs lg:text-sm text-content-secondary mt-1.5">
+                    <span>新卡片</span>
+                    <HelpTooltip text="從未學過的卡片" />
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full bg-srs-easy/70 mx-auto mt-2.5"></div>
+            </div>
+            <div class="text-center py-4 lg:py-5 px-2 rounded-lg bg-surface-page/60">
+                <div class="text-2xl lg:text-3xl font-semibold text-content-primary tracking-tight leading-none">
+                    {srs.deckStats.relearningCount}
+                </div>
+                <div class="flex items-center justify-center gap-1 text-xs lg:text-sm text-content-secondary mt-1.5">
+                    <span>待鞏固</span>
+                    <HelpTooltip text="複習時忘記了，需要重新鞏固記憶" />
+                </div>
+                <div class="w-1.5 h-1.5 rounded-full bg-srs-again/70 mx-auto mt-2.5"></div>
+            </div>
+        </div>
+
+        <div class="mb-6 p-3 bg-surface-page/40 rounded-lg">
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-content-tertiary">已學習詞彙</span>
+                <span class="font-medium text-content-primary">{learnedLemmaCount} 個</span>
             </div>
         </div>
 
@@ -279,6 +263,27 @@
 
 {#snippet settingsContent()}
     <div class="space-y-5">
+        <div class="flex items-center justify-between p-3 bg-surface-page/60 rounded-lg">
+            <div>
+                <span class="text-sm font-medium text-content-primary">智慧推薦模式</span>
+                <p class="text-xs text-content-tertiary mt-0.5">
+                    {smartMode ? "根據 ML 模型自動安排學習順序" : "隨機順序學習新卡片"}
+                </p>
+            </div>
+            <button
+                type="button"
+                onclick={() => (smartMode = !smartMode)}
+                class="relative w-10 h-6 rounded-full transition-colors {smartMode ? 'bg-accent' : 'bg-border'}"
+                role="switch"
+                aria-checked={smartMode}
+                aria-label="智慧推薦模式"
+            >
+                <span
+                    class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform {smartMode ? 'translate-x-4' : 'translate-x-0'}"
+                ></span>
+            </button>
+        </div>
+
         <div>
             <label
                 for="new-card-limit"
@@ -299,71 +304,7 @@
             </p>
         </div>
 
-        <div>
-            <span
-                class="block text-sm font-medium text-content-secondary mb-2.5"
-            >
-                新卡片詞性
-            </span>
-            <div class="flex flex-wrap gap-2">
-                <button
-                    onclick={() => (selectedPos = new Set())}
-                    class="px-3 py-1.5 text-sm font-medium rounded-md transition-all {selectedPos.size ===
-                    0
-                        ? 'bg-accent-soft text-accent border border-accent/20'
-                        : 'bg-surface-page text-content-secondary border border-transparent hover:border-border-hover'}"
-                >
-                    全部
-                </button>
-                {#each posOptions as pos}
-                    <button
-                        onclick={() => togglePos(pos)}
-                        class="px-3 py-1.5 text-sm font-medium rounded-md transition-all {selectedPos.has(
-                            pos,
-                        )
-                            ? 'bg-accent-soft text-accent border border-accent/20'
-                            : 'bg-surface-page text-content-secondary border border-transparent hover:border-border-hover'}"
-                    >
-                        {posLabels[pos] || pos}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
-        <div>
-            <span class="block text-sm font-medium text-content-secondary mb-2">
-                新卡片出現頻率
-            </span>
-            <div class="flex gap-3 items-center">
-                <input
-                    type="number"
-                    bind:value={freqMin}
-                    min="1"
-                    class="flex-1 px-3 py-2 text-sm bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
-                />
-                <span class="text-content-tertiary text-sm">至</span>
-                <input
-                    type="number"
-                    bind:value={freqMax}
-                    min="1"
-                    class="flex-1 px-3 py-2 text-sm bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
-                />
-            </div>
-        </div>
-
         <div class="space-y-2.5">
-            <label class="flex items-center gap-3 cursor-pointer group">
-                <input
-                    type="checkbox"
-                    bind:checked={excludePropn}
-                    class="w-4 h-4 rounded border-border-hover text-accent focus:ring-0 focus:ring-offset-0"
-                />
-                <span
-                    class="text-sm text-content-secondary group-hover:text-content-primary transition-colors"
-                >
-                    排除專有名詞
-                </span>
-            </label>
             <label class="flex items-center gap-3 cursor-pointer group">
                 <input
                     type="checkbox"
