@@ -1,0 +1,47 @@
+[project]
+name = "gsat-vocab-pipeline"
+version = "0.1.0"
+description = "GSAT vocabulary frequency analysis pipeline"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pdfplumber>=0.11.0",
+    "spacy>=3.7.0",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    "openai>=1.82.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.28.0",
+    "tqdm>=4.66.0",
+    "typer>=0.15.0",
+    "rich>=13.0.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "truststore>=0.10.0",
+    "numpy>=2.0.0",
+    "tiktoken>=0.12.0",
+    "nltk>=3.9.0",
+    "scikit-learn>=1.8.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+gsat-pipeline = "src.cli:app"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

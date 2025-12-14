@@ -1,170 +1,142 @@
 # GSAT Vocabulary Website - Backend
 
-This directory contains all backend-related code including API services and data processing scripts.
+This directory contains the data processing pipeline that generates vocabulary data from CEEC exam papers.
 
 ## Directory Structure
 
 ```
 backend/
-├── api/                          # Cloudflare Workers API
-│   ├── worker-api.js            # API worker code
-│   └── wrangler.toml            # Cloudflare Workers configuration
-├── scripts/                      # Data processing scripts
-│   ├── ceec_scraper.py          # PDF scraper from CEEC website
-│   ├── extract_words.py         # Extract words and generate AI definitions
-│   ├── filter_sentences.py      # Filter and clean sentences
-│   ├── generate_polysemy.py     # Generate polysemy analysis
-│   ├── generate_tts_audio.py    # Generate word pronunciation audio
-│   ├── generate_featured_sentence_audio.py  # Generate sentence audio
-│   ├── split_vocab_details.py   # Split data into chunks
-│   ├── upload_vocab_details.py  # Upload data to R2
-│   ├── r2_up.py                 # Upload audio files to R2
-│   └── temp_upload_sentences.py # Temporary upload script
-└── requirements.txt              # Python dependencies
+├── src/                          # Pipeline source code
+│   ├── cli.py                   # CLI entry point (typer)
+│   ├── config.py                # Configuration settings
+│   ├── llm/                     # LLM integration
+│   │   ├── client.py           # OpenAI client wrapper
+│   │   └── prompts.py          # Prompt templates
+│   ├── ml/                      # Machine learning module
+│   │   ├── features.py         # Feature extraction
+│   │   ├── model.py            # ImportanceScorer model
+│   │   ├── train.py            # Model training script
+│   │   └── weights.py          # Legacy weight configuration
+│   ├── models/                  # Pydantic data models
+│   │   ├── analysis.py         # Analysis result models
+│   │   ├── cleaned.py          # Cleaned vocab data models
+│   │   ├── exam.py             # Exam structure models
+│   │   └── vocab.py            # Vocabulary entry models
+│   ├── stages/                  # Pipeline stages
+│   │   ├── stage0_pdf_to_md.py # PDF → Markdown conversion
+│   │   ├── stage1_structurize.py # Exam structurization
+│   │   ├── stage2_clean.py     # Data cleaning & classification
+│   │   ├── stage3_generate.py  # LLM entry generation
+│   │   ├── stage4_output.py    # Database building & output
+│   │   └── stage5_relations.py # WordNet relation computation
+│   └── utils/                   # Utility modules
+│       ├── scraper.py          # CEEC paper scraper
+│       └── validation.py       # Data validation utilities
+├── data/                         # Data directory (gitignored)
+│   ├── pdf/                     # Downloaded exam PDFs
+│   ├── markdown/                # Converted markdown files
+│   ├── intermediate/            # Pipeline intermediate data
+│   └── output/                  # Final output files
+├── pyproject.toml               # Project configuration (uv)
+└── uv.lock                      # Dependency lock file
 ```
 
 ## Setup
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 18+ (for Wrangler CLI)
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/) package manager
 - OpenAI API Key
-- Cloudflare account
 
 ### Installation
 
 ```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # macOS/Linux
-# or venv\Scripts\activate  # Windows
-
-# Install Python dependencies
 cd backend
-pip install -r requirements.txt
 
-# Download spaCy model
-python -m spacy download en_core_web_sm
+# Install dependencies with uv
+uv sync
 
-# Install Wrangler CLI
-npm install -g wrangler
+# Or install development dependencies
+uv sync --dev
 ```
 
 ### Environment Variables
 
-Create `.env` file in project root:
+Create `.env` file in the backend directory (see `.env.example`):
 
 ```bash
 OPENAI_API_KEY=sk-proj-your-key-here
-R2_ACCOUNT_ID=your-r2-account-id
-R2_ACCESS_KEY_ID=your-r2-access-key
-R2_SECRET_ACCESS_KEY=your-r2-secret-key
 ```
 
-## Data Processing Pipeline
+## Pipeline Usage
 
-### 1. Scrape PDF Files
+The pipeline is accessed via the `gsat-pipeline` CLI:
 
 ```bash
-cd backend/scripts
-python ceec_scraper.py
+# Run the full pipeline
+uv run gsat-pipeline run
+
+# Run with options
+uv run gsat-pipeline run --skip-llm           # Skip LLM stages (use cached)
+uv run gsat-pipeline run --use-legacy-weights # Use legacy scoring instead of ML
+uv run gsat-pipeline run --debug-first-batch  # Process only first batch for debugging
+
+# Scrape exam papers from CEEC
+uv run gsat-pipeline scrape
+
+# Train ML model separately
+uv run gsat-pipeline train-ml --target-year 114 --compare-modes
 ```
 
-Downloads CEEC English exam PDFs to `ceec_english_papers/`.
+### Pipeline Stages
 
-### 2. Extract Words and Generate Definitions
-
-```bash
-python extract_words.py
-```
-
-- Extracts text from PDFs
-- Performs NLP analysis with spaCy
-- Generates AI definitions using OpenAI API
-- Outputs: `data/output/vocab_data.json`
-
-### 3. Generate Audio
-
-```bash
-# Generate word pronunciation
-python generate_tts_audio.py
-
-# Generate sentence audio
-python generate_featured_sentence_audio.py
-```
-
-Outputs: `data/output/tts_audio/*.mp3`
-
-### 4. Split Data
-
-```bash
-python split_vocab_details.py
-```
-
-Splits large JSON into:
-- `vocab_index.json` - Lightweight index
-- `search_index.json` - Search index
-- `vocab_details/*.json` - Individual word details
-
-### 5. Upload to R2
-
-```bash
-# Upload audio files
-python r2_up.py
-
-# Upload data files
-python upload_vocab_details.py
-```
-
-## API Deployment
-
-### Configure Wrangler
-
-Edit `api/wrangler.toml` with your settings.
-
-### Create KV Namespace
-
-```bash
-wrangler kv:namespace create "VOCAB_CACHE"
-```
-
-Update the namespace ID in `wrangler.toml`.
-
-### Deploy Worker
-
-```bash
-cd api
-wrangler deploy
-```
-
-## API Endpoints
-
-- `GET /api/vocab/index` - Get vocabulary index
-- `GET /api/vocab/detail/:lemma` - Get word details
-- `GET /api/vocab/search?q=word` - Search words
-- `GET /api/vocab/random` - Get random word
-- `GET /api/quiz/generate` - Generate quiz questions
-- `GET /api/search-index` - Get search index
-- `GET /audio/:filename` - Get audio file
+| Stage | Description | Output |
+|-------|-------------|--------|
+| 0 | PDF → Markdown conversion | `data/markdown/*.md` |
+| 1 | Exam structurization (LLM) | `data/intermediate/exams/*.json` |
+| 2 | Clean & classify vocabulary | `data/intermediate/cleaned.json` |
+| 2.5 | Train ML importance model | `data/output/importance_model.pkl` |
+| 3 | Generate vocabulary entries (LLM) | Vocabulary database |
+| 4 | Compute WordNet relations | Enhanced entries |
+| 5 | Build database & write output | `data/output/vocab.json` |
 
 ## Technology Stack
 
-### Data Processing
-- **Python 3.10+**
+- **Python 3.13+** with uv package manager
 - **pdfplumber** - PDF text extraction
 - **spaCy** - NLP processing
-- **OpenAI API** - AI definitions and TTS
-- **boto3** - R2 upload
+- **OpenAI API** - LLM for structurization and generation
+- **scikit-learn** - ML importance scoring
+- **Pydantic** - Data validation
+- **typer + rich** - CLI interface
 
-### API
-- **Cloudflare Workers** - Serverless API
-- **Cloudflare R2** - Object storage
-- **Cloudflare KV** - Caching layer
+## Data Sources
 
-## Notes
+### Official Wordlist
 
-- All scripts should be run from the `backend/scripts` directory
-- Data output goes to `data/output/`
-- Audio files are uploaded incrementally
-- API uses caching to improve performance
+The `data/official_wordlist.json` file is derived from the Taiwan high school 6K vocabulary list (108 curriculum edition), originally compiled by the community at:
+
+https://github.com/EngTW/English-for-Programmers/tree/main/lists/Taiwan-high-school-6K-108-edition
+
+### Exam Papers
+
+Exam papers are scraped from the College Entrance Examination Center (CEEC, 大考中心) official website.
+
+## Acknowledgments
+
+- [EngTW/English-for-Programmers](https://github.com/EngTW/English-for-Programmers) for the vocabulary list compilation
+- 大學入學考試中心 (CEEC) for providing past exam papers
+
+## Development
+
+```bash
+# Run tests
+uv run pytest
+
+# Lint code
+uv run ruff check src/
+
+# Format code
+uv run ruff format src/
+```

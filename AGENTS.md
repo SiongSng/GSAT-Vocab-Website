@@ -51,18 +51,70 @@ Refer to `frontend/DESIGN_SYSTEM.md` for complete specification including:
 - Implements client-side caching with 5-minute TTL
 - Transforms API responses to match TypeScript interfaces
 
-### Backend
+### Backend (`/backend`)
 
-- **Platform**: Cloudflare Workers
-- **API Base**: `https://gsat-vocab-api.vic0407lu.workers.dev`
+The backend is a Python-based data processing pipeline that generates vocabulary data from CEEC exam papers.
+
+- **Package Manager**: uv
+- **Python Version**: 3.13+
+- **CLI Framework**: typer + rich
+
+#### Pipeline Stages
+
+| Stage | Module | Description |
+|-------|--------|-------------|
+| 0 | `stage0_pdf_to_md.py` | PDF → Markdown conversion |
+| 1 | `stage1_structurize.py` | LLM-based exam structurization |
+| 2 | `stage2_clean.py` | Data cleaning & classification |
+| 2.5 | `ml/model.py` | ML importance model training |
+| 3 | `stage3_generate.py` | LLM vocabulary entry generation |
+| 4 | `stage4_output.py` | Database building & output |
+| 5 | `stage5_relations.py` | WordNet relation computation |
+
+#### Key Modules
+
+- `src/cli.py` - CLI entry point with `run`, `scrape`, `train-ml` commands
+- `src/config.py` - Pydantic settings for OpenAI configuration
+- `src/llm/` - OpenAI client wrapper and prompt templates
+- `src/ml/` - Machine learning importance scoring (scikit-learn)
+- `src/models/` - Pydantic data models for exams, vocabulary, analysis
+- `src/stages/` - Pipeline stage implementations
+- `src/utils/` - Scraper and validation utilities
+
+#### Data Flow
+
+```
+PDF files → Markdown → Structured Exams → Cleaned Vocab → ML Scoring → Generated Entries → vocab.json
+```
 
 ## Development Commands
+
+### Frontend
 
 ```bash
 cd frontend
 bun install        # Install dependencies
 bun run build      # Production build
 bun run preview    # Preview production build
+```
+
+### Backend
+
+```bash
+cd backend
+uv sync            # Install dependencies
+uv sync --dev      # Install with dev dependencies
+
+# Pipeline commands
+uv run gsat-pipeline run              # Run full pipeline
+uv run gsat-pipeline run --skip-llm   # Skip LLM stages (use cached)
+uv run gsat-pipeline scrape           # Scrape CEEC papers
+uv run gsat-pipeline train-ml         # Train ML model separately
+
+# Development
+uv run pytest                         # Run tests
+uv run ruff check src/                # Lint code
+uv run ruff format src/               # Format code
 ```
 
 ## Performance Considerations
@@ -92,16 +144,3 @@ The word list contains 5000+ items. Key optimizations:
 
 - When manipulating classes via JavaScript (`classList.add/remove`), use `:global(.class-name)` in scoped styles
 - Tailwind classes for utility styling, scoped `<style>` for component-specific styles
-
-## API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/vocab/index` | Full vocabulary index |
-| `GET /api/vocab/detail/:lemma` | Word detail with meanings and sentences |
-| `GET /api/vocab/random` | Random word (supports filters) |
-| `GET /api/search-index` | Search index by POS |
-| `GET /api/quiz/generate` | Generate quiz questions |
-| `GET /api/vocab/:lemma/sentences` | Paginated sentences |
-| `GET /audio/:lemma.mp3` | Word pronunciation audio |
-| `GET /audio/sentences/:filename` | Sentence audio |
