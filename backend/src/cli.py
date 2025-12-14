@@ -274,6 +274,21 @@ async def _run_pipeline(
         min_year = min(years) if years else 0
         max_year = max(years) if years else 0
 
+        if entries and cleaned:
+            ml_score_map = {
+                e.lemma.lower(): e.frequency.ml_score
+                for e in cleaned.entries
+                if e.frequency.ml_score is not None
+            }
+            for entry in entries:
+                score = ml_score_map.get(entry.lemma.lower())
+                if score is not None:
+                    entry.frequency.ml_score = score
+            entries.sort(
+                key=lambda e: (e.frequency.ml_score or 0, e.frequency.weighted_score),
+                reverse=True,
+            )
+
         distractor_groups = cleaned.distractor_groups if cleaned else []
         database = build_database(entries, distractor_groups, min_year, max_year)
         errors_path = output_path.parent / "errors.json"
