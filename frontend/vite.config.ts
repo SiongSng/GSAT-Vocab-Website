@@ -19,4 +19,5 @@ export default defineConfig({
     target: "esnext",
     minify: "esbuild",
   },
+  assetsInclude: ["**/*.gz"],
 });

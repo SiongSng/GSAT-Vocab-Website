@@ -1,30 +1,40 @@
 <script lang="ts">
     import type { SRSCard } from "$lib/types/srs";
-    import type { VocabDetail } from "$lib/types";
+    import type { VocabEntry } from "$lib/types/vocab";
     import StateBadge from "./StateBadge.svelte";
     import { playCurrentCardAudio } from "$lib/stores/srs.svelte";
 
     interface Props {
         card: SRSCard;
-        wordDetail: VocabDetail | null;
+        vocabEntry: VocabEntry | null;
         isFlipped: boolean;
         isLoading: boolean;
         onFlip: () => void;
     }
 
-    let { card, wordDetail, isFlipped, isLoading, onFlip }: Props = $props();
+    let { card, vocabEntry, isFlipped, isLoading, onFlip }: Props = $props();
 
     const primaryPos = $derived.by(() => {
-        if (wordDetail?.meanings?.[0]?.pos) {
-            return wordDetail.meanings[0].pos;
+        if (vocabEntry?.senses?.[0]?.pos) {
+            return vocabEntry.senses[0].pos;
         }
-        if (wordDetail?.pos_distribution) {
-            const keys = Object.keys(wordDetail.pos_distribution);
-            if (keys.length > 0) {
-                return keys[0];
-            }
+        if (vocabEntry?.pos && vocabEntry.pos.length > 0) {
+            return vocabEntry.pos[0];
         }
         return "word";
+    });
+
+    const firstExample = $derived.by(() => {
+        if (!vocabEntry?.senses) return null;
+        for (const sense of vocabEntry.senses) {
+            if (sense.examples.length > 0) {
+                return sense.examples[0].text;
+            }
+            if (sense.generated_example) {
+                return sense.generated_example;
+            }
+        }
+        return null;
     });
 
     function highlightWord(text: string, lemma: string): string {
@@ -166,41 +176,39 @@
                             載入中...
                         </div>
                     </div>
-                {:else if wordDetail?.meanings && wordDetail.meanings.length > 0}
-                    {#each wordDetail.meanings.slice(0, 3) as meaning, i}
+                {:else if vocabEntry?.senses && vocabEntry.senses.length > 0}
+                    {#each vocabEntry.senses.slice(0, 3) as sense, i}
                         <div
                             class={i <
-                            Math.min(wordDetail.meanings.length, 3) - 1
+                            Math.min(vocabEntry.senses.length, 3) - 1
                                 ? "pb-4 border-b border-border/60"
                                 : ""}
                         >
                             <span
                                 class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mb-2 lowercase"
                             >
-                                {meaning.pos}
+                                {sense.pos}
                             </span>
                             <p
                                 class="text-base text-content-primary leading-relaxed"
                             >
-                                {meaning.zh_def}
+                                {sense.zh_def}
                             </p>
-                            {#if meaning.en_def}
+                            {#if sense.en_def}
                                 <p
                                     class="text-sm text-content-tertiary mt-1 leading-relaxed"
                                 >
-                                    {meaning.en_def}
+                                    {sense.en_def}
                                 </p>
                             {/if}
                         </div>
                     {/each}
 
-                    {#if wordDetail.sentences?.preview && wordDetail.sentences.preview.length > 0}
+                    {#if firstExample}
                         <div class="pt-3 mt-3 border-t border-border/50">
-                            {#each wordDetail.sentences.preview.slice(0, 1) as sentence}
-                                <p class="text-sm text-content-secondary leading-relaxed">
-                                    {@html highlightWord(sentence.text, card.lemma)}
-                                </p>
-                            {/each}
+                            <p class="text-sm text-content-secondary leading-relaxed">
+                                {@html highlightWord(firstExample, card.lemma)}
+                            </p>
                         </div>
                     {/if}
                 {:else}

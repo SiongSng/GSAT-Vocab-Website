@@ -2,26 +2,21 @@
     import { tick } from "svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
-    import { fetchMoreSentences, type SentencePreview } from "$lib/api";
     import { speakText } from "$lib/tts";
 
     const vocab = getVocabStore();
     const app = getAppStore();
 
-    let isLoadingMoreSentences = $state(false);
-    let additionalSentences = $state<SentencePreview[]>([]);
-    let nextOffset = $state(0);
-    let totalSentences = $state(0);
     let audioPlayer: HTMLAudioElement | null = null;
     let isPlayingWord = $state(false);
     let playingSentenceIndex = $state<number | null>(null);
     let showSkeleton = $state(false);
     let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const word = $derived(vocab.selectedWord);
+    const entry = $derived(vocab.selectedEntry);
     const selectedLemma = $derived(vocab.selectedLemma);
     const isActuallyLoading = $derived(
-        selectedLemma !== null && word?.lemma !== selectedLemma,
+        selectedLemma !== null && entry?.lemma !== selectedLemma,
     );
 
     $effect(() => {
@@ -38,48 +33,24 @@
         }
     });
 
-    $effect(() => {
-        if (word) {
-            additionalSentences = [];
-            nextOffset = word.sentences?.next_offset ?? 0;
-            totalSentences = word.sentences?.total_count ?? 0;
-        }
-    });
-
     const isLoadingDetail = $derived(isActuallyLoading && showSkeleton);
 
-    const allSentences = $derived.by(() => {
-        if (!word?.sentences) return [];
-        return [...(word.sentences.preview || []), ...additionalSentences];
+    const allExamples = $derived.by(() => {
+        if (!entry?.senses) return [];
+        return entry.senses.flatMap((sense, senseIdx) =>
+            sense.examples.map((ex) => ({
+                text: ex.text,
+                source: `${ex.source.year} ${ex.source.exam_type}`,
+                senseIdx,
+            })),
+        );
     });
 
-    const hasMoreSentences = $derived(
-        word?.sentences ? nextOffset < totalSentences : false,
-    );
-
-    function observeSentinel(node: HTMLElement) {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting && !isLoadingMoreSentences) {
-                    loadMoreSentences();
-                }
-            },
-            { rootMargin: "100px" },
-        );
-        observer.observe(node);
-
-        return {
-            destroy() {
-                observer.disconnect();
-            },
-        };
-    }
-
     async function playWordAudio() {
-        if (!word || isPlayingWord) return;
+        if (!entry || isPlayingWord) return;
         isPlayingWord = true;
         try {
-            const url = await speakText(word.lemma);
+            const url = await speakText(entry.lemma);
             if (!audioPlayer) audioPlayer = new Audio();
             audioPlayer.src = url;
             audioPlayer.onended = () => (isPlayingWord = false);
@@ -115,22 +86,6 @@
                 listContainer.scrollTop = 0;
             }
         });
-    }
-
-    async function loadMoreSentences() {
-        if (!word || isLoadingMoreSentences || !hasMoreSentences) return;
-
-        isLoadingMoreSentences = true;
-        try {
-            const data = await fetchMoreSentences(word.lemma, nextOffset, 5);
-            additionalSentences = [...additionalSentences, ...data.items];
-            nextOffset = data.next_offset;
-            totalSentences = data.total;
-        } catch (e) {
-            console.error("Failed to load more sentences:", e);
-        } finally {
-            isLoadingMoreSentences = false;
-        }
     }
 
     function highlightWord(text: string, lemma: string): string {
@@ -170,13 +125,22 @@
         const idx = vocab.index.findIndex((w) => w.lemma === lemma);
         return idx >= 0 ? idx + 1 : 0;
     }
-    $effect(() => {
-        if (word) {
-            additionalSentences = [];
-            nextOffset = word.sentences?.next_offset ?? 0;
-            totalSentences = word.sentences?.total_count ?? 0;
-        }
-    });
+
+    function formatLevel(level: number | null): string {
+        if (level === null) return "";
+        return `Level ${level}`;
+    }
+
+    function formatTier(tier: string): string {
+        const tierMap: Record<string, string> = {
+            tested: "考題詞彙",
+            translation: "翻譯詞彙",
+            phrase: "片語",
+            pattern: "句型",
+            basic: "基礎",
+        };
+        return tierMap[tier] ?? tier;
+    }
 </script>
 
 <section
@@ -236,7 +200,7 @@
             <p class="text-sm text-content-secondary max-w-xs">
                 {vocab.isLoading
                     ? "正在載入數據..."
-                    : "從左側開始搜尋、篩選，或點擊「隨機一字」"}
+                    : "從左側開始搜尋、篩選，或點擊任意單字"}
             </p>
         </div>
     {:else if isLoadingDetail}
@@ -272,31 +236,6 @@
                 </div>
             </div>
 
-            <div class="pos-distribution-section mb-6">
-                <div class="skeleton-text h-5 w-16 mb-3"></div>
-                <div
-                    class="bg-surface-primary rounded-lg p-4 border border-border"
-                >
-                    <div class="space-y-3">
-                        {#each [1, 2, 3] as _}
-                            <div>
-                                <div class="flex justify-between mb-1.5">
-                                    <div class="skeleton-text h-4 w-14"></div>
-                                    <div class="skeleton-text h-4 w-16"></div>
-                                </div>
-                                <div
-                                    class="h-1.5 bg-surface-secondary rounded-full overflow-hidden"
-                                >
-                                    <div
-                                        class="skeleton-bar h-full rounded-full"
-                                    ></div>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                </div>
-            </div>
-
             <div class="sentences-section">
                 <div class="skeleton-text h-5 w-20 mb-3"></div>
                 <div class="space-y-2.5">
@@ -318,7 +257,7 @@
                 </div>
             </div>
         </div>
-    {:else if word}
+    {:else if entry}
         <div class="detail-content pt-12 lg:pt-0">
             <div class="flex items-start justify-between mb-6">
                 <div>
@@ -326,7 +265,7 @@
                         <h2
                             class="text-2xl lg:text-3xl font-semibold tracking-tight text-accent"
                         >
-                            {word.lemma}
+                            {entry.lemma}
                         </h2>
                         <button
                             class="p-2 rounded-md hover:bg-surface-hover transition-colors"
@@ -351,21 +290,27 @@
                             </svg>
                         </button>
                     </div>
-                    <div
-                        class="flex items-center gap-2 text-sm text-content-tertiary"
-                    >
-                        <span>#{getRank(word.lemma)}</span>
-                        <span class="text-border-hover">•</span>
-                        <span>出現 {word.count} 次</span>
+                    <div class="flex items-center gap-2 flex-wrap text-sm">
+                        <span class="text-content-tertiary">#{getRank(entry.lemma)}</span>
+                        <span class="text-border-hover">·</span>
+                        <span class="text-content-tertiary">出現 {entry.frequency.total_occurrences} 次</span>
+                        {#if entry.level !== null}
+                            <span class="text-border-hover">·</span>
+                            <span class="text-content-tertiary">{formatLevel(entry.level)}</span>
+                        {/if}
+                        {#if entry.in_official_list}
+                            <span class="px-1.5 py-0.5 text-xs font-medium bg-accent-soft text-accent rounded">官方詞彙</span>
+                        {/if}
+                        <span class="px-1.5 py-0.5 text-xs font-medium bg-surface-secondary text-content-secondary rounded">{formatTier(entry.tier)}</span>
                     </div>
                 </div>
             </div>
 
-            {#if word.meanings && word.meanings.length > 0}
+            {#if entry.senses && entry.senses.length > 0}
                 <div class="meanings-section mb-6">
                     <h3 class="section-header">詞義</h3>
                     <div class="space-y-2.5">
-                        {#each word.meanings as meaning, i}
+                        {#each entry.senses as sense, i}
                             <div
                                 class="meaning-item bg-surface-primary rounded-lg p-4 border border-border shadow-card transition-shadow hover:shadow-card-hover"
                             >
@@ -373,77 +318,104 @@
                                     <span
                                         class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded"
                                     >
-                                        {meaning.pos}
+                                        {sense.pos}
                                     </span>
-                                    <span class="text-xs text-content-tertiary"
-                                        >#{i + 1}</span
-                                    >
+                                    <span class="text-xs text-content-tertiary">#{i + 1}</span>
+                                    {#if sense.tested_in_exam}
+                                        <span class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded">曾考</span>
+                                    {/if}
                                 </div>
                                 <p class="text-content-primary mb-1">
-                                    {meaning.zh_def}
+                                    {sense.zh_def}
                                 </p>
                                 <p class="text-sm text-content-secondary">
-                                    {meaning.en_def}
+                                    {sense.en_def}
                                 </p>
+                                {#if sense.generated_example}
+                                    <p class="text-sm text-content-tertiary mt-2 italic">
+                                        {sense.generated_example}
+                                    </p>
+                                {/if}
                             </div>
                         {/each}
                     </div>
                 </div>
             {/if}
 
-            {#if word.pos_distribution && Object.keys(word.pos_distribution).length > 0}
-                <div class="pos-distribution-section mb-6">
-                    <h3 class="section-header">詞性分布</h3>
-                    <div
-                        class="bg-surface-primary rounded-lg p-4 border border-border shadow-card"
-                    >
-                        <div class="space-y-3">
-                            {#each Object.entries(word.pos_distribution).sort((a, b) => b[1] - a[1]) as [pos, count]}
-                                {@const total = Object.values(
-                                    word.pos_distribution,
-                                ).reduce((a, b) => a + b, 0)}
-                                {@const percentage = Math.round(
-                                    (count / total) * 100,
-                                )}
-                                <div class="pos-bar">
-                                    <div
-                                        class="flex justify-between text-sm mb-1.5"
-                                    >
-                                        <span
-                                            class="font-medium text-content-primary"
-                                            >{pos}</span
-                                        >
-                                        <span class="text-content-tertiary"
-                                            >{count} ({percentage}%)</span
-                                        >
-                                    </div>
-                                    <div
-                                        class="h-1.5 bg-surface-page rounded-full overflow-hidden"
-                                    >
-                                        <div
-                                            class="h-full bg-accent rounded-full transition-all duration-300"
-                                            style="width: {percentage}%"
-                                        ></div>
-                                    </div>
+            {#if entry.confusion_notes && entry.confusion_notes.length > 0}
+                <div class="confusion-section mb-6">
+                    <h3 class="section-header">易混淆詞</h3>
+                    <div class="space-y-2.5">
+                        {#each entry.confusion_notes as note}
+                            <div class="bg-surface-primary rounded-lg p-4 border border-border shadow-card">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="font-medium text-srs-hard">{note.confused_with}</span>
                                 </div>
-                            {/each}
-                        </div>
+                                <p class="text-sm text-content-secondary mb-2">{note.distinction}</p>
+                                <p class="text-xs text-content-tertiary italic">{note.memory_tip}</p>
+                            </div>
+                        {/each}
                     </div>
                 </div>
             {/if}
 
-            {#if allSentences.length > 0}
+            {#if entry.root_info}
+                <div class="root-section mb-6">
+                    <h3 class="section-header">記憶策略</h3>
+                    <div class="bg-surface-primary rounded-lg p-4 border border-border shadow-card">
+                        {#if entry.root_info.root_breakdown}
+                            <p class="text-sm text-content-primary mb-2">
+                                <span class="font-medium">字根拆解：</span>{entry.root_info.root_breakdown}
+                            </p>
+                        {/if}
+                        <p class="text-sm text-content-secondary">{entry.root_info.memory_strategy}</p>
+                    </div>
+                </div>
+            {/if}
+
+            {#if entry.synonyms && entry.synonyms.length > 0}
+                <div class="related-section mb-6">
+                    <h3 class="section-header">同義詞</h3>
+                    <div class="flex flex-wrap gap-2">
+                        {#each entry.synonyms as syn}
+                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{syn}</span>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
+            {#if entry.antonyms && entry.antonyms.length > 0}
+                <div class="related-section mb-6">
+                    <h3 class="section-header">反義詞</h3>
+                    <div class="flex flex-wrap gap-2">
+                        {#each entry.antonyms as ant}
+                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{ant}</span>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
+            {#if entry.derived_forms && entry.derived_forms.length > 0}
+                <div class="related-section mb-6">
+                    <h3 class="section-header">衍生詞</h3>
+                    <div class="flex flex-wrap gap-2">
+                        {#each entry.derived_forms as form}
+                            <span class="px-2.5 py-1 text-sm bg-surface-primary border border-border rounded-md text-content-secondary">{form}</span>
+                        {/each}
+                    </div>
+                </div>
+            {/if}
+
+            {#if allExamples.length > 0}
                 <div class="sentences-section">
                     <h3 class="section-header">
-                        例句
+                        考古題例句
                         <span class="text-content-tertiary font-normal">
-                            ({allSentences.length}/{totalSentences ||
-                                word.sentences?.total_count ||
-                                0})
+                            ({allExamples.length})
                         </span>
                     </h3>
                     <div class="space-y-2.5">
-                        {#each allSentences as sentence, i (sentence.text)}
+                        {#each allExamples as example, i (example.text)}
                             <div
                                 class="sentence-item bg-surface-primary rounded-lg p-4 border border-border shadow-card animate-fade-in"
                             >
@@ -457,24 +429,22 @@
                                             class="text-content-primary leading-relaxed"
                                         >
                                             {@html highlightWord(
-                                                sentence.text,
-                                                word.lemma,
+                                                example.text,
+                                                entry.lemma,
                                             )}
                                         </p>
-                                        {#if sentence.source}
-                                            <p
-                                                class="text-xs text-content-tertiary mt-2"
-                                            >
-                                                — {sentence.source}
-                                            </p>
-                                        {/if}
+                                        <p
+                                            class="text-xs text-content-tertiary mt-2"
+                                        >
+                                            — {example.source}
+                                        </p>
                                     </div>
                                     <button
                                         class="p-1.5 rounded-md hover:bg-surface-hover transition-colors flex-shrink-0"
                                         class:animate-pulse={playingSentenceIndex === i}
                                         onclick={() =>
                                             playSentenceAudio(
-                                                sentence.text,
+                                                example.text,
                                                 i,
                                             )}
                                         title="播放例句"
@@ -499,15 +469,6 @@
                             </div>
                         {/each}
                     </div>
-
-                    {#if hasMoreSentences}
-                        <div
-                            use:observeSentinel
-                            class="mt-4 flex items-center justify-center py-6"
-                        >
-                            <div class="loading-spinner"></div>
-                        </div>
-                    {/if}
                 </div>
             {/if}
         </div>
@@ -538,21 +499,6 @@
         }
         to {
             opacity: 1;
-        }
-    }
-
-    .loading-spinner {
-        width: 24px;
-        height: 24px;
-        border: 2px solid var(--color-border);
-        border-top-color: var(--color-accent);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
         }
     }
 
@@ -600,18 +546,6 @@
         background-size: 200% 100%;
         animation: shimmer 2.5s infinite;
         border-radius: 9999px;
-    }
-
-    .skeleton-bar {
-        background: linear-gradient(
-            90deg,
-            var(--color-accent-soft) 25%,
-            rgba(32, 125, 255, 0.05) 50%,
-            var(--color-accent-soft) 75%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 2.5s infinite;
-        width: 60%;
     }
 
     @keyframes shimmer {

@@ -1,6 +1,5 @@
 <script lang="ts">
     import { Rating } from "ts-fsrs";
-    import type { VocabDetail } from "$lib/types";
     import {
         getSRSStore,
         flipCard,
@@ -9,7 +8,8 @@
         playCurrentCardAudio,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { fetchWordDetail } from "$lib/api";
+    import { getEntry } from "$lib/stores/vocab-db";
+    import type { VocabEntry } from "$lib/types/vocab";
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
     import ProgressBar from "./ProgressBar.svelte";
@@ -17,7 +17,7 @@
     const srs = getSRSStore();
     const app = getAppStore();
 
-    let wordDetail: VocabDetail | null = $state(null);
+    let vocabEntry: VocabEntry | null = $state(null);
     let isLoadingDetail = $state(false);
     let autoSpeak = $state(true);
 
@@ -40,16 +40,16 @@
                 setTimeout(() => playCurrentCardAudio(), 100);
             }
         } else {
-            wordDetail = null;
+            vocabEntry = null;
         }
     });
 
     async function loadWordDetail(lemma: string) {
         isLoadingDetail = true;
         try {
-            wordDetail = await fetchWordDetail(lemma);
+            vocabEntry = await getEntry(lemma) ?? null;
         } catch {
-            wordDetail = null;
+            vocabEntry = null;
         } finally {
             isLoadingDetail = false;
         }
@@ -87,7 +87,7 @@
     {#if srs.currentCard}
         <Flashcard
             card={srs.currentCard}
-            {wordDetail}
+            {vocabEntry}
             isFlipped={srs.isFlipped}
             isLoading={isLoadingDetail}
             onFlip={handleFlip}

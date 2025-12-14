@@ -111,11 +111,25 @@ export async function downloadAndStoreVocab(
   });
 
   let vocabData: VocabDatabase;
-  try {
-    const clonedResponse = response.clone();
-    vocabData = await decompressGzipStream(clonedResponse);
-  } catch {
-    vocabData = await decompressGzipFallback(response);
+  const contentEncoding = response.headers.get("Content-Encoding");
+
+  if (contentEncoding === "gzip") {
+    // Server already decompressed it (Vite dev server behavior)
+    vocabData = await response.json();
+  } else {
+    // Need to decompress manually (production with static .gz file)
+    try {
+      const clonedResponse = response.clone();
+      vocabData = await decompressGzipStream(clonedResponse);
+    } catch {
+      try {
+        vocabData = await decompressGzipFallback(response);
+      } catch {
+        // Last resort: maybe it's already JSON
+        const text = await response.text();
+        vocabData = JSON.parse(text);
+      }
+    }
   }
 
   const entries = vocabData.entries;
