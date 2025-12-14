@@ -87,6 +87,9 @@ uv run gsat-pipeline scrape
 
 # Train ML model separately
 uv run gsat-pipeline train-ml --target-year 114 --compare-modes
+
+# Export vocab.json as gzip to frontend
+uv run gsat-pipeline export
 ```
 
 ### Pipeline Stages
@@ -100,6 +103,20 @@ uv run gsat-pipeline train-ml --target-year 114 --compare-modes
 | 3 | Generate vocabulary entries (LLM) | Vocabulary database |
 | 4 | Compute WordNet relations | Enhanced entries |
 | 5 | Build database & write output | `data/output/vocab.json` |
+
+### Export Command
+
+The `export` command compresses `vocab.json` to gzip and copies it to the frontend for lazy loading into IndexedDB:
+
+```bash
+uv run gsat-pipeline export
+```
+
+Options:
+- `--input-path`: Custom input vocab.json path (default: `data/output/vocab.json`)
+- `--output-dir`: Custom output directory (default: `../frontend/public/data`)
+
+Output: `frontend/public/data/vocab.json.gz` (~82% compression ratio)
 
 ## Technology Stack
 

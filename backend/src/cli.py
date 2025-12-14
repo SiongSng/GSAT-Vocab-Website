@@ -1,6 +1,8 @@
 import asyncio
+import gzip
 import json
 import logging
+import shutil
 from pathlib import Path
 
 import typer
@@ -352,6 +354,47 @@ def scrape(
     console.print(f"Scraping CEEC papers to {output_dir}...")
     count = scrape_ceec_papers(output_dir)
     console.print(f"[green]✓[/] Downloaded {count} papers")
+
+
+@app.command()
+def export(
+    input_path: Path = typer.Option(None, help="Input vocab.json path"),
+    output_dir: Path = typer.Option(None, help="Output directory in frontend"),
+):
+    """Compress vocab.json to gzip and copy to frontend for lazy loading."""
+    data_dir = get_data_dir()
+
+    if input_path is None:
+        input_path = data_dir / "output" / "vocab.json"
+    if output_dir is None:
+        output_dir = data_dir.parent.parent / "frontend" / "public" / "data"
+
+    if not input_path.exists():
+        console.print(f"[red]✗[/] Input file not found: {input_path}")
+        raise typer.Exit(1)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "vocab.json.gz"
+
+    with (
+        open(input_path, "rb") as f_in,
+        gzip.open(output_path, "wb", compresslevel=9) as f_out,
+    ):
+        shutil.copyfileobj(f_in, f_out)
+
+    original_size = input_path.stat().st_size
+    compressed_size = output_path.stat().st_size
+    ratio = (1 - compressed_size / original_size) * 100
+
+    table = Table(title="Export Complete", show_header=False, box=None)
+    table.add_column(style="dim")
+    table.add_column(style="bold")
+    table.add_row("Source", str(input_path))
+    table.add_row("Output", str(output_path))
+    table.add_row("Original size", f"{original_size / 1024 / 1024:.2f} MB")
+    table.add_row("Compressed size", f"{compressed_size / 1024 / 1024:.2f} MB")
+    table.add_row("Compression ratio", f"{ratio:.1f}%")
+    console.print(Panel(table, border_style="green"))
 
 
 if __name__ == "__main__":
