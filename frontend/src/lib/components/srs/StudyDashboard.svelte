@@ -18,6 +18,7 @@
 
     const STORAGE_KEY = "gsat_srs_study_settings";
     const CUSTOM_DECK_KEY = "gsat_srs_custom_deck";
+    const SEPARATOR_PATTERN = /[\s,，、;；]+/;
 
     interface StudySettings {
         newCardLimit: number;
@@ -114,7 +115,8 @@
     function updateCustomDeck(lemmas: string[]): void {
         customDeck = lemmas;
         if (lemmas.length > 0) {
-            const newOnes = lemmas.filter((lemma) => !getLemmaHasCard(lemma));
+            const existing = new Set(getAllCards().map((c) => c.lemma));
+            const newOnes = lemmas.filter((lemma) => !existing.has(lemma));
             if (newOnes.length > 0) {
                 addWordsToSRS(newOnes);
             }
@@ -147,7 +149,7 @@
 
     function parseCustomInput(): string[] {
         const parts = customInput
-            .split(/[\s,，、;；]+/)
+            .split(SEPARATOR_PATTERN)
             .map((p) => p.trim())
             .filter(Boolean);
         return normalizeLemmaList(parts);
@@ -245,18 +247,22 @@
         return new Set(propnLemmas);
     });
 
-    function handleStart() {
-        onStart(filteredNewCardPool, excludedLemmas);
-    }
-
-    function handleStartCustomDeck() {
+    const customExcludedLemmas = $derived.by(() => {
         const exclude = new Set<string>(excludedLemmas);
         for (const item of vocab.index || []) {
             if (!customDeckSet.has(item.lemma)) {
                 exclude.add(item.lemma);
             }
         }
-        onStart(customNewCardPool, exclude);
+        return exclude;
+    });
+
+    function handleStart() {
+        onStart(filteredNewCardPool, excludedLemmas);
+    }
+
+    function handleStartCustomDeck() {
+        onStart(customNewCardPool, customExcludedLemmas);
     }
 </script>
 
