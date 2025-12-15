@@ -35,10 +35,16 @@
         const rect = btnRef.getBoundingClientRect();
         const contentWidth = 200;
         const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
         const padding = 12;
+        const tooltipHeight = 60;
 
-        const top = rect.bottom + 8;
+        let top = rect.bottom + 8;
         let left = rect.left + rect.width / 2 - contentWidth / 2;
+
+        if (top + tooltipHeight > viewportHeight - padding) {
+            top = rect.top - tooltipHeight - 8;
+        }
 
         if (left < padding) {
             left = padding;
@@ -58,10 +64,12 @@
         if (isOpen) {
             updatePosition();
             document.addEventListener("click", handleClickOutside);
-            window.addEventListener("scroll", close, true);
+            window.addEventListener("scroll", updatePosition, true);
+            window.addEventListener("resize", updatePosition);
             return () => {
                 document.removeEventListener("click", handleClickOutside);
-                window.removeEventListener("scroll", close, true);
+                window.removeEventListener("scroll", updatePosition, true);
+                window.removeEventListener("resize", updatePosition);
             };
         }
     });
