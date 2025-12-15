@@ -1,17 +1,14 @@
-import type { PosFilter, VocabTypeFilter, TierFilter, SortOption } from "$lib/types";
+import type {
+  PosFilter,
+  VocabTypeFilter,
+  TierFilter,
+  SortOption,
+} from "$lib/types";
 import type { VocabEntry, VocabIndexItem } from "$lib/types/vocab";
 import { createIndexItem } from "$lib/types/vocab";
 import { getRouterStore, navigate } from "./router.svelte";
-import {
-  initVocabDB,
-  buildIndex,
-  getEntry,
-  getEntriesCount,
-} from "./vocab-db";
-import {
-  loadVocabWithVersionCheck,
-  type LoadProgress,
-} from "./vocab-loader";
+import { initVocabDB, buildIndex, getEntry, getEntriesCount } from "./vocab-db";
+import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 
 let vocabIndex: VocabIndexItem[] = $state.raw([]);
 let selectedEntry: VocabEntry | null = $state.raw(null);
@@ -19,13 +16,10 @@ let selectedLemma: string | null = $state(null);
 let isLoading = $state(false);
 let isLoadingDetail = $state(false);
 let error: string | null = $state(null);
-let freqRange = $state({ min: 1, max: 6359 });
 
 let loadProgress: LoadProgress | null = $state(null);
 
 let searchTerm = $state("");
-let freqMin = $state(1);
-let freqMax = $state(20);
 let pos: PosFilter = $state("all");
 let vocabType: VocabTypeFilter = $state("all");
 let tier: TierFilter = $state("all");
@@ -40,10 +34,6 @@ const filteredWords = $derived.by(() => {
   if (searchTerm) {
     const term = searchTerm.toLowerCase();
     result = result.filter((w) => w.lemma.toLowerCase().startsWith(term));
-  }
-
-  if (freqMin > 0 || freqMax < freqRange.max) {
-    result = result.filter((w) => w.count >= freqMin && w.count <= freqMax);
   }
 
   if (pos !== "all") {
@@ -72,10 +62,14 @@ const filteredWords = $derived.by(() => {
 
   switch (sortBy) {
     case "importance_desc":
-      result = [...result].sort((a, b) => b.importance_score - a.importance_score);
+      result = [...result].sort(
+        (a, b) => b.importance_score - a.importance_score,
+      );
       break;
     case "importance_asc":
-      result = [...result].sort((a, b) => a.importance_score - b.importance_score);
+      result = [...result].sort(
+        (a, b) => a.importance_score - b.importance_score,
+      );
       break;
     case "count_desc":
       result = [...result].sort((a, b) => b.count - a.count);
@@ -123,9 +117,6 @@ export function getVocabStore() {
     get error() {
       return error;
     },
-    get freqRange() {
-      return freqRange;
-    },
     get filteredWords() {
       return filteredWords;
     },
@@ -142,18 +133,6 @@ export function getFilters() {
     },
     set searchTerm(v: string) {
       searchTerm = v;
-    },
-    get freqMin() {
-      return freqMin;
-    },
-    set freqMin(v: number) {
-      freqMin = v;
-    },
-    get freqMax() {
-      return freqMax;
-    },
-    set freqMax(v: number) {
-      freqMax = v;
     },
     get pos() {
       return pos;
@@ -314,11 +293,6 @@ export function setSearchTerm(term: string): void {
   searchTerm = term.toLowerCase();
 }
 
-export function setFreqRange(min: number, max: number): void {
-  freqMin = Math.max(freqRange.min, min);
-  freqMax = Math.min(freqRange.max, max);
-}
-
 export function setPosFilter(p: PosFilter): void {
   pos = p;
 }
@@ -357,8 +331,6 @@ export function setSortBy(s: SortOption): void {
 
 export function resetFilters(): void {
   searchTerm = "";
-  freqMin = 1;
-  freqMax = 20;
   pos = "all";
   vocabType = "all";
   tier = "all";

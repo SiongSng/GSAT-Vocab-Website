@@ -10,12 +10,9 @@
         getCurrentAnswer,
         type QuizConfig,
     } from "$lib/stores/quiz.svelte";
-    import { getVocabStore, getFilters } from "$lib/stores/vocab.svelte";
     import { speakText } from "$lib/tts";
 
     const quiz = getQuizStore();
-    const vocab = getVocabStore();
-    const filters = getFilters();
 
     let quizCount = $state(10);
     let selectedPos = $state<Set<string>>(new Set());
@@ -130,11 +127,6 @@
         }
         return "";
     }
-
-    $effect(() => {
-        freqMin = filters.freqMin;
-        freqMax = filters.freqMax;
-    });
 </script>
 
 <div class="quiz-view h-full overflow-y-auto bg-surface-page p-5 sm:p-8">
@@ -566,8 +558,8 @@
                     <div class="flex gap-3 items-center">
                         <input
                             type="number"
-                            min={vocab.freqRange.min}
-                            max={vocab.freqRange.max}
+                            min={1}
+                            max={9999}
                             bind:value={freqMin}
                             class="flex-1 px-3 py-2 text-sm"
                             placeholder="最小"
@@ -575,8 +567,8 @@
                         <span class="text-content-tertiary text-sm">至</span>
                         <input
                             type="number"
-                            min={vocab.freqRange.min}
-                            max={vocab.freqRange.max}
+                            min={1}
+                            max={9999}
                             bind:value={freqMax}
                             class="flex-1 px-3 py-2 text-sm"
                             placeholder="最大"
@@ -672,6 +664,8 @@
 
     .quiz-type-card:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
+        box-shadow:
+            0 0 0 2px var(--color-surface-primary),
+            0 0 0 4px var(--color-accent);
     }
 </style>
