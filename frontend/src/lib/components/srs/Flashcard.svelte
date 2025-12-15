@@ -27,16 +27,17 @@
 
     const currentExample = $derived.by(() => {
         if (!currentSense) return null;
-        if (currentSense.examples.length > 0) {
-            const randomIdx = Math.floor(Math.random() * currentSense.examples.length);
+        const examples = currentSense.examples ?? [];
+        if (examples.length > 0) {
+            const randomIdx = Math.floor(Math.random() * examples.length);
             return {
-                text: currentSense.examples[randomIdx].text,
-                source: currentSense.examples[randomIdx].source,
+                text: examples[randomIdx].text,
+                source: examples[randomIdx].source,
             };
         }
-        if (currentSense.generated_example) {
+        if (currentSense.generated_example?.trim()) {
             return {
-                text: currentSense.generated_example,
+                text: currentSense.generated_example.trim(),
                 source: null,
             };
         }

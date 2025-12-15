@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { getSRSStore } from "$lib/stores/srs.svelte";
+    import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
@@ -17,6 +17,7 @@
     const app = getAppStore();
 
     const STORAGE_KEY = "gsat_srs_study_settings";
+    const CUSTOM_DECK_KEY = "gsat_srs_custom_deck";
 
     interface StudySettings {
         newCardLimit: number;
@@ -34,6 +35,10 @@
     let autoSpeak = $state(defaultSettings.autoSpeak);
     let smartMode = $state(defaultSettings.smartMode);
     let showSettings = $state(false);
+    let customDeck: string[] = $state([]);
+    let customInput = $state("");
+    let customStatus: string | null = $state(null);
+    let isCustomDeckLoaded = $state(false);
 
     function loadSettings(): void {
         try {
@@ -71,9 +76,124 @@
         saveSettings();
     });
 
+    const vocabLemmaMap = $derived.by(() => {
+        const map = new Map<string, string>();
+        for (const item of vocab.index || []) {
+            map.set(item.lemma.toLowerCase(), item.lemma);
+        }
+        return map;
+    });
+
+    function normalizeLemma(raw: string): string | null {
+        const key = raw.trim().toLowerCase();
+        if (!key) return null;
+        return vocabLemmaMap.get(key) ?? null;
+    }
+
+    function normalizeLemmaList(list: string[]): string[] {
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const raw of list) {
+            const normalized = normalizeLemma(raw);
+            if (normalized && !seen.has(normalized)) {
+                seen.add(normalized);
+                result.push(normalized);
+            }
+        }
+        return result;
+    }
+
+    function saveCustomDeck(lemmas: string[]): void {
+        try {
+            localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(lemmas));
+        } catch {
+            // ignore
+        }
+    }
+
+    function updateCustomDeck(lemmas: string[]): void {
+        customDeck = lemmas;
+        if (lemmas.length > 0) {
+            addWordsToSRS(lemmas);
+        }
+        saveCustomDeck(lemmas);
+    }
+
+    function loadCustomDeck(): void {
+        try {
+            const saved = localStorage.getItem(CUSTOM_DECK_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    const normalized = normalizeLemmaList(parsed);
+                    updateCustomDeck(normalized);
+                }
+            }
+        } catch {
+            // ignore
+        } finally {
+            isCustomDeckLoaded = true;
+        }
+    }
+
+    $effect(() => {
+        if (isCustomDeckLoaded) return;
+        if (!vocab.index || vocab.index.length === 0) return;
+        loadCustomDeck();
+    });
+
+    function parseCustomInput(): string[] {
+        const parts = customInput
+            .split(/[\s,，、;；]+/)
+            .map((p) => p.trim())
+            .filter(Boolean);
+        return normalizeLemmaList(parts);
+    }
+
+    function handleAddCustomWords(): void {
+        if (vocabLemmaMap.size === 0) {
+            customStatus = "單字表尚未載入完成";
+            return;
+        }
+        const lemmas = parseCustomInput();
+        if (lemmas.length === 0) {
+            customStatus = "找不到有效的單字，請用逗號或換行分隔";
+            return;
+        }
+        const merged = normalizeLemmaList([...customDeck, ...lemmas]);
+        if (merged.length === customDeck.length) {
+            customStatus = "卡組已包含這些單字";
+        } else {
+            updateCustomDeck(merged);
+            customStatus = `已儲存 ${merged.length} 個單字到卡組`;
+        }
+        customInput = "";
+    }
+
+    function handleRemoveCustomWord(lemma: string): void {
+        const filtered = customDeck.filter((l) => l !== lemma);
+        updateCustomDeck(filtered);
+    }
+
+    function handleClearCustomDeck(): void {
+        updateCustomDeck([]);
+        customStatus = "已清空卡組";
+    }
+
     const newCardLemmas = $derived.by(() => {
         return new Set(getNewCards().map((c) => c.lemma));
     });
+
+    const customDeckSet = $derived.by(() => {
+        return new Set(customDeck);
+    });
+
+    const customNewCardPool = $derived.by(() => {
+        const newSet = new Set(getNewCards().map((c) => c.lemma));
+        return customDeck.filter((lemma) => newSet.has(lemma));
+    });
+
+    const customDeckPreview = $derived(customDeck.slice(0, 18));
 
     const learnedLemmaCount = $derived.by(() => {
         const cards = getAllCards();
@@ -124,6 +244,16 @@
 
     function handleStart() {
         onStart(filteredNewCardPool, excludedLemmas);
+    }
+
+    function handleStartCustomDeck() {
+        const exclude = new Set<string>(excludedLemmas);
+        for (const item of vocab.index || []) {
+            if (!customDeckSet.has(item.lemma)) {
+                exclude.add(item.lemma);
+            }
+        }
+        onStart(customNewCardPool, exclude);
     }
 </script>
 
@@ -245,6 +375,88 @@
                 {/if}
             </div>
         {/if}
+
+        <div class="mt-8 border-t border-border pt-6">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <div>
+                    <h3 class="text-lg font-semibold tracking-tight text-content-primary">
+                        自訂學習卡組
+                    </h3>
+                    <p class="text-sm text-content-tertiary mt-1">
+                        貼上想練習的單字（逗號、空格或換行分隔），學習紀錄會同步到智慧遺忘曲線。
+                    </p>
+                </div>
+                <div class="text-xs text-content-tertiary whitespace-nowrap">
+                    已加入 {customDeck.length} 個 · 新卡 {customNewCardPool.length} 張
+                </div>
+            </div>
+
+            <textarea
+                rows="3"
+                bind:value={customInput}
+                class="w-full px-3.5 py-2.5 text-sm bg-surface-page/60 border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                placeholder="例：abandon, ability, achieve"
+            ></textarea>
+
+            <div class="flex items-center justify-between text-xs text-content-tertiary mt-2">
+                <span>僅會保留在字庫中的詞彙，並自動去除重複</span>
+                {#if customStatus}
+                    <span class="text-content-secondary">{customStatus}</span>
+                {/if}
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <button
+                    type="button"
+                    onclick={handleAddCustomWords}
+                    class="px-3.5 py-2 rounded-md bg-surface-page text-content-primary border border-border hover:border-border-hover transition-colors"
+                >
+                    儲存卡組
+                </button>
+                <button
+                    type="button"
+                    onclick={handleStartCustomDeck}
+                    disabled={customDeck.length === 0}
+                    class="px-3.5 py-2 rounded-md bg-content-primary text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    開始自訂學習
+                </button>
+                <button
+                    type="button"
+                    onclick={handleClearCustomDeck}
+                    disabled={customDeck.length === 0}
+                    class="px-3 py-2 rounded-md text-content-tertiary hover:text-content-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    清空
+                </button>
+            </div>
+
+            {#if customDeck.length > 0}
+                <div class="flex flex-wrap gap-2 mt-3">
+                    {#each customDeckPreview as lemma}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-surface-page text-xs text-content-secondary">
+                            {lemma}
+                            <button
+                                type="button"
+                                onclick={(event) => {
+                                    event.stopPropagation();
+                                    handleRemoveCustomWord(lemma);
+                                }}
+                                class="text-content-tertiary hover:text-content-primary transition-colors"
+                                aria-label={`移除 ${lemma}`}
+                            >
+                                ✕
+                            </button>
+                        </span>
+                    {/each}
+                    {#if customDeck.length > customDeckPreview.length}
+                        <span class="text-xs text-content-tertiary">
+                            還有 {customDeck.length - customDeckPreview.length} 個...
+                        </span>
+                    {/if}
+                </div>
+            {/if}
+        </div>
     </div>
 
     {#if !app.isMobile}
