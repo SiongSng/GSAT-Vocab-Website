@@ -107,8 +107,8 @@
     function saveCustomDeck(lemmas: string[]): void {
         try {
             localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(lemmas));
-        } catch {
-            // ignore
+        } catch (err) {
+            console.warn("Failed to save custom deck", err);
         }
     }
 
@@ -134,8 +134,8 @@
                     updateCustomDeck(normalized);
                 }
             }
-        } catch {
-            // ignore
+        } catch (err) {
+            console.warn("Failed to load custom deck", err);
         } finally {
             isCustomDeckLoaded = true;
         }
@@ -425,7 +425,7 @@
                 <button
                     type="button"
                     onclick={handleStartCustomDeck}
-                    disabled={customDeck.length === 0}
+                    disabled={customDeck.length === 0 || !vocab.index || vocab.index.length === 0}
                     class="px-3.5 py-2 rounded-md bg-content-primary text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     開始自訂學習
