@@ -1,10 +1,11 @@
 <script lang="ts">
-    import { getSRSStore } from "$lib/stores/srs.svelte";
+    import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
+    import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
 
     interface Props {
         onStart: (newCardPool: string[], excludeLemmas: Set<string>) => void;
@@ -17,6 +18,17 @@
     const app = getAppStore();
 
     const STORAGE_KEY = "gsat_srs_study_settings";
+    const CUSTOM_DECK_KEY = "gsat_srs_custom_decks";
+    const LEGACY_DECK_KEY = "gsat_srs_custom_deck";
+    const SEPARATOR_PATTERN = /[\s,，、;；]+/;
+    const CUSTOM_PREVIEW_LIMIT = 18;
+
+    type CustomDeck = {
+        id: string;
+        name: string;
+        lemmas: string[];
+        createdAt: number;
+    };
 
     interface StudySettings {
         newCardLimit: number;
@@ -34,6 +46,15 @@
     let autoSpeak = $state(defaultSettings.autoSpeak);
     let smartMode = $state(defaultSettings.smartMode);
     let showSettings = $state(false);
+    let isCustomDeckLoaded = $state(false);
+
+    let customDecks: CustomDeck[] = $state([]);
+    let selectedDeckId: string | null = $state(null);
+    let isDeckModalOpen = $state(false);
+    let editingDeckId: string | null = $state(null);
+    let deckNameInput = $state("");
+    let deckInput = $state("");
+    let deckStatus: string | null = $state(null);
 
     function loadSettings(): void {
         try {
@@ -71,8 +92,222 @@
         saveSettings();
     });
 
+    const vocabLemmaMap = $derived.by(() => {
+        const map = new Map<string, string>();
+        for (const item of vocab.index || []) {
+            map.set(item.lemma.toLowerCase(), item.lemma);
+        }
+        return map;
+    });
+
+    function normalizeLemma(raw: string): string | null {
+        const key = raw.trim().toLowerCase();
+        if (!key) return null;
+        return vocabLemmaMap.get(key) || null;
+    }
+
+    function normalizeLemmaList(list: string[]): string[] {
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const raw of list) {
+            const normalized = normalizeLemma(raw);
+            if (normalized && !seen.has(normalized)) {
+                seen.add(normalized);
+                result.push(normalized);
+            }
+        }
+        return result;
+    }
+
+    function saveCustomDecks(decks: CustomDeck[]): void {
+        try {
+            localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(decks));
+        } catch (err) {
+            console.warn("Failed to save custom decks", err);
+        }
+    }
+
+    function migrateLegacyDeck(): CustomDeck[] {
+        try {
+            const saved = localStorage.getItem(LEGACY_DECK_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    const lemmas = normalizeLemmaList(parsed);
+                    if (lemmas.length > 0) {
+                        return [
+                            {
+                                id: crypto.randomUUID?.() ?? `deck-${Date.now()}`,
+                                name: "自訂卡組",
+                                lemmas,
+                                createdAt: Date.now(),
+                            },
+                        ];
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Failed to migrate legacy custom deck", err);
+        }
+        return [];
+    }
+
+    function loadCustomDecks(): void {
+        try {
+            const saved = localStorage.getItem(CUSTOM_DECK_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    const decks = parsed
+                        .map((d) => ({
+                            ...d,
+                            lemmas: normalizeLemmaList(d.lemmas || []),
+                        }))
+                        .filter((d) => d.name && Array.isArray(d.lemmas));
+                    customDecks = decks;
+                }
+            } else {
+                const legacy = migrateLegacyDeck();
+                if (legacy.length > 0) {
+                    customDecks = legacy;
+                    saveCustomDecks(legacy);
+                }
+            }
+        } catch (err) {
+            console.warn("Failed to load custom decks", err);
+        } finally {
+            isCustomDeckLoaded = true;
+            if (!selectedDeckId && customDecks.length > 0) {
+                selectedDeckId = customDecks[0].id;
+            }
+        }
+    }
+
+    $effect(() => {
+        if (isCustomDeckLoaded) return;
+        if (!vocab.index || vocab.index.length === 0) return;
+        loadCustomDecks();
+    });
+
+    function parseDeckInput(): string[] {
+        const parts = deckInput
+            .split(SEPARATOR_PATTERN)
+            .map((p) => p.trim())
+            .filter(Boolean);
+        return normalizeLemmaList(parts);
+    }
+
+    function upsertDeck(): void {
+        if (vocabLemmaMap.size === 0) {
+            deckStatus = "單字表尚未載入完成";
+            return;
+        }
+        const name = deckNameInput.trim();
+        if (!name) {
+            deckStatus = "請輸入卡組名稱";
+            return;
+        }
+        const lemmas = parseDeckInput();
+        if (lemmas.length === 0) {
+            deckStatus = "找不到有效的單字，請用逗號或換行分隔";
+            return;
+        }
+
+        const decks = [...customDecks];
+        const now = Date.now();
+        let deckId = editingDeckId;
+
+        if (editingDeckId) {
+            const idx = decks.findIndex((d) => d.id === editingDeckId);
+            if (idx >= 0) {
+                decks[idx] = { ...decks[idx], name, lemmas };
+            } else {
+                deckId = null;
+            }
+        }
+
+        if (!deckId) {
+            deckId = crypto.randomUUID?.() ?? `deck-${now}-${Math.random().toString(36).slice(2, 8)}`;
+            decks.push({ id: deckId, name, lemmas, createdAt: now });
+        }
+
+        const newOnes = lemmas.filter((lemma) => !existingLemmaSet.has(lemma));
+        if (newOnes.length > 0) {
+            addWordsToSRS(newOnes);
+        }
+
+        customDecks = decks;
+        selectedDeckId = deckId;
+        saveCustomDecks(decks);
+        deckStatus = null;
+        isDeckModalOpen = false;
+    }
+
+    function openCreateDeck(): void {
+        editingDeckId = null;
+        deckNameInput = `卡組 ${customDecks.length + 1}`;
+        deckInput = "";
+        deckStatus = null;
+        isDeckModalOpen = true;
+    }
+
+    function openEditDeck(deck: CustomDeck): void {
+        editingDeckId = deck.id;
+        deckNameInput = deck.name;
+        deckInput = deck.lemmas.join(", ");
+        deckStatus = null;
+        isDeckModalOpen = true;
+    }
+
+    function handleDeleteDeck(deckId: string): void {
+        customDecks = customDecks.filter((d) => d.id !== deckId);
+        if (selectedDeckId === deckId) {
+            selectedDeckId = customDecks[0]?.id ?? null;
+        }
+        saveCustomDecks(customDecks);
+    }
+
     const newCardLemmas = $derived.by(() => {
         return new Set(getNewCards().map((c) => c.lemma));
+    });
+
+    const existingLemmaSet = $derived.by(() => {
+        return new Set(getAllCards().map((c) => c.lemma));
+    });
+
+    const customDeckMap = $derived.by(() => {
+        const map = new Map<string, CustomDeck>();
+        for (const deck of customDecks) {
+            map.set(deck.id, deck);
+        }
+        return map;
+    });
+
+    const selectedDeck = $derived(customDeckMap.get(selectedDeckId ?? ""));
+
+    const customDeckSet = $derived.by(() => {
+        return new Set(selectedDeck?.lemmas ?? []);
+    });
+
+    const customNewCardPool = $derived.by(() => {
+        if (!selectedDeck) return [];
+        const newSet = new Set(getNewCards().map((c) => c.lemma));
+        return selectedDeck.lemmas.filter((lemma) => newSet.has(lemma));
+    });
+
+    const customDeckPreview = $derived((selectedDeck?.lemmas ?? []).slice(0, CUSTOM_PREVIEW_LIMIT));
+
+    const deckNewCountMap = $derived.by(() => {
+        const set = new Set(getNewCards().map((c) => c.lemma));
+        const map = new Map<string, number>();
+        for (const deck of customDecks) {
+            let count = 0;
+            for (const lemma of deck.lemmas) {
+                if (set.has(lemma)) count++;
+            }
+            map.set(deck.id, count);
+        }
+        return map;
     });
 
     const learnedLemmaCount = $derived.by(() => {
@@ -122,8 +357,24 @@
         return new Set(propnLemmas);
     });
 
+    const customExcludedLemmas = $derived.by(() => {
+        const exclude = new Set<string>(excludedLemmas);
+        if (!selectedDeck) return exclude;
+        for (const item of vocab.index || []) {
+            if (!customDeckSet.has(item.lemma)) {
+                exclude.add(item.lemma);
+            }
+        }
+        return exclude;
+    });
+
     function handleStart() {
         onStart(filteredNewCardPool, excludedLemmas);
+    }
+
+    function handleStartCustomDeck() {
+        if (!selectedDeck) return;
+        onStart(customNewCardPool, customExcludedLemmas);
     }
 </script>
 
@@ -245,6 +496,101 @@
                 {/if}
             </div>
         {/if}
+
+        <div class="mt-8 border-t border-border pt-6">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold tracking-tight text-content-primary">
+                        自訂卡組（多課程）
+                    </h3>
+                    <p class="text-sm text-content-tertiary mt-1">
+                        為不同課程建立卡組，學習紀錄與 SRS 排程同步。
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onclick={openCreateDeck}
+                    class="px-3 py-2 rounded-md bg-surface-page text-content-primary border border-border hover:border-border-hover transition-colors"
+                >
+                    新增卡組
+                </button>
+            </div>
+
+            {#if customDecks.length === 0}
+                <div class="text-sm text-content-tertiary bg-surface-page/60 border border-border rounded-lg p-4">
+                    目前尚未建立卡組，點擊「新增卡組」開始設定你的課程。
+                </div>
+            {:else}
+                <div class="space-y-3">
+                    {#each customDecks as deck}
+                        <div class="flex items-center gap-3 p-3 rounded-lg border {selectedDeckId === deck.id ? 'border-accent/60 bg-accent/5' : 'border-border bg-surface-page/60'}">
+                            <label class="flex-1 flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="custom-deck"
+                                    value={deck.id}
+                                    checked={selectedDeckId === deck.id}
+                                    onclick={() => (selectedDeckId = deck.id)}
+                                    class="w-4 h-4 accent-accent"
+                                />
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium text-content-primary">{deck.name}</span>
+                                        <span class="text-[11px] px-2 py-0.5 rounded bg-surface-primary border border-border text-content-tertiary">
+                                            {deck.lemmas.length} 詞
+                                        </span>
+                                        <span class="text-[11px] px-2 py-0.5 rounded bg-surface-primary border border-border text-srs-easy">
+                                            新卡 {deckNewCountMap.get(deck.id) || 0}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs text-content-tertiary mt-1">
+                                        {deck.lemmas.slice(0, 4).join("、")}{deck.lemmas.length > 4 ? "…" : ""}
+                                    </div>
+                                </div>
+                            </label>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onclick={(event) => {
+                                        event.stopPropagation();
+                                        openEditDeck(deck);
+                                    }}
+                                    class="px-2.5 py-1.5 text-xs rounded-md border border-border text-content-secondary hover:text-content-primary hover:border-border-hover transition-colors"
+                                >
+                                    編輯
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick={(event) => {
+                                        event.stopPropagation();
+                                        handleDeleteDeck(deck.id);
+                                    }}
+                                    class="px-2.5 py-1.5 text-xs rounded-md text-content-tertiary hover:text-content-primary transition-colors"
+                                >
+                                    刪除
+                                </button>
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+
+                {#if selectedDeck}
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="text-xs text-content-tertiary">
+                            預覽：{customDeckPreview.join("、")}{selectedDeck.lemmas.length > customDeckPreview.length ? "…" : ""}
+                        </div>
+                        <button
+                            type="button"
+                            onclick={handleStartCustomDeck}
+                            disabled={customNewCardPool.length === 0 || !vocab.index || vocab.index.length === 0}
+                            class="px-3.5 py-2 rounded-md bg-content-primary text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            使用「{selectedDeck.name}」開始學習
+                        </button>
+                    </div>
+                {/if}
+            {/if}
+        </div>
     </div>
 
     {#if !app.isMobile}
@@ -260,6 +606,87 @@
         </div>
     {/if}
 </div>
+
+<BottomSheet isOpen={isDeckModalOpen} onClose={() => (isDeckModalOpen = false)}>
+    {@render deckModalContent()}
+</BottomSheet>
+
+{#snippet deckModalContent()}
+    <div class="py-4">
+        <div class="flex items-center justify-between mb-3">
+            <div>
+                <h3 class="text-lg font-semibold text-content-primary">
+                    {editingDeckId ? "編輯卡組" : "建立卡組"}
+                </h3>
+                <p class="text-sm text-content-tertiary mt-1">
+                    以逗號、空格或換行分隔單字，會自動對齊字庫並去重。
+                </p>
+            </div>
+            <button
+                type="button"
+                onclick={() => (isDeckModalOpen = false)}
+                class="text-content-tertiary hover:text-content-primary transition-colors"
+                aria-label="close modal"
+            >
+                ✕
+            </button>
+        </div>
+
+        <div class="space-y-3">
+            <div>
+                <label for="deck-name" class="block text-sm font-medium text-content-secondary mb-1">
+                    卡組名稱
+                </label>
+                <input
+                    id="deck-name"
+                    type="text"
+                    bind:value={deckNameInput}
+                    class="w-full px-3.5 py-2.5 text-sm bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                    placeholder="例如：高一上 Unit 1"
+                />
+            </div>
+
+            <div>
+                <label for="deck-lemmas" class="block text-sm font-medium text-content-secondary mb-1">
+                    單字清單
+                </label>
+                <textarea
+                    id="deck-lemmas"
+                    rows="6"
+                    bind:value={deckInput}
+                    class="w-full px-3.5 py-2.5 text-sm bg-surface-primary border border-border rounded-md focus:outline-none focus:border-border-hover transition-colors"
+                    placeholder="abandon, ability, achieve"
+                ></textarea>
+                <p class="text-xs text-content-tertiary mt-1">
+                    支援分隔符：空白、逗號、頓號、分號。
+                </p>
+            </div>
+
+            {#if deckStatus}
+                <div class="text-xs text-srs-hard">
+                    {deckStatus}
+                </div>
+            {/if}
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <button
+                    type="button"
+                    onclick={() => (isDeckModalOpen = false)}
+                    class="px-3.5 py-2 rounded-md text-content-secondary hover:text-content-primary transition-colors"
+                >
+                    取消
+                </button>
+                <button
+                    type="button"
+                    onclick={upsertDeck}
+                    class="px-3.5 py-2 rounded-md bg-content-primary text-white font-medium hover:opacity-90 transition-opacity"
+                >
+                    儲存卡組
+                </button>
+            </div>
+        </div>
+    </div>
+{/snippet}
 
 {#snippet settingsContent()}
     <div class="space-y-5">
