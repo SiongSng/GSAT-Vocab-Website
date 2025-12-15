@@ -161,9 +161,9 @@
                 </div>
             </div>
 
-        <div class="relative">
+        <div class="search-container">
             <svg
-                class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-tertiary"
+                class="search-icon"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -179,7 +179,7 @@
             <input
                 type="text"
                 placeholder="搜尋單字..."
-                class="w-full bg-surface-secondary border-none rounded-md py-2 pl-9 pr-3 text-sm focus:ring-2 focus:ring-accent/20 focus:outline-none transition placeholder:text-content-tertiary"
+                class="search-input"
                 value={searchValue}
                 oninput={handleSearchInput}
             />
@@ -321,6 +321,43 @@
     .sidebar-collapsed:hover {
         background-color: var(--color-surface-hover);
         color: var(--color-content-secondary);
+    }
+
+    .search-container {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1rem;
+        height: 1rem;
+        color: var(--color-content-tertiary);
+        pointer-events: none;
+    }
+
+    .search-input {
+        width: 100%;
+        background-color: var(--color-surface-secondary);
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+        font-size: 0.875rem;
+        transition: all 0.15s ease;
+        color: var(--color-content-primary);
+    }
+
+    .search-input::placeholder {
+        color: var(--color-content-tertiary);
+    }
+
+    .search-input:focus {
+        outline: none;
+        ring: 2px;
+        ring-color: rgba(var(--color-accent-rgb), 0.2);
+        box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
     }
 
     .section-header {
