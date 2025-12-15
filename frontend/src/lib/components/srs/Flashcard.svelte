@@ -35,9 +35,10 @@
                 source: examples[randomIdx].source,
             };
         }
-        if (currentSense.generated_example?.trim()) {
+        const generated = currentSense.generated_example?.trim();
+        if (generated) {
             return {
-                text: currentSense.generated_example.trim(),
+                text: generated,
                 source: null,
             };
         }
