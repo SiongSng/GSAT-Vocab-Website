@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { addWordsToSRS, getSRSStore, getLemmaHasCard } from "$lib/stores/srs.svelte";
+    import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
@@ -19,6 +19,7 @@
     const STORAGE_KEY = "gsat_srs_study_settings";
     const CUSTOM_DECK_KEY = "gsat_srs_custom_deck";
     const SEPARATOR_PATTERN = /[\s,，、;；]+/;
+    const CUSTOM_PREVIEW_LIMIT = 18;
 
     interface StudySettings {
         newCardLimit: number;
@@ -115,8 +116,7 @@
     function updateCustomDeck(lemmas: string[]): void {
         customDeck = lemmas;
         if (lemmas.length > 0) {
-            const existing = new Set(getAllCards().map((c) => c.lemma));
-            const newOnes = lemmas.filter((lemma) => !existing.has(lemma));
+            const newOnes = lemmas.filter((lemma) => !existingLemmaSet.has(lemma));
             if (newOnes.length > 0) {
                 addWordsToSRS(newOnes);
             }
@@ -193,12 +193,16 @@
         return new Set(customDeck);
     });
 
+    const existingLemmaSet = $derived.by(() => {
+        return new Set(getAllCards().map((c) => c.lemma));
+    });
+
     const customNewCardPool = $derived.by(() => {
         const newSet = new Set(getNewCards().map((c) => c.lemma));
         return customDeck.filter((lemma) => newSet.has(lemma));
     });
 
-    const customDeckPreview = $derived(customDeck.slice(0, 18));
+    const customDeckPreview = $derived(customDeck.slice(0, CUSTOM_PREVIEW_LIMIT));
 
     const learnedLemmaCount = $derived.by(() => {
         const cards = getAllCards();
