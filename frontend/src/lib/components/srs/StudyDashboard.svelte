@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
+    import { addWordsToSRS, getSRSStore, getLemmaHasCard } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
@@ -87,7 +87,7 @@
     function normalizeLemma(raw: string): string | null {
         const key = raw.trim().toLowerCase();
         if (!key) return null;
-        return vocabLemmaMap.get(key) ?? null;
+        return vocabLemmaMap.get(key) || null;
     }
 
     function normalizeLemmaList(list: string[]): string[] {
@@ -114,7 +114,10 @@
     function updateCustomDeck(lemmas: string[]): void {
         customDeck = lemmas;
         if (lemmas.length > 0) {
-            addWordsToSRS(lemmas);
+            const newOnes = lemmas.filter((lemma) => !getLemmaHasCard(lemma));
+            if (newOnes.length > 0) {
+                addWordsToSRS(newOnes);
+            }
         }
         saveCustomDeck(lemmas);
     }
