@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from .exam import AnnotationRole, PatternType, SourceInfo
+from .exam import AnnotationRole, PatternCategory, PatternSubtype, SourceInfo
 
 
 class LemmaOccurrence(BaseModel):
@@ -32,7 +32,8 @@ class ConfusionNote(BaseModel):
 
 
 class PatternInfo(BaseModel):
-    pattern_type: PatternType
+    pattern_category: PatternCategory
+    pattern_subtype: PatternSubtype | None = None
     display_name: str | None
     structure: str
 

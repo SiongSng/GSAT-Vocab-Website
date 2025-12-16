@@ -102,21 +102,21 @@ def validate_entry(entry: VocabEntry) -> list[ValidationIssue]:
             "ADJ": "ADJ",
             "ADVERB": "ADV",
             "ADV": "ADV",
-            "PHRASE": "PHRASE",
         }
         return mapping.get(p, p)
 
-    sense_pos_types = {_normalize_pos(s.pos) for s in entry.senses}
-    entry_pos_set = {p.upper() for p in entry.pos}
-    missing_pos = sense_pos_types - entry_pos_set
-    if missing_pos:
-        issues.append(
-            ValidationIssue(
-                lemma=entry.lemma,
-                issue_type="pos_mismatch",
-                message=f"Entry pos {entry.pos} missing sense POS types: {missing_pos}",
+    if entry.type == "word" and entry.pos:
+        sense_pos_types = {_normalize_pos(s.pos) for s in entry.senses}
+        entry_pos_set = {p.upper() for p in entry.pos}
+        missing_pos = sense_pos_types - entry_pos_set - {"PHRASE"}
+        if missing_pos:
+            issues.append(
+                ValidationIssue(
+                    lemma=entry.lemma,
+                    issue_type="pos_mismatch",
+                    message=f"Entry pos {entry.pos} missing sense POS types: {missing_pos}",
+                )
             )
-        )
 
     # 6. tier-specific checks
     tier_val = entry.tier.value if hasattr(entry.tier, "value") else entry.tier

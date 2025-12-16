@@ -30,19 +30,21 @@ logger = logging.getLogger(__name__)
 
 
 class GeneratedSense(BaseModel):
-    pos: Literal[
-        "NOUN",
-        "VERB",
-        "ADJ",
-        "ADV",
-        "PHRASE",
-        "PRON",
-        "DET",
-        "CONJ",
-        "PREP",
-        "AUX",
-        "OTHER",
-    ]
+    pos: (
+        Literal[
+            "NOUN",
+            "VERB",
+            "ADJ",
+            "ADV",
+            "PRON",
+            "DET",
+            "CONJ",
+            "PREP",
+            "AUX",
+            "OTHER",
+        ]
+        | None
+    ) = None
     zh_def: str
     en_def: str
     example: str
@@ -173,8 +175,10 @@ def _convert_item(
 ) -> VocabEntry:
     pos_counter: dict[str, int] = {}
     senses = []
+    is_phrase_or_pattern = entry.tier in (VocabTier.PHRASE, VocabTier.PATTERN)
     for i, s in enumerate(item.senses):
-        normalized_pos = _normalize_pos_tag(s.pos)
+        sense_pos = s.pos if s.pos else ("PHRASE" if is_phrase_or_pattern else "OTHER")
+        normalized_pos = _normalize_pos_tag(sense_pos)
         pos_counter[normalized_pos] = pos_counter.get(normalized_pos, 0) + 1
         pos_abbrev = _pos_to_sense_id_abbrev(normalized_pos)
         sense_id = (
@@ -225,7 +229,8 @@ def _convert_item(
 
     pos_set = {p.upper() for p in entry.pos} if entry.pos else set()
     for s in senses:
-        pos_set.add(s.pos)
+        if s.pos:
+            pos_set.add(s.pos)
 
     vocab_type = "word"
     if entry.tier == VocabTier.PATTERN or pattern_info:
@@ -233,10 +238,15 @@ def _convert_item(
     elif entry.tier == VocabTier.PHRASE or "PHRASE" in pos_set or " " in entry.lemma.strip():
         vocab_type = "phrase"
 
+    final_pos: list[str] | None = None
+    if vocab_type == "word":
+        valid_word_pos = {p for p in pos_set if p not in ("PHRASE",)}
+        final_pos = sorted(valid_word_pos) if valid_word_pos else None
+
     return VocabEntry(
         lemma=entry.lemma,
         type=vocab_type,
-        pos=sorted(pos_set),
+        pos=final_pos,
         level=entry.level,
         tier=entry.tier,
         in_official_list=entry.in_official_list,
@@ -296,7 +306,8 @@ async def _resolve_polysemy(
         # Group senses and examples by POS
         senses_by_pos = {}  # normalized_pos -> list of sense indices
         for i, s in enumerate(item.senses):
-            norm_pos = _normalize_pos_tag(s.pos)
+            sense_pos = s.pos if s.pos else "PHRASE"
+            norm_pos = _normalize_pos_tag(sense_pos)
             senses_by_pos.setdefault(norm_pos, []).append(i)
 
         examples_by_pos = {}  # normalized_pos -> list of (example_idx, ExamExample)

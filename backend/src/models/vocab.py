@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from .cleaned import DistractorGroup, FrequencyData, VocabTier
-from .exam import PatternType, SourceInfo
+from .exam import PatternCategory, PatternSubtype, SourceInfo
 
 
 class ExamExample(BaseModel):
@@ -34,7 +34,8 @@ class RootInfo(BaseModel):
 
 
 class PatternInfo(BaseModel):
-    pattern_type: PatternType
+    pattern_category: PatternCategory
+    pattern_subtype: PatternSubtype | None = None
     display_name: str | None
     structure: str
 
@@ -42,7 +43,7 @@ class PatternInfo(BaseModel):
 class VocabEntry(BaseModel):
     lemma: str
     type: str
-    pos: list[str]
+    pos: list[str] | None = None
     level: int | None
     tier: VocabTier
     in_official_list: bool

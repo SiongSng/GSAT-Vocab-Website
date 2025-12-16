@@ -39,6 +39,12 @@ SPECIAL_FILES = [
         "year": 111,
         "type": "GSAT_REF",
     },
+    # https://www.ceec.edu.tw/xmdoc/cont?xsmsid=0J018586101460336585&sid=0O211573150658099894
+    {
+        "url": "https://www.ceec.edu.tw/files/file_pool/1/0O211576602559573811/02_02_%E5%AD%B8%E6%B8%AC%E8%8B%B1%E6%96%87%E8%80%83%E7%A7%91115%E8%B5%B7%E9%81%A9%E7%94%A8%E5%8F%83%E8%80%83%E8%A9%A6%E5%8D%B7.pdf",
+        "year": 115,
+        "type": "GSAT_REF",
+    },
 ]
 
 ALLOW_EXT = {".pdf", ".doc", ".docx"}
