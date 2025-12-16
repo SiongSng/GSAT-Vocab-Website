@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
@@ -162,9 +163,7 @@ async def _run_pipeline(
             target_year = max(years) if years else 114
 
             entries_dict = [e.model_dump(mode="json", exclude_none=True) for e in cleaned.entries]
-            distractor_dict = [
-                dg.model_dump(mode="json", exclude_none=True) for dg in cleaned.distractor_groups
-            ]
+            distractor_dict = []
             essay_dict = [
                 et.model_dump(mode="json", exclude_none=True) for et in cleaned.essay_topics
             ]
@@ -199,7 +198,7 @@ async def _run_pipeline(
                     entry.frequency.ml_score = round(score, 4)
 
             cleaned.entries.sort(
-                key=lambda e: (e.frequency.ml_score or 0, e.frequency.weighted_score),
+                key=lambda e: (e.frequency.ml_score or 0, e.frequency.tested_count),
                 reverse=True,
             )
 
@@ -215,7 +214,10 @@ async def _run_pipeline(
                 json.dump(training_info, f, ensure_ascii=False, indent=2)
         else:
             if cleaned:
-                cleaned.entries.sort(key=lambda e: e.frequency.weighted_score, reverse=True)
+                cleaned.entries.sort(
+                    key=lambda e: (e.frequency.tested_count, e.frequency.total_occurrences),
+                    reverse=True,
+                )
 
         if cleaned:
             with open(cleaned_cache, "w", encoding="utf-8") as f:
@@ -284,12 +286,11 @@ async def _run_pipeline(
                 if score is not None:
                     entry.frequency.ml_score = score
             entries.sort(
-                key=lambda e: (e.frequency.ml_score or 0, e.frequency.weighted_score),
+                key=lambda e: (e.frequency.ml_score or 0, e.frequency.tested_count),
                 reverse=True,
             )
 
-        distractor_groups = cleaned.distractor_groups if cleaned else []
-        database = build_database(entries, distractor_groups, min_year, max_year)
+        database = build_database(entries, min_year, max_year)
         errors_path = output_path.parent / "errors.json"
         count, errors = write_output(database, output_path, errors_path)
         stats["errors"] = len(errors)

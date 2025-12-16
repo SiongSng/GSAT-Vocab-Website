@@ -1,33 +1,29 @@
 import logging
-import math
 import re
 from collections import defaultdict
-from datetime import datetime
 
 import spacy
 
 from ..models import (
     AnnotationRole,
+    AnnotationType,
+    CleanedPatternEntry,
+    CleanedPhraseEntry,
     CleanedVocabData,
-    CleanedVocabEntry,
-    DistractorGroup,
+    CleanedWordEntry,
     EssayTopicData,
-    ExamType,
     FrequencyData,
     LemmaOccurrence,
     OfficialWordEntry,
+    PatternOccurrence,
     SectionType,
     SentenceRole,
     SourceInfo,
     StructuredExam,
-    TranslationItem,
-    VocabTier,
+    is_tested,
 )
 
 logger = logging.getLogger(__name__)
-
-CURRICULUM_CUTOFF_YEAR = 111
-TRIAL_YEARS = {110, 111}
 
 STOP_POS = {
     "ADP",
@@ -69,12 +65,11 @@ POS_NORMALIZE = {
     "AUX": "AUX",
 }
 
+_nlp = None
+
 
 def _normalize_pos(pos: str) -> str:
     return POS_NORMALIZE.get(pos.upper(), pos.upper())
-
-
-_nlp = None
 
 
 def get_nlp():
@@ -99,135 +94,45 @@ def _check_in_official(lemma: str, official_lemmas: set[str]) -> bool:
     return lemma.lower() in official_lemmas
 
 
-ROLE_WEIGHTS = {
-    AnnotationRole.CORRECT_ANSWER: 1.0,
-    AnnotationRole.DISTRACTOR: 0.4,
-    AnnotationRole.TESTED_KEYWORD: 1.2,
-    AnnotationRole.NOTABLE_PATTERN: 0.7,
-    AnnotationRole.NOTABLE_PHRASE: 0.5,
-}
+def normalize_phrase(phrase: str, nlp) -> str:
+    doc = nlp(phrase)
+    result = []
 
-SECTION_WEIGHTS = {
-    SectionType.READING: 1.8,
-    SectionType.STRUCTURE: 1.2,
-    SectionType.VOCABULARY: 1.0,
-    SectionType.DISCOURSE: 0.9,
-    SectionType.MIXED: 1.0,
-    SectionType.CLOZE: 0.5,
-}
-
-EXAM_WEIGHTS = {
-    ExamType.GSAT: 1.2,
-    ExamType.GSAT_REF: 1.1,
-    ExamType.GSAT_MAKEUP: 1.0,
-    ExamType.GSAT_TRIAL: 1.1,
-    ExamType.AST: 0.6,
-    ExamType.AST_MAKEUP: 0.5,
-}
-
-SENTENCE_ROLE_WEIGHTS = {
-    SentenceRole.CLOZE: 1.0,
-    SentenceRole.PASSAGE: 0.6,
-    SentenceRole.QUESTION_PROMPT: 0.2,
-    SentenceRole.OPTION: 0.8,
-    SentenceRole.UNUSED_OPTION: 0.5,
-}
-
-OFFICIAL_BONUS_COEFFICIENT = 0.54
-YEAR_SPREAD_COEFFICIENT = 0.05
-RECENCY_COEFFICIENT = 0.04
-DISTRACTOR_PARTNER_COEFFICIENT = 0.02
-PRE_CURRICULUM_MULTIPLIER = 1.12
-POST_CURRICULUM_MULTIPLIER = 0.90
-TRIAL_PERIOD_MULTIPLIER = 1.05
-
-
-def _calculate_time_decay(year: int, current_year: int | None = None, half_life: int = 10) -> float:
-    if current_year is None:
-        current_year = datetime.now().year - 1911
-    delta = max(0, current_year - year)
-
-    if delta <= 3:
-        return 1.0
-
-    weight = math.pow(0.5, (delta - 3) / half_life)
-    return round(weight, 3)
-
-
-def _calculate_frequency(
-    occurrences: list[LemmaOccurrence],
-    in_official: bool = False,
-    level: int | None = None,
-    distractor_partner_count: int = 0,
-) -> FrequencyData:
-    total = len(occurrences)
-    tested = sum(
-        1
-        for o in occurrences
-        if o.role
-        in (
-            AnnotationRole.CORRECT_ANSWER,
-            AnnotationRole.TESTED_KEYWORD,
-            AnnotationRole.DISTRACTOR,
-        )
-    )
-    years = {o.source.year for o in occurrences}
-    year_spread = len(years)
-
-    current_year = datetime.now().year - 1911
-
-    pre_108_score = 0.0
-    post_108_score = 0.0
-
-    for occ in occurrences:
-        r_w = ROLE_WEIGHTS.get(occ.role, 1.0)
-        s_w = SECTION_WEIGHTS.get(occ.source.section_type, 1.0)
-        t_w = _calculate_time_decay(occ.source.year, current_year)
-        e_w = EXAM_WEIGHTS.get(occ.source.exam_type, 1.0)
-
-        item_score = r_w * s_w * t_w * e_w
-
-        if occ.source.year < CURRICULUM_CUTOFF_YEAR:
-            pre_108_score += item_score * PRE_CURRICULUM_MULTIPLIER
-        elif occ.source.year in TRIAL_YEARS:
-            post_108_score += item_score * TRIAL_PERIOD_MULTIPLIER
+    for token in doc:
+        if token.pos_ == "AUX":
+            continue
+        if token.pos_ == "VERB":
+            result.append(token.lemma_.lower())
         else:
-            post_108_score += item_score * POST_CURRICULUM_MULTIPLIER
+            result.append(token.text.lower())
 
-    base_score = math.log2(1 + pre_108_score + post_108_score)
+    return " ".join(result)
 
-    official_bonus = 1.0 + OFFICIAL_BONUS_COEFFICIENT * (1 if in_official else 0)
 
-    spread_bonus = 1.0 + YEAR_SPREAD_COEFFICIENT * min(year_spread, 10)
-
-    recent_years = {y for y in years if current_year - y <= 3}
-    recency_bonus = 1.0 + RECENCY_COEFFICIENT * len(recent_years)
-
-    distractor_bonus = 1.0 + DISTRACTOR_PARTNER_COEFFICIENT * min(distractor_partner_count, 10)
-
-    final_score = base_score * official_bonus * spread_bonus * recency_bonus * distractor_bonus
+def _calculate_frequency(occurrences: list[LemmaOccurrence]) -> FrequencyData:
+    total = len(occurrences)
+    tested = sum(1 for o in occurrences if is_tested(o.source))
+    years = {o.source.year for o in occurrences}
 
     return FrequencyData(
         total_occurrences=total,
         tested_count=tested,
-        year_spread=year_spread,
-        weighted_score=round(final_score, 2),
+        year_spread=len(years),
+        ml_score=None,
     )
 
 
-def _determine_tier(occurrences: list[LemmaOccurrence], in_official: bool) -> VocabTier:
-    roles = {o.role for o in occurrences}
+def _calculate_pattern_frequency(occurrences: list[PatternOccurrence]) -> FrequencyData:
+    total = len(occurrences)
+    tested = sum(1 for o in occurrences if is_tested(o.source))
+    years = {o.source.year for o in occurrences}
 
-    if AnnotationRole.CORRECT_ANSWER in roles or AnnotationRole.DISTRACTOR in roles:
-        return VocabTier.TESTED
-    if AnnotationRole.TESTED_KEYWORD in roles:
-        return VocabTier.TRANSLATION
-    if AnnotationRole.NOTABLE_PATTERN in roles:
-        return VocabTier.PATTERN
-    if AnnotationRole.NOTABLE_PHRASE in roles:
-        return VocabTier.PHRASE
-
-    return VocabTier.BASIC
+    return FrequencyData(
+        total_occurrences=total,
+        tested_count=tested,
+        year_spread=len(years),
+        ml_score=None,
+    )
 
 
 def _is_valid_surface(surface: str, sentence: str) -> bool:
@@ -272,65 +177,72 @@ def _find_annotation_role(
     return None
 
 
-def _process_sentences(
+def _process_sections(
     exams: list[StructuredExam],
+    nlp,
 ) -> tuple[
-    dict[str, list[LemmaOccurrence]], dict[str, list[LemmaOccurrence]], list[DistractorGroup]
+    dict[str, list[LemmaOccurrence]],
+    dict[str, list[LemmaOccurrence]],
+    dict[str, list[PatternOccurrence]],
 ]:
-    nlp = get_nlp()
     lemma_map: dict[str, list[LemmaOccurrence]] = defaultdict(list)
     phrase_map: dict[str, list[LemmaOccurrence]] = defaultdict(list)
-    distractor_groups: list[DistractorGroup] = []
+    pattern_map: dict[str, list[PatternOccurrence]] = defaultdict(list)
 
     for exam in exams:
         for section in exam.sections:
             for sentence in section.sentences:
-                sentence_source = SourceInfo(
+                base_source = SourceInfo(
                     year=exam.year,
                     exam_type=exam.exam_type,
                     section_type=section.type,
                     question_number=sentence.question,
+                    sentence_role=sentence.sentence_role,
                 )
 
                 annotations = sentence.annotations or []
 
-                correct_answers = [
-                    a.surface for a in annotations if a.role == AnnotationRole.CORRECT_ANSWER
-                ]
-                distractors = [
-                    a.surface for a in annotations if a.role == AnnotationRole.DISTRACTOR
-                ]
+                for ann in annotations:
+                    source = base_source.model_copy(update={"role": ann.role})
 
-                if correct_answers and distractors:
-                    for correct in correct_answers:
-                        distractor_groups.append(
-                            DistractorGroup(
-                                correct_answer=correct,
-                                distractors=distractors,
-                                question_context=sentence.text,
-                                source=sentence_source,
+                    if ann.type == AnnotationType.PATTERN:
+                        if ann.pattern_category is None:
+                            logger.warning(
+                                f"Pattern annotation missing category: '{ann.surface}' "
+                                f"(year={exam.year}, q={sentence.question})"
+                            )
+                            continue
+
+                        pattern_key = f"{ann.pattern_category.value}"
+                        pattern_map[pattern_key].append(
+                            PatternOccurrence(
+                                pattern_category=ann.pattern_category,
+                                pattern_subtype=ann.pattern_subtype,
+                                surface=ann.surface,
+                                sentence=sentence.text,
+                                source=source,
                             )
                         )
 
-                for ann in annotations:
-                    if ann.type in ("phrase", "pattern"):
+                    elif ann.type == AnnotationType.PHRASE:
                         if not _is_valid_surface(ann.surface, sentence.text):
                             logger.warning(
-                                f"Skipping invalid annotation: surface '{ann.surface}' "
+                                f"Skipping invalid phrase: surface '{ann.surface}' "
                                 f"not found in sentence (year={exam.year}, q={sentence.question})"
                             )
                             continue
-                        phrase_key = ann.surface.lower()
-                        phrase_map[phrase_key].append(
+
+                        normalized = normalize_phrase(ann.surface, nlp)
+                        phrase_map[normalized].append(
                             LemmaOccurrence(
                                 pos="PHRASE",
                                 surface=ann.surface,
                                 sentence=sentence.text,
-                                role=ann.role,
-                                source=sentence_source,
+                                source=source,
                             )
                         )
-                    elif ann.type == "word":
+
+                    elif ann.type == AnnotationType.WORD:
                         doc = nlp(ann.surface)
                         for token in doc:
                             if not token.is_alpha or len(token.lemma_) <= 1:
@@ -341,8 +253,7 @@ def _process_sentences(
                                     pos=token.pos_,
                                     surface=ann.surface,
                                     sentence=sentence.text,
-                                    role=ann.role,
-                                    source=sentence_source,
+                                    source=source,
                                 )
                             )
 
@@ -363,26 +274,27 @@ def _process_sentences(
                             continue
 
                         role = _find_annotation_role(token.text, token.lemma_, annotations)
+                        if role is not None:
+                            continue
 
+                        source = base_source.model_copy(update={"role": None})
                         lemma = token.lemma_.lower()
-                        if role is None:
-                            lemma_map[lemma].append(
-                                LemmaOccurrence(
-                                    pos=token.pos_,
-                                    surface=token.text,
-                                    sentence=sent_text,
-                                    role=None,
-                                    source=sentence_source,
-                                )
+                        lemma_map[lemma].append(
+                            LemmaOccurrence(
+                                pos=token.pos_,
+                                surface=token.text,
+                                sentence=sent_text,
+                                source=source,
                             )
+                        )
 
-    return lemma_map, phrase_map, distractor_groups
+    return lemma_map, phrase_map, pattern_map
 
 
 def _process_translation_items(
     exams: list[StructuredExam],
+    nlp,
 ) -> dict[str, list[LemmaOccurrence]]:
-    nlp = get_nlp()
     lemma_map: dict[str, list[LemmaOccurrence]] = defaultdict(list)
 
     for exam in exams:
@@ -392,6 +304,8 @@ def _process_translation_items(
                 exam_type=exam.exam_type,
                 section_type=SectionType.TRANSLATION,
                 question_number=item.question,
+                role=AnnotationRole.TESTED_KEYWORD,
+                sentence_role=None,
             )
 
             for keyword in item.keywords:
@@ -408,7 +322,6 @@ def _process_translation_items(
                             pos=token.pos_,
                             surface=keyword,
                             sentence=item.chinese_prompt,
-                            role=AnnotationRole.TESTED_KEYWORD,
                             source=source_info,
                         )
                     )
@@ -429,34 +342,31 @@ def _dedupe_occurrences(occurrences: list[LemmaOccurrence]) -> list[LemmaOccurre
     return result
 
 
-def _build_distractor_partner_index(
-    distractor_groups: list[DistractorGroup],
-) -> dict[str, set[str]]:
-    partner_index: dict[str, set[str]] = defaultdict(set)
-
-    for group in distractor_groups:
-        correct = group.correct_answer.lower()
-        distractors = [d.lower() for d in group.distractors]
-
-        all_words = [correct] + distractors
-        for word in all_words:
-            for other in all_words:
-                if other != word:
-                    partner_index[word].add(other)
-
-    return partner_index
+def _dedupe_pattern_occurrences(occurrences: list[PatternOccurrence]) -> list[PatternOccurrence]:
+    seen = set()
+    result = []
+    for occ in occurrences:
+        key = (
+            occ.sentence.strip(),
+            occ.source.year,
+            occ.source.question_number,
+            occ.pattern_subtype,
+        )
+        if key not in seen:
+            seen.add(key)
+            result.append(occ)
+    return result
 
 
-def clean_and_classify(
+def clean_and_aggregate(
     exams: list[StructuredExam],
     official_wordlist: dict[str, OfficialWordEntry],
 ) -> CleanedVocabData:
+    nlp = get_nlp()
     official_lemmas = _build_official_lemma_set(official_wordlist)
 
-    sentence_lemmas, phrase_lemmas, distractor_groups = _process_sentences(exams)
-    translation_lemmas = _process_translation_items(exams)
-
-    distractor_partner_index = _build_distractor_partner_index(distractor_groups)
+    sentence_lemmas, phrase_lemmas, pattern_map = _process_sections(exams, nlp)
+    translation_lemmas = _process_translation_items(exams, nlp)
 
     essay_topics = []
     for exam in exams:
@@ -484,7 +394,7 @@ def clean_and_classify(
         if word not in all_lemmas:
             all_lemmas[word] = []
 
-    entries: list[CleanedVocabEntry] = []
+    entries = []
 
     for lemma, occurrences in all_lemmas.items():
         occurrences = _dedupe_occurrences(occurrences)
@@ -494,17 +404,14 @@ def clean_and_classify(
         level = int(official.level) if official and official.level.isdigit() else None
 
         if occurrences:
-            tier = _determine_tier(occurrences, in_official)
-            partner_count = len(distractor_partner_index.get(lemma.lower(), set()))
-            frequency = _calculate_frequency(occurrences, in_official, level, partner_count)
+            frequency = _calculate_frequency(occurrences)
             pos = sorted({_normalize_pos(o.pos) for o in occurrences})
         else:
-            tier = VocabTier.BASIC
             frequency = FrequencyData(
                 total_occurrences=0,
                 tested_count=0,
                 year_spread=0,
-                weighted_score=0.0,
+                ml_score=None,
             )
             pos = [_normalize_pos(p) for p in official.parts_of_speech] if official else []
 
@@ -514,9 +421,8 @@ def clean_and_classify(
             continue
 
         entries.append(
-            CleanedVocabEntry(
+            CleanedWordEntry(
                 lemma=lemma,
-                tier=tier,
                 level=level,
                 in_official_list=in_official,
                 pos=pos,
@@ -530,27 +436,45 @@ def clean_and_classify(
         if not occurrences:
             continue
 
-        tier = _determine_tier(occurrences, False)
-        frequency = _calculate_frequency(
-            occurrences, in_official=False, level=None, distractor_partner_count=0
-        )
+        frequency = _calculate_frequency(occurrences)
 
         entries.append(
-            CleanedVocabEntry(
+            CleanedPhraseEntry(
                 lemma=phrase,
-                tier=tier,
-                level=None,
-                in_official_list=False,
-                pos=["PHRASE"],
                 occurrences=occurrences,
                 frequency=frequency,
             )
         )
 
-    entries.sort(key=lambda e: e.frequency.weighted_score, reverse=True)
+    for category_key, occurrences in pattern_map.items():
+        occurrences = _dedupe_pattern_occurrences(occurrences)
+        if not occurrences:
+            continue
+
+        pattern_category = occurrences[0].pattern_category
+        frequency = _calculate_pattern_frequency(occurrences)
+
+        entries.append(
+            CleanedPatternEntry(
+                lemma=pattern_category.value,
+                pattern_category=pattern_category,
+                occurrences=occurrences,
+                frequency=frequency,
+            )
+        )
+
+    entries.sort(
+        key=lambda e: (e.frequency.tested_count, e.frequency.total_occurrences), reverse=True
+    )
 
     return CleanedVocabData(
         entries=entries,
-        distractor_groups=distractor_groups,
         essay_topics=essay_topics,
     )
+
+
+def clean_and_classify(
+    exams: list[StructuredExam],
+    official_wordlist: dict[str, OfficialWordEntry],
+) -> CleanedVocabData:
+    return clean_and_aggregate(exams, official_wordlist)

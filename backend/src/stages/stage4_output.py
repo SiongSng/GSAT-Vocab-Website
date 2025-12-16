@@ -3,7 +3,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..models import DistractorGroup, VocabDatabase, VocabEntry, VocabMetadata
+from ..models import VocabDatabase, VocabEntry, VocabMetadata
 from ..utils.validation import ValidationIssue, validate_all_entries
 
 logger = logging.getLogger(__name__)
@@ -11,11 +11,9 @@ logger = logging.getLogger(__name__)
 
 def build_database(
     entries: list[VocabEntry],
-    distractor_groups: list[DistractorGroup],
     min_year: int,
     max_year: int,
 ) -> VocabDatabase:
-    # Validate entries before building database
     valid_entries, issues = validate_all_entries(entries)
 
     if issues:
@@ -26,26 +24,22 @@ def build_database(
             logger.warning(f"  ... and {len(issues) - 10} more issues")
 
     count_by_type = {"word": 0, "phrase": 0, "pattern": 0}
-    count_by_tier = {"tested": 0, "translation": 0, "phrase": 0, "basic": 0}
     for entry in valid_entries:
-        if entry.type in count_by_type:
-            count_by_type[entry.type] += 1
-        if entry.tier.value in count_by_tier:
-            count_by_tier[entry.tier.value] += 1
+        entry_type = entry.type if isinstance(entry.type, str) else entry.type
+        if entry_type in count_by_type:
+            count_by_type[entry_type] += 1
 
     metadata = VocabMetadata(
         exam_year_range={"min": min_year, "max": max_year},
         total_entries=len(valid_entries),
         count_by_type=count_by_type,
-        count_by_tier=count_by_tier,
     )
 
     return VocabDatabase(
-        version="2.0.0",
+        version="3.0.0",
         generated_at=datetime.now(UTC).isoformat(),
         metadata=metadata,
         entries=valid_entries,
-        distractor_groups=distractor_groups,
     )
 
 
@@ -54,7 +48,6 @@ def write_output(
     output_path: Path,
     errors_path: Path | None = None,
 ) -> tuple[int, list[ValidationIssue]]:
-    # Re-validate to collect all issues for error report
     _, all_issues = validate_all_entries(database.entries)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

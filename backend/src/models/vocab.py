@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
-from .cleaned import DistractorGroup, FrequencyData, VocabTier
+from .cleaned import FrequencyData
 from .exam import PatternCategory, PatternSubtype, SourceInfo
 
 
@@ -14,10 +15,9 @@ class ExamExample(BaseModel):
 
 class VocabSense(BaseModel):
     sense_id: str
-    pos: str
+    pos: str | None = None
     zh_def: str
     en_def: str
-    tested_in_exam: bool
     examples: list[ExamExample]
     generated_example: str
 
@@ -33,34 +33,51 @@ class RootInfo(BaseModel):
     memory_strategy: str
 
 
-class PatternInfo(BaseModel):
-    pattern_category: PatternCategory
-    pattern_subtype: PatternSubtype | None = None
-    display_name: str | None
-    structure: str
-
-
-class VocabEntry(BaseModel):
+class WordEntry(BaseModel):
+    type: Literal["word"] = "word"
     lemma: str
-    type: str
-    pos: list[str] | None = None
+    pos: list[str]
     level: int | None
-    tier: VocabTier
     in_official_list: bool
     senses: list[VocabSense]
     frequency: FrequencyData
-    confusion_notes: list[ConfusionNote]
+    confusion_notes: list[ConfusionNote] = []
     root_info: RootInfo | None = None
-    pattern_info: PatternInfo | None = None
     synonyms: list[str] | None = None
     antonyms: list[str] | None = None
-    derived_forms: list[str] | None = None
+
+
+class PhraseEntry(BaseModel):
+    type: Literal["phrase"] = "phrase"
+    lemma: str
+    senses: list[VocabSense]
+    frequency: FrequencyData
+    confusion_notes: list[ConfusionNote] = []
+
+
+class PatternSubtypeOutput(BaseModel):
+    subtype: PatternSubtype
+    display_name: str
+    structure: str
+    examples: list[ExamExample]
+    generated_example: str
+
+
+class PatternEntry(BaseModel):
+    type: Literal["pattern"] = "pattern"
+    lemma: str
+    pattern_category: PatternCategory
+    subtypes: list[PatternSubtypeOutput]
+    teaching_explanation: str
+    frequency: FrequencyData
+
+
+VocabEntry = WordEntry | PhraseEntry | PatternEntry
 
 
 class VocabMetadata(BaseModel):
     exam_year_range: dict[str, int]
     total_entries: int
-    count_by_tier: dict[str, int]
     count_by_type: dict[str, int]
 
 
@@ -69,7 +86,6 @@ class VocabDatabase(BaseModel):
     generated_at: str
     metadata: VocabMetadata
     entries: list[VocabEntry]
-    distractor_groups: list[DistractorGroup] = []
 
 
 class OfficialWordEntry(BaseModel):
