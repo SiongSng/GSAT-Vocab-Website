@@ -14,12 +14,11 @@ CURRICULUM_CUTOFF_YEAR = 111
 TRIAL_YEARS = {110, 111}
 
 ROLE_WEIGHTS = {
-    "passage_word": 2.5,
+    "correct_answer": 1.0,
+    "distractor": 0.4,
     "tested_keyword": 1.2,
-    "tested_answer": 0.9,
     "notable_pattern": 0.7,
     "notable_phrase": 0.5,
-    "tested_distractor": 0.3,
 }
 
 SECTION_WEIGHTS = {

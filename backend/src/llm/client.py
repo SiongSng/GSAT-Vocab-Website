@@ -5,7 +5,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeVar
 
-from openai import AsyncOpenAI, RateLimitError
+from openai import APIStatusError, AsyncOpenAI, RateLimitError
 from pydantic import BaseModel
 
 from ..config import get_settings
@@ -39,6 +39,15 @@ def _add_additional_properties(schema: dict) -> dict:
     return schema
 
 
+COT_SUFFIX = """
+
+Before answering, reason through:
+1. What is the PURPOSE of each field?
+2. What CONSTRAINTS does the schema define?
+3. Does my output match the EXAMPLES' pattern?
+4. Am I applying the PRINCIPLE, not just literal rules?"""
+
+
 class LLMClient:
     def __init__(self):
         settings = get_settings()
@@ -52,8 +61,7 @@ class LLMClient:
         self._concurrency = settings.llm_concurrency
         self._semaphore = asyncio.Semaphore(self._concurrency)
         self._request_delay = settings.llm_request_delay
-        self._last_request_time = 0.0
-        self._delay_lock = asyncio.Lock()
+        self._dispatch_lock = asyncio.Lock()
 
     def _get_model(self, tier: ModelTier) -> str:
         return self._model_fast if tier == ModelTier.FAST else self._model_smart
@@ -98,7 +106,7 @@ class LLMClient:
             model=model,
             input=prompt,
             instructions=system,
-            reasoning={"effort": "none"},
+            reasoning={"effort": "low"},
             text={
                 "format": {
                     "type": "json_schema",
@@ -110,13 +118,9 @@ class LLMClient:
         )
         return response.output_text or ""
 
-    async def _wait_for_delay(self):
-        async with self._delay_lock:
-            now = asyncio.get_event_loop().time()
-            elapsed = now - self._last_request_time
-            if elapsed < self._request_delay:
-                await asyncio.sleep(self._request_delay - elapsed)
-            self._last_request_time = asyncio.get_event_loop().time()
+    async def _dispatch(self):
+        async with self._dispatch_lock:
+            await asyncio.sleep(self._request_delay)
 
     async def complete(
         self,
@@ -133,17 +137,19 @@ class LLMClient:
         schema.pop("description", None)
         _add_additional_properties(schema)
 
+        prompt_with_cot = prompt + COT_SUFFIX
+
         async with self._semaphore:
-            await self._wait_for_delay()
+            await self._dispatch()
             for attempt in range(max_retries):
                 try:
                     if tier == ModelTier.FAST:
                         content = await self._complete_chat(
-                            model, prompt, system, schema, temperature
+                            model, prompt_with_cot, system, schema, temperature
                         )
                     else:
                         content = await self._complete_responses(
-                            model, prompt, system, schema, temperature
+                            model, prompt_with_cot, system, schema, temperature
                         )
 
                     if not content:
@@ -155,6 +161,17 @@ class LLMClient:
                         f"Rate limit hit, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})..."
                     )
                     await asyncio.sleep(wait_time)
+                except APIStatusError as e:
+                    if e.status_code >= 500:
+                        wait_time = 5 * (attempt + 1)
+                        logger.warning(
+                            f"Server error {e.status_code}, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})..."
+                        )
+                        if attempt == max_retries - 1:
+                            raise
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON decode error: {e}")
                     if attempt == max_retries - 1:
@@ -178,7 +195,7 @@ class LLMClient:
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             async with self._semaphore:
-                await self._wait_for_delay()
+                await self._dispatch()
                 for attempt in range(max_retries):
                     try:
                         response = await self._client.embeddings.create(

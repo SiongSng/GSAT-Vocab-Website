@@ -67,7 +67,7 @@ def compute_relations(
         if entry.type != "word":
             continue
 
-        syns, ants, dervs = _get_wordnet_relations(entry.lemma, entry.pos)
+        syns, ants, dervs = _get_wordnet_relations(entry.lemma, entry.pos or [])
 
         filtered_syns = [s for s in syns if s in lemma_set][:MAX_RELATIONS]
         filtered_ants = [a for a in ants if a in lemma_set][:MAX_RELATIONS]

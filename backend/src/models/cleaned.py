@@ -47,8 +47,8 @@ class LemmaOccurrence(BaseModel):
     sentence: str
     """The sentence containing this word."""
 
-    role: AnnotationRole
-    """The role this word played (tested_answer, passage_word, etc.)."""
+    role: AnnotationRole | None = None
+    """The role this word played (correct_answer, distractor, etc.). None for passage words."""
 
     source: SourceInfo
     """Exam source information (year, exam type, section)."""

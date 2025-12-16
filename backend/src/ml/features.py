@@ -23,9 +23,9 @@ from .weights import (
     TRIAL_YEARS,
 )
 
-TESTED_ROLES = {"tested_answer", "tested_keyword", "tested_distractor"}
-ACTIVE_TESTED_ROLES = {"tested_answer", "tested_keyword"}
-ANSWER_ONLY_ROLES = {"tested_answer"}
+TESTED_ROLES = {"correct_answer", "tested_keyword", "distractor"}
+ACTIVE_TESTED_ROLES = {"correct_answer", "tested_keyword"}
+ANSWER_ONLY_ROLES = {"correct_answer"}
 
 COMMON_PREFIXES = {
     "un",
@@ -169,10 +169,10 @@ FEATURE_NAMES = [
     "curriculum_transition_ratio",
     "post_curriculum_year_spread",
     # Role distribution features
-    "role_tested_answer",
+    "role_correct_answer",
     "role_tested_keyword",
-    "role_tested_distractor",
-    "role_passage_word",
+    "role_distractor",
+    "role_none",
     "role_notable_phrase",
     "role_notable_pattern",
     "tested_role_ratio",
@@ -348,7 +348,7 @@ class FeatureExtractor:
         for occ in occurrences:
             source = occ.get("source", {})
             year = source.get("year", 0)
-            role = occ.get("role", "passage_word")
+            role = occ.get("role") or "none"
             section = source.get("section_type", "mixed")
             exam_type = source.get("exam_type", "gsat")
 
@@ -428,14 +428,14 @@ class FeatureExtractor:
         )
 
         tested_count = sum(
-            wf.role_by_year.get(y, {}).get("tested_answer", 0)
+            wf.role_by_year.get(y, {}).get("correct_answer", 0)
             + wf.role_by_year.get(y, {}).get("tested_keyword", 0)
-            + wf.role_by_year.get(y, {}).get("tested_distractor", 0)
+            + wf.role_by_year.get(y, {}).get("distractor", 0)
             for y in years_before
         )
 
         active_tested_count = sum(
-            wf.role_by_year.get(y, {}).get("tested_answer", 0)
+            wf.role_by_year.get(y, {}).get("correct_answer", 0)
             + wf.role_by_year.get(y, {}).get("tested_keyword", 0)
             for y in years_before
         )
@@ -483,14 +483,14 @@ class FeatureExtractor:
 
         total_role_count = sum(role_counts.values())
         tested_role_count = (
-            role_counts.get("tested_answer", 0)
+            role_counts.get("correct_answer", 0)
             + role_counts.get("tested_keyword", 0)
-            + role_counts.get("tested_distractor", 0)
+            + role_counts.get("distractor", 0)
         )
         tested_role_ratio = tested_role_count / max(1, total_role_count)
 
-        answer_count = role_counts.get("tested_answer", 0) + role_counts.get("tested_keyword", 0)
-        distractor_count = role_counts.get("tested_distractor", 0)
+        answer_count = role_counts.get("correct_answer", 0) + role_counts.get("tested_keyword", 0)
+        distractor_count = role_counts.get("distractor", 0)
         answer_to_distractor_ratio = (
             answer_count / max(1, distractor_count) if distractor_count > 0 else answer_count
         )
@@ -549,13 +549,13 @@ class FeatureExtractor:
             if CURRICULUM_CUTOFF_YEAR <= y < cutoff_year
         )
         pre_curriculum_tested = sum(
-            wf.role_by_year.get(y, {}).get("tested_answer", 0)
+            wf.role_by_year.get(y, {}).get("correct_answer", 0)
             + wf.role_by_year.get(y, {}).get("tested_keyword", 0)
             for y in years_before
             if y < CURRICULUM_CUTOFF_YEAR
         )
         post_curriculum_tested = sum(
-            wf.role_by_year.get(y, {}).get("tested_answer", 0)
+            wf.role_by_year.get(y, {}).get("correct_answer", 0)
             + wf.role_by_year.get(y, {}).get("tested_keyword", 0)
             for y in years_before
             if y >= CURRICULUM_CUTOFF_YEAR
@@ -576,7 +576,7 @@ class FeatureExtractor:
             if y in TRIAL_YEARS and y < cutoff_year
         )
         trial_period_tested = sum(
-            wf.role_by_year.get(y, {}).get("tested_answer", 0)
+            wf.role_by_year.get(y, {}).get("correct_answer", 0)
             + wf.role_by_year.get(y, {}).get("tested_keyword", 0)
             for y in years_before
             if y in TRIAL_YEARS
@@ -652,10 +652,10 @@ class FeatureExtractor:
             float(curriculum_transition_ratio),
             float(post_curriculum_year_spread),
             # Role distribution features
-            float(role_counts.get("tested_answer", 0)),
+            float(role_counts.get("correct_answer", 0)),
             float(role_counts.get("tested_keyword", 0)),
-            float(role_counts.get("tested_distractor", 0)),
-            float(role_counts.get("passage_word", 0)),
+            float(role_counts.get("distractor", 0)),
+            float(role_counts.get("none", 0)),
             float(role_counts.get("notable_phrase", 0)),
             float(role_counts.get("notable_pattern", 0)),
             float(tested_role_ratio),

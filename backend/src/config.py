@@ -10,11 +10,11 @@ class Settings(BaseSettings):
     # Fast model for simple tasks (Stage 0, 4, simple batches)
     openai_model_fast: str = "gpt-4.1"
     # Smart model for complex reasoning (Stage 1, 3, 6)
-    openai_model_smart: str = "gpt-5.2"
+    openai_model_smart: str = "gpt-5-mini"
     openai_embedding_model: str = "text-embedding-3-small"
 
     llm_concurrency: int = 60
-    llm_request_delay: float = 2.5  # seconds between requests
+    llm_request_delay: float = 1.5  # seconds between requests
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
