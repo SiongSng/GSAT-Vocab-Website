@@ -106,6 +106,8 @@ class SourceInfo(BaseModel):
     exam_type: ExamType
     section_type: SectionType
     question_number: int | None = None
+    role: AnnotationRole | None = None
+    sentence_role: SentenceRole | None = None
 
 
 class Annotation(BaseModel):

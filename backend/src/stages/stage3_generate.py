@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+from collections.abc import Callable, Sequence
 from typing import Literal
 from xml.sax.saxutils import escape
 
@@ -12,18 +13,20 @@ from ..llm.client import ModelTier
 from ..llm.prompts import STAGE3_GENERATE_SYSTEM
 from ..models import (
     AnnotationRole,
+    CleanedPatternEntry,
+    CleanedPhraseEntry,
     CleanedVocabData,
     CleanedVocabEntry,
+    CleanedWordEntry,
     ConfusionNote,
-    DistractorGroup,
     ExamExample,
     FrequencyData,
     LemmaOccurrence,
-    PatternInfo,
+    PhraseEntry,
     RootInfo,
     VocabEntry,
     VocabSense,
-    VocabTier,
+    WordEntry,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,16 +115,17 @@ def _pos_to_sense_id_abbrev(pos: str) -> str:
     return abbrev_map.get(pos.upper(), "x")
 
 
-def _distractor_map_for_correct(groups: list[DistractorGroup]) -> dict[str, list[DistractorGroup]]:
-    """Map word (correct or distractor) -> groups where it appeared."""
-    m: dict[str, list[DistractorGroup]] = {}
-    for g in groups:
-        # Map correct answer
-        m.setdefault(g.correct_answer.lower(), []).append(g)
-        # Map distractors too
-        for d in g.distractors:
-            m.setdefault(d.lower(), []).append(g)
-    return m
+def _build_distractor_map_from_entries(
+    entries: list[CleanedVocabEntry],
+) -> dict[str, set[str]]:
+    distractor_map: dict[str, set[str]] = {}
+    for entry in entries:
+        if isinstance(entry, CleanedPatternEntry):
+            continue
+        for occ in entry.occurrences:
+            if occ.source.role in (AnnotationRole.CORRECT_ANSWER, AnnotationRole.DISTRACTOR):
+                distractor_map.setdefault(entry.lemma.lower(), set())
+    return distractor_map
 
 
 def _escape(s: str) -> str:
@@ -129,55 +133,50 @@ def _escape(s: str) -> str:
 
 
 def _build_word_block(
-    entry: CleanedVocabEntry, distractor_map: dict[str, list[DistractorGroup]] | None = None
+    entry: CleanedWordEntry | CleanedPhraseEntry, distractor_map: dict[str, set[str]] | None = None
 ) -> str:
-    tier = entry.tier.value
-    lvl = entry.level if entry.level is not None else "unknown"
-    pos = ",".join(entry.pos) if entry.pos else ""
+    entry_type = entry.type.value if hasattr(entry.type, "value") else entry.type
+    lvl = "unknown"
+    pos = ""
 
-    lines = [f'<entry lemma="{_escape(entry.lemma)}" tier="{tier}" level="{lvl}" pos="{pos}">']
+    if isinstance(entry, CleanedWordEntry):
+        lvl = entry.level if entry.level is not None else "unknown"
+        pos = ",".join(entry.pos) if entry.pos else ""
 
-    if entry.tier == VocabTier.TESTED and distractor_map:
-        groups = distractor_map.get(entry.lemma.lower(), [])
-        if groups:
-            all_related = set()
-            lemma_lower = entry.lemma.lower()
-            for g in groups:
-                # Add correct answer if it's not the lemma itself
-                if g.correct_answer.lower() != lemma_lower:
-                    all_related.add(g.correct_answer)
-                # Add distractors if they are not the lemma itself
-                for d in g.distractors:
-                    if d.lower() != lemma_lower:
-                        all_related.add(d)
+    lines = [
+        f'<entry lemma="{_escape(entry.lemma)}" type="{entry_type}" level="{lvl}" pos="{pos}">'
+    ]
 
-            if all_related:
-                # Filter out long distractors (sentences) to keep context clean
-                short_related = [d for d in all_related if len(d) < 50]
-                if short_related:
-                    lines.append(f"  <distractors>{', '.join(short_related[:6])}</distractors>")
+    if isinstance(entry, CleanedWordEntry) and entry.frequency.tested_count > 0 and distractor_map:
+        related = distractor_map.get(entry.lemma.lower(), set())
+        if related:
+            short_related = [d for d in related if len(d) < 50]
+            if short_related:
+                lines.append(f"  <distractors>{', '.join(list(short_related)[:6])}</distractors>")
 
     lines.append("</entry>")
     return "\n".join(lines)
 
 
 def _build_prompt(
-    entries: list[CleanedVocabEntry], distractor_map: dict[str, list[DistractorGroup]] | None = None
+    entries: Sequence[CleanedWordEntry | CleanedPhraseEntry],
+    distractor_map: dict[str, set[str]] | None = None,
 ) -> str:
     blocks = [_build_word_block(e, distractor_map) for e in entries]
     return "<entries>\n" + "\n".join(blocks) + "\n</entries>"
 
 
 def _convert_item(
-    entry: CleanedVocabEntry,
+    entry: CleanedWordEntry | CleanedPhraseEntry,
     item: GeneratedItem,
     example_assignments: dict[int, list[ExamExample]],
 ) -> VocabEntry:
     pos_counter: dict[str, int] = {}
     senses = []
-    is_phrase_or_pattern = entry.tier in (VocabTier.PHRASE, VocabTier.PATTERN)
+    is_phrase = isinstance(entry, CleanedPhraseEntry)
+
     for i, s in enumerate(item.senses):
-        sense_pos = s.pos if s.pos else ("PHRASE" if is_phrase_or_pattern else "OTHER")
+        sense_pos = s.pos if s.pos else ("PHRASE" if is_phrase else "OTHER")
         normalized_pos = _normalize_pos_tag(sense_pos)
         pos_counter[normalized_pos] = pos_counter.get(normalized_pos, 0) + 1
         pos_abbrev = _pos_to_sense_id_abbrev(normalized_pos)
@@ -186,16 +185,13 @@ def _convert_item(
         )
 
         sense_examples = example_assignments.get(i, [])
-        has_real_examples = len(sense_examples) > 0
-        entry_was_tested = len(entry.occurrences) > 0
 
         senses.append(
             VocabSense(
                 sense_id=sense_id,
-                pos=normalized_pos,
+                pos=normalized_pos if not is_phrase else None,
                 zh_def=s.zh_def,
                 en_def=s.en_def,
-                tested_in_exam=entry_was_tested and has_real_examples,
                 examples=sense_examples,
                 generated_example=s.example,
             )
@@ -212,50 +208,51 @@ def _convert_item(
             for c in item.confusion_notes
         ]
 
-    root_info = None
-    if entry.level and entry.level >= 2 and item.root_info:
-        root_info = RootInfo(
-            root_breakdown=item.root_info.root_breakdown,
-            memory_strategy=item.root_info.memory_strategy,
-        )
+    if isinstance(entry, CleanedWordEntry):
+        root_info = None
+        if entry.level and entry.level >= 2 and item.root_info:
+            root_info = RootInfo(
+                root_breakdown=item.root_info.root_breakdown,
+                memory_strategy=item.root_info.memory_strategy,
+            )
 
-    pattern_info = None
-    if item.pattern_info:
-        pattern_info = PatternInfo(
-            pattern_type=item.pattern_info.pattern_type,
-            display_name=item.pattern_info.display_name,
-            structure=item.pattern_info.structure,
-        )
+        pos_set = {p.upper() for p in entry.pos} if entry.pos else set()
+        for s in senses:
+            if s.pos:
+                pos_set.add(s.pos)
 
-    pos_set = {p.upper() for p in entry.pos} if entry.pos else set()
-    for s in senses:
-        if s.pos:
-            pos_set.add(s.pos)
-
-    vocab_type = "word"
-    if entry.tier == VocabTier.PATTERN or pattern_info:
-        vocab_type = "pattern"
-    elif entry.tier == VocabTier.PHRASE or "PHRASE" in pos_set or " " in entry.lemma.strip():
-        vocab_type = "phrase"
-
-    final_pos: list[str] | None = None
-    if vocab_type == "word":
         valid_word_pos = {p for p in pos_set if p not in ("PHRASE",)}
-        final_pos = sorted(valid_word_pos) if valid_word_pos else None
+        final_pos = sorted(valid_word_pos) if valid_word_pos else []
 
-    return VocabEntry(
-        lemma=entry.lemma,
-        type=vocab_type,
-        pos=final_pos,
-        level=entry.level,
-        tier=entry.tier,
-        in_official_list=entry.in_official_list,
-        senses=senses,
-        frequency=entry.frequency,
-        confusion_notes=confusion_notes,
-        root_info=root_info,
-        pattern_info=pattern_info,
-    )
+        return WordEntry(
+            lemma=entry.lemma,
+            pos=final_pos,
+            level=entry.level,
+            in_official_list=entry.in_official_list,
+            senses=senses,
+            frequency=entry.frequency,
+            confusion_notes=confusion_notes,
+            root_info=root_info,
+        )
+
+    elif isinstance(entry, CleanedPhraseEntry):
+        return PhraseEntry(
+            lemma=entry.lemma,
+            senses=senses,
+            frequency=entry.frequency,
+            confusion_notes=confusion_notes,
+        )
+
+    else:
+        return WordEntry(
+            lemma=entry.lemma,
+            pos=[],
+            level=None,
+            in_official_list=False,
+            senses=senses,
+            frequency=entry.frequency,
+            confusion_notes=confusion_notes,
+        )
 
 
 def _fallback_assign_by_pos(
@@ -281,12 +278,8 @@ def _fallback_assign_by_pos(
 
 
 async def _resolve_polysemy(
-    entries: list[CleanedVocabEntry], items: list[GeneratedItem]
+    entries: list[CleanedWordEntry | CleanedPhraseEntry], items: list[GeneratedItem]
 ) -> dict[str, dict[int, list[ExamExample]]]:
-    """
-    Resolve example assignment for polysemous words using embeddings and POS matching.
-    Returns: lemma -> sense_index -> list[ExamExample]
-    """
     entry_map = {e.lemma.lower(): e for e in entries}
     assignments: dict[str, dict[int, list[ExamExample]]] = {}
 
@@ -485,7 +478,8 @@ async def _resolve_polysemy(
 
 
 async def _generate_batch(
-    entries: list[CleanedVocabEntry], distractor_map: dict[str, list[DistractorGroup]] | None = None
+    entries: list[CleanedWordEntry | CleanedPhraseEntry],
+    distractor_map: dict[str, set[str]] | None = None,
 ):
     client = get_llm_client()
     prompt = _build_prompt(entries, distractor_map)
@@ -506,17 +500,15 @@ async def _generate_batch(
         )
         return results
 
-    # Resolve example assignments (potentially using embeddings)
     assignments = await _resolve_polysemy(entries, response.items)
 
     for item in response.items:
         entry = entry_map.get(item.lemma.lower())
         if entry:
             matched_lemmas.add(item.lemma.lower())
-            if entry.level == 1:
+            if type(entry) is CleanedWordEntry and entry.level == 1:
                 item.root_info = None
-            # Allow pattern_info for any tier if generated
-            if entry.tier != VocabTier.TESTED:
+            if type(entry) is CleanedWordEntry and entry.frequency.tested_count == 0:
                 item.confusion_notes = None
             results.append(_convert_item(entry, item, assignments.get(entry.lemma.lower(), {})))
 
@@ -533,11 +525,11 @@ BATCH_SIZE = 35
 
 
 def _create_batches(
-    entries: list[CleanedVocabEntry],
-    tier: VocabTier,
-    distractor_map: dict[str, list[DistractorGroup]] | None,
-) -> list[list[CleanedVocabEntry]]:
-    batches = []
+    entries: list[CleanedWordEntry | CleanedPhraseEntry],
+    entry_type: str,
+    distractor_map: dict[str, set[str]] | None,
+) -> list[list[CleanedWordEntry | CleanedPhraseEntry]]:
+    batches: list[list[CleanedWordEntry | CleanedPhraseEntry]] = []
     for i in range(0, len(entries), BATCH_SIZE):
         batches.append(entries[i : i + BATCH_SIZE])
     return batches
@@ -546,11 +538,10 @@ def _create_batches(
 async def generate_all_entries(
     cleaned_data: CleanedVocabData,
     debug_first_batch: bool = False,
-    progress_callback: callable = None,
+    progress_callback: Callable | None = None,
 ) -> list[VocabEntry]:
-    distractor_map = _distractor_map_for_correct(cleaned_data.distractor_groups)
+    distractor_map = _build_distractor_map_from_entries(cleaned_data.entries)
 
-    # Process essay words
     existing_lemmas = {e.lemma.lower() for e in cleaned_data.entries}
     essay_entries = []
     seen_essay_words = set()
@@ -561,9 +552,8 @@ async def generate_all_entries(
             if w_lower and w_lower not in existing_lemmas and w_lower not in seen_essay_words:
                 seen_essay_words.add(w_lower)
                 essay_entries.append(
-                    CleanedVocabEntry(
+                    CleanedWordEntry(
                         lemma=word,
-                        tier=VocabTier.BASIC,
                         level=None,
                         in_official_list=False,
                         pos=[],
@@ -572,7 +562,6 @@ async def generate_all_entries(
                                 pos="UNKNOWN",
                                 surface=word,
                                 sentence=f"Essay Topic: {topic.description[:100]}...",
-                                role=AnnotationRole.TESTED_KEYWORD,
                                 source=topic.source,
                             )
                         ],
@@ -580,34 +569,48 @@ async def generate_all_entries(
                             total_occurrences=0,
                             tested_count=0,
                             year_spread=0,
-                            weighted_score=0.0,
+                            ml_score=None,
                         ),
                     )
                 )
 
-    # Combine entries for processing
-    all_entries = cleaned_data.entries + essay_entries
+    word_entries: list[CleanedWordEntry] = [
+        e for e in cleaned_data.entries if isinstance(e, CleanedWordEntry)
+    ]
+    phrase_entries: list[CleanedPhraseEntry] = [
+        e for e in cleaned_data.entries if isinstance(e, CleanedPhraseEntry)
+    ]
 
-    all_batches: list[tuple[VocabTier, list[CleanedVocabEntry]]] = []
-    for tier in [
-        VocabTier.TESTED,
-        VocabTier.TRANSLATION,
-        VocabTier.PATTERN,
-        VocabTier.PHRASE,
-        VocabTier.BASIC,
-    ]:
-        tier_entries = [e for e in all_entries if e.tier == tier]
-        if not tier_entries:
-            continue
-        dm = distractor_map if tier == VocabTier.TESTED else None
-        batches = _create_batches(tier_entries, tier, dm)
-        logger.info(f"  {tier.value}: {len(tier_entries)} entries → {len(batches)} batches")
+    all_processable: list[CleanedWordEntry | CleanedPhraseEntry] = (
+        word_entries + phrase_entries + essay_entries
+    )
+
+    all_batches: list[tuple[str, list[CleanedWordEntry | CleanedPhraseEntry]]] = []
+
+    tested_entries: list[CleanedWordEntry | CleanedPhraseEntry] = [
+        e
+        for e in all_processable
+        if isinstance(e, CleanedWordEntry) and e.frequency.tested_count > 0
+    ]
+    other_entries: list[CleanedWordEntry | CleanedPhraseEntry] = [
+        e
+        for e in all_processable
+        if not (isinstance(e, CleanedWordEntry) and e.frequency.tested_count > 0)
+    ]
+
+    if tested_entries:
+        batches = _create_batches(tested_entries, "tested", distractor_map)
+        logger.info(f"  tested: {len(tested_entries)} entries → {len(batches)} batches")
         if debug_first_batch:
             batches = batches[:1]
         for batch in batches:
-            all_batches.append((tier, batch))
-        if debug_first_batch:
-            break
+            all_batches.append(("tested", batch))
+
+    if other_entries and not debug_first_batch:
+        batches = _create_batches(other_entries, "other", None)
+        logger.info(f"  other: {len(other_entries)} entries → {len(batches)} batches")
+        for batch in batches:
+            all_batches.append(("other", batch))
 
     total_batches = len(all_batches)
     total_input_entries = sum(len(batch) for _, batch in all_batches)
@@ -620,15 +623,15 @@ async def generate_all_entries(
     lock = asyncio.Lock()
 
     async def process_batch(
-        idx: int, tier: VocabTier, batch: list[CleanedVocabEntry]
+        idx: int, entry_type: str, batch: list[CleanedWordEntry | CleanedPhraseEntry]
     ) -> list[VocabEntry]:
         nonlocal completed_count, total_generated, total_processed
         batch_lemmas = {e.lemma.lower() for e in batch}
         try:
-            dm = distractor_map if tier == VocabTier.TESTED else None
+            dm = distractor_map if entry_type == "tested" else None
             res = await _generate_batch(batch, dm)
         except Exception as e:
-            logger.error(f"Batch {idx} FAILED ({tier.value}, {len(batch)} entries): {e}")
+            logger.error(f"Batch {idx} FAILED ({entry_type}, {len(batch)} entries): {e}")
             res = []
 
         generated_lemmas = {e.lemma.lower() for e in res}
@@ -644,24 +647,27 @@ async def generate_all_entries(
                 progress_callback(
                     completed_count,
                     total_batches,
-                    tier.value,
+                    entry_type,
                     total_generated,
                     total_processed,
                     total_input_entries,
                 )
         return res
 
-    tasks = [process_batch(i, tier, batch) for i, (tier, batch) in enumerate(all_batches)]
+    tasks = [
+        process_batch(i, entry_type, batch) for i, (entry_type, batch) in enumerate(all_batches)
+    ]
     results = await asyncio.gather(*tasks)
 
     all_results: list[VocabEntry] = []
     for res in results:
         all_results.extend(res)
 
-    # Log summary
     if all_missing:
         logger.warning(f"Missing {len(all_missing)} entries: {all_missing[:20]}...")
     logger.info(f"Stage 3 complete: {total_input_entries} input → {len(all_results)} generated")
 
-    all_results.sort(key=lambda e: e.frequency.weighted_score, reverse=True)
+    all_results.sort(
+        key=lambda e: (e.frequency.tested_count, e.frequency.total_occurrences), reverse=True
+    )
     return all_results
