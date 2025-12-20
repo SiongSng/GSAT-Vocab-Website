@@ -36,18 +36,25 @@
             }
             showSkeleton = false;
         }
+
+        return () => {
+            if (skeletonTimer) {
+                clearTimeout(skeletonTimer);
+                skeletonTimer = null;
+            }
+        };
     });
 
     const isLoadingDetail = $derived(isActuallyLoading && showSkeleton);
 
     const hasConfusionNotes = $derived(
-        entry?.confusion_notes && entry.confusion_notes.length > 0,
+        entry?.confusion_notes != null && entry.confusion_notes.length > 0,
     );
-    const hasRootInfo = $derived(entry?.root_info !== null);
+    const hasRootInfo = $derived(entry?.root_info != null);
     const hasRelatedWords = $derived(
-        (entry?.synonyms && entry.synonyms.length > 0) ||
-            (entry?.antonyms && entry.antonyms.length > 0) ||
-            (entry?.derived_forms && entry.derived_forms.length > 0),
+        (entry?.synonyms != null && entry.synonyms.length > 0) ||
+            (entry?.antonyms != null && entry.antonyms.length > 0) ||
+            (entry?.derived_forms != null && entry.derived_forms.length > 0),
     );
 
     async function playWordAudio() {
@@ -86,10 +93,16 @@
         return `L${level}`;
     }
 
-    function formatImportance(frequency: {
-        ml_score: number | null;
-        weighted_score: number;
-    }): string {
+    function formatImportance(
+        frequency:
+            | {
+                  ml_score: number | null;
+                  weighted_score: number;
+              }
+            | null
+            | undefined,
+    ): string {
+        if (!frequency) return "N/A";
         const score = frequency.ml_score ?? frequency.weighted_score / 30;
         return `${Math.round(score * 100)}%`;
     }
@@ -269,18 +282,22 @@
             {/if}
 
             <!-- Collapsible Sections -->
-            <div class="collapsible-sections space-y-1 border-t border-border pt-4">
+            <div
+                class="collapsible-sections space-y-1 border-t border-border pt-4"
+            >
                 <!-- Statistics -->
-                <CollapsibleSection
-                    title="統計數據"
-                    icon="chart"
-                    defaultOpen={false}
-                >
-                    <StatisticsSection
-                        frequency={entry.frequency}
-                        senses={entry.senses}
-                    />
-                </CollapsibleSection>
+                {#if entry.frequency && entry.senses}
+                    <CollapsibleSection
+                        title="統計數據"
+                        icon="chart"
+                        defaultOpen={false}
+                    >
+                        <StatisticsSection
+                            frequency={entry.frequency}
+                            senses={entry.senses}
+                        />
+                    </CollapsibleSection>
+                {/if}
 
                 <!-- Root Analysis -->
                 {#if hasRootInfo && entry.root_info}
@@ -294,7 +311,7 @@
                 {/if}
 
                 <!-- Confusion Notes -->
-                {#if hasConfusionNotes}
+                {#if hasConfusionNotes && entry.confusion_notes}
                     <CollapsibleSection
                         title="易混淆詞彙"
                         icon="warning"
