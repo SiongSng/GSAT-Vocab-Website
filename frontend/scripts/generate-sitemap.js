@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { readFileSync, writeFileSync } from "fs";
+import { gunzipSync } from "zlib";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -8,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const BASE_URL = "https://siongsng.github.io/GSAT-Vocab-Website";
-const VOCAB_JSON_PATH = join(__dirname, "../public/data/vocab.json");
+const VOCAB_GZ_PATH = join(__dirname, "../public/data/vocab.json.gz");
 const SITEMAP_PATH = join(__dirname, "../public/sitemap.xml");
 
 const STATIC_PAGES = [
@@ -27,17 +28,19 @@ function escapeXml(unsafe) {
 }
 
 function generateSitemap() {
-  console.log("Reading vocab data...");
+  console.log("Reading vocab data from gzip...");
 
   let entries = [];
   try {
-    const vocabData = JSON.parse(readFileSync(VOCAB_JSON_PATH, "utf-8"));
+    const compressed = readFileSync(VOCAB_GZ_PATH);
+    const decompressed = gunzipSync(compressed);
+    const vocabData = JSON.parse(decompressed.toString("utf-8"));
     entries = vocabData.entries || [];
     console.log(`Found ${entries.length} vocabulary entries`);
   } catch (error) {
     if (error.code === "ENOENT") {
       console.warn(
-        "⚠ vocab.json not found, generating sitemap with static pages only",
+        "⚠ vocab.json.gz not found, generating sitemap with static pages only",
       );
     } else {
       throw error;
@@ -72,7 +75,6 @@ function generateSitemap() {
   console.log(`Including top ${topWords.length} words in sitemap`);
 
   for (const entry of topWords) {
-    const lemma = escapeXml(entry.lemma);
     const encodedLemma = encodeURIComponent(entry.lemma);
 
     sitemap += "  <url>\n";
