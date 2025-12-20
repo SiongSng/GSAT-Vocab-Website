@@ -7,6 +7,7 @@ import type {
 import type { VocabEntry, VocabIndexItem } from "$lib/types/vocab";
 import { createIndexItem } from "$lib/types/vocab";
 import { getRouterStore, navigate } from "./router.svelte";
+import { openMobileDetail } from "./app.svelte";
 import { initVocabDB, buildIndex, getEntry, getEntriesCount } from "./vocab-db";
 import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 
@@ -287,6 +288,7 @@ export function syncWordFromRoute(): void {
     const lemma = router.route.params.lemma;
     if (lemma && lemma !== selectedLemma) {
       selectWord(lemma);
+      openMobileDetail();
     }
   }
 }

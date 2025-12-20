@@ -5,7 +5,7 @@ interface AppStore {
   isSidebarOpen: boolean;
   isFilterCollapsed: boolean;
   isGridMode: boolean;
-  isMobile: boolean;
+  isMobile: boolean | null;
   isMobileDetailOpen: boolean;
 }
 
@@ -13,7 +13,7 @@ const store: AppStore = $state({
   isSidebarOpen: false,
   isFilterCollapsed: false,
   isGridMode: false,
-  isMobile: false,
+  isMobile: null,
   isMobileDetailOpen: false,
 });
 
@@ -98,6 +98,11 @@ export function setMobile(isMobile: boolean): void {
   if (!isMobile) {
     store.isSidebarOpen = false;
     store.isMobileDetailOpen = false;
+  } else {
+    const router = getRouterStore();
+    if (router.route.name === "word") {
+      store.isMobileDetailOpen = true;
+    }
   }
 }
 

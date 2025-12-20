@@ -58,7 +58,9 @@
     <Header />
 
     <main class="flex-1 overflow-hidden">
-        {#if app.mode === "browse"}
+        {#if app.isMobile === null}
+            <!-- Wait for mobile detection -->
+        {:else if app.mode === "browse"}
             <BrowseView />
         {:else if app.mode === "flashcard"}
             <SRSFlashcardView />

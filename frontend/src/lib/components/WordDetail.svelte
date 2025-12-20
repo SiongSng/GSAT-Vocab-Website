@@ -1,6 +1,6 @@
 <script lang="ts">
     import { tick } from "svelte";
-    import { getVocabStore, selectWord } from "$lib/stores/vocab.svelte";
+    import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
     import { speakText } from "$lib/tts";
     import SenseTabs from "$lib/components/word/SenseTabs.svelte";
@@ -114,10 +114,6 @@
                 listContainer.scrollTop = 0;
             }
         });
-    }
-
-    function handleRelatedWordClick(lemma: string) {
-        selectWord(lemma);
     }
 
     function formatLevel(level: number | null): string {
@@ -436,7 +432,6 @@
                                     synonyms={entry.synonyms}
                                     antonyms={entry.antonyms}
                                     derivedForms={entry.derived_forms}
-                                    onWordClick={handleRelatedWordClick}
                                 />
                             {/if}
                         </div>

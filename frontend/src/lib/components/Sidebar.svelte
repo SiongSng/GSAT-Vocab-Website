@@ -9,7 +9,11 @@
         setTestedOnly,
         resetFilters,
     } from "$lib/stores/vocab.svelte";
-    import { getAppStore, closeSidebar, toggleFilterCollapsed } from "$lib/stores/app.svelte";
+    import {
+        getAppStore,
+        closeSidebar,
+        toggleFilterCollapsed,
+    } from "$lib/stores/app.svelte";
     import type { PosFilter, VocabTypeFilter } from "$lib/types";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
 
@@ -126,7 +130,9 @@
     >
         <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
             <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-content-primary">篩選條件</h2>
+                <h2 class="text-sm font-semibold text-content-primary">
+                    篩選條件
+                </h2>
                 <div class="flex items-center gap-2">
                     <button
                         class="text-xs text-accent hover:underline"
@@ -161,91 +167,9 @@
                 </div>
             </div>
 
-        <div class="search-container">
-            <svg
-                class="search-icon"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-            >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                />
-            </svg>
-            <input
-                type="text"
-                placeholder="搜尋單字..."
-                class="search-input"
-                value={searchValue}
-                oninput={handleSearchInput}
-            />
-        </div>
-
-        <div class="space-y-2">
-            <div class="flex items-center gap-1.5">
-                <h3 class="section-header mb-0">詞彙等級</h3>
-                <HelpTooltip text="大考中心官方難度分級：1-2 基礎、3-4 中級、5-6 進階" />
-            </div>
-            <div class="flex gap-1.5">
-                {#each levelOptions as level}
-                    <button
-                        class="level-chip"
-                        class:active={filters.levels.includes(level)}
-                        onclick={() => handleLevelClick(level)}
-                        type="button"
-                    >
-                        {level}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
-        <div class="space-y-2">
-            <h3 class="section-header mb-0">詞彙類型</h3>
-            <div class="flex flex-wrap gap-1.5">
-                {#each typeOptions as option}
-                    <button
-                        class="filter-chip"
-                        class:active={filters.vocabType === option.value}
-                        onclick={() => handleTypeClick(option.value)}
-                        type="button"
-                    >
-                        {option.label}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
-        <div class="space-y-2">
-            <h3 class="section-header mb-0">詞性</h3>
-            <div class="flex flex-wrap gap-1.5">
-                {#each posOptions as option}
-                    <button
-                        class="filter-chip"
-                        class:active={filters.pos === option.value}
-                        onclick={() => handlePosClick(option.value)}
-                        type="button"
-                    >
-                        {option.label}
-                    </button>
-                {/each}
-            </div>
-        </div>
-
-        <div class="space-y-2">
-            <button
-                class="flex items-center justify-between w-full text-left"
-                onclick={toggleAdvanced}
-                type="button"
-            >
-                <h3 class="section-header mb-0">進階篩選</h3>
+            <div class="search-container">
                 <svg
-                    class="w-4 h-4 text-content-tertiary transition-transform duration-200"
-                    class:rotate-180={isAdvancedOpen}
+                    class="search-icon"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -255,53 +179,141 @@
                     <path
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
                     />
                 </svg>
-            </button>
+                <input
+                    type="text"
+                    placeholder="搜尋單字..."
+                    class="search-input"
+                    value={searchValue}
+                    oninput={handleSearchInput}
+                />
+            </div>
 
-            {#if isAdvancedOpen}
-                <div class="space-y-3 pt-1">
-                    <label class="flex items-start gap-2.5 cursor-pointer group">
-                        <input
-                            type="checkbox"
-                            checked={filters.officialOnly}
-                            onchange={handleOfficialChange}
-                        />
-                        <div class="flex-1 min-w-0">
-                            <span
-                                class="text-sm text-content-secondary group-hover:text-content-primary transition-colors block"
-                            >
-                                僅顯示大考中心詞彙表
-                            </span>
-                            <span class="text-xs text-content-tertiary">
-                                官方公布的 7000 單字範圍
-                            </span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-start gap-2.5 cursor-pointer group">
-                        <input
-                            type="checkbox"
-                            checked={filters.testedOnly}
-                            onchange={handleTestedChange}
-                        />
-                        <div class="flex-1 min-w-0">
-                            <span
-                                class="text-sm text-content-secondary group-hover:text-content-primary transition-colors block"
-                            >
-                                僅顯示曾出現在考題的詞彙
-                            </span>
-                            <span class="text-xs text-content-tertiary">
-                                作為答案、選項或翻譯關鍵字
-                            </span>
-                        </div>
-                    </label>
+            <div class="space-y-2">
+                <div class="flex items-center gap-1.5">
+                    <h3 class="section-header mb-0">詞彙等級</h3>
+                    <HelpTooltip
+                        text="大考中心官方難度分級：1-2 基礎、3-4 中級、5-6 進階"
+                    />
                 </div>
-            {/if}
+                <div class="flex gap-1.5">
+                    {#each levelOptions as level}
+                        <button
+                            class="level-chip"
+                            class:active={filters.levels.includes(level)}
+                            onclick={() => handleLevelClick(level)}
+                            type="button"
+                        >
+                            {level}
+                        </button>
+                    {/each}
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="section-header mb-0">詞彙類型</h3>
+                <div class="flex flex-wrap gap-1.5">
+                    {#each typeOptions as option}
+                        <button
+                            class="filter-chip"
+                            class:active={filters.vocabType === option.value}
+                            onclick={() => handleTypeClick(option.value)}
+                            type="button"
+                        >
+                            {option.label}
+                        </button>
+                    {/each}
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="section-header mb-0">詞性</h3>
+                <div class="flex flex-wrap gap-1.5">
+                    {#each posOptions as option}
+                        <button
+                            class="filter-chip"
+                            class:active={filters.pos === option.value}
+                            onclick={() => handlePosClick(option.value)}
+                            type="button"
+                        >
+                            {option.label}
+                        </button>
+                    {/each}
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button
+                    class="flex items-center justify-between w-full text-left"
+                    onclick={toggleAdvanced}
+                    type="button"
+                >
+                    <h3 class="section-header mb-0">進階篩選</h3>
+                    <svg
+                        class="w-4 h-4 text-content-tertiary transition-transform duration-200"
+                        class:rotate-180={isAdvancedOpen}
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                        />
+                    </svg>
+                </button>
+
+                {#if isAdvancedOpen}
+                    <div class="space-y-3 pt-1">
+                        <label
+                            class="flex items-start gap-2.5 cursor-pointer group"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={filters.officialOnly}
+                                onchange={handleOfficialChange}
+                            />
+                            <div class="flex-1 min-w-0">
+                                <span
+                                    class="text-sm text-content-secondary group-hover:text-content-primary transition-colors block"
+                                >
+                                    僅顯示大考中心詞彙表
+                                </span>
+                                <span class="text-xs text-content-tertiary">
+                                    官方公布的 7000 單字範圍
+                                </span>
+                            </div>
+                        </label>
+
+                        <label
+                            class="flex items-start gap-2.5 cursor-pointer group"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={filters.testedOnly}
+                                onchange={handleTestedChange}
+                            />
+                            <div class="flex-1 min-w-0">
+                                <span
+                                    class="text-sm text-content-secondary group-hover:text-content-primary transition-colors block"
+                                >
+                                    僅顯示曾出現在考題的詞彙
+                                </span>
+                                <span class="text-xs text-content-tertiary">
+                                    作為答案、選項或翻譯關鍵字
+                                </span>
+                            </div>
+                        </label>
+                    </div>
+                {/if}
+            </div>
         </div>
-    </div>
-</aside>
+    </aside>
 {/if}
 
 <style>
