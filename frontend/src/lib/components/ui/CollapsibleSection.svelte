@@ -9,6 +9,7 @@
     }
 
     let { title, icon, defaultOpen = true, children }: Props = $props();
+    // svelte-ignore state_referenced_locally
     let isOpen = $state(defaultOpen);
 
     function toggle() {

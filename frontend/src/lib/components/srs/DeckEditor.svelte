@@ -15,7 +15,9 @@
 
     const vocab = getVocabStore();
 
+    // svelte-ignore state_referenced_locally
     let deckName = $state(initialName);
+    // svelte-ignore state_referenced_locally
     let selectedLemmas: string[] = $state([...initialLemmas]);
     let searchQuery = $state("");
     let error: string | null = $state(null);

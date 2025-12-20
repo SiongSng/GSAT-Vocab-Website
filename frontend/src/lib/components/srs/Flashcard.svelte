@@ -255,16 +255,17 @@
                                         size="sm"
                                     />
                                 </div>
-                                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
-                                <p
-                                    class="text-sm text-content-secondary leading-relaxed"
+                                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                <span
+                                    class="example-text"
                                     onclick={(e) => e.stopPropagation()}
+                                    role="presentation"
                                 >
                                     <ClickableWord
                                         text={currentExample.text}
                                         highlightWord={card.lemma}
                                     />
-                                </p>
+                                </span>
                                 {#if currentExample.source}
                                     <div
                                         class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary mt-2"
@@ -407,5 +408,12 @@
     .custom-scrollbar::-webkit-scrollbar-thumb {
         background-color: var(--color-border-hover);
         border-radius: 2px;
+    }
+
+    .example-text {
+        display: block;
+        font-size: 0.875rem;
+        line-height: 1.625;
+        color: var(--color-content-secondary);
     }
 </style>
