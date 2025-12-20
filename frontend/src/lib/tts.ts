@@ -24,6 +24,7 @@ function getSynthesisTimeout(): number {
     case "3g":
       return 6000;
     case "4g":
+      return 1500;
     default:
       return 2500;
   }
@@ -115,13 +116,18 @@ async function synthesizeOnce(text: string): Promise<Blob> {
   return result.audio;
 }
 
+function jitteredDelay(baseMs: number, jitterRatio: number = 0.5): number {
+  const jitter = baseMs * jitterRatio * (Math.random() * 2 - 1);
+  return Math.max(0, baseMs + jitter);
+}
+
 async function synthesizeWithRetry(text: string): Promise<string> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      const delay =
-        BASE_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 500;
+      const baseDelay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      const delay = jitteredDelay(baseDelay, 0.5);
       await sleep(delay);
     }
 
@@ -168,27 +174,46 @@ export async function speakText(text: string): Promise<string> {
   return request;
 }
 
+const PRELOAD_RETRY_DELAY_MS = 3000;
+const failedPreloads = new Set<string>();
+
 export async function preloadAudio(texts: string[]): Promise<void> {
   if (texts.length === 0) return;
 
-  const [first, ...rest] = texts;
-  const firstPromise =
-    audioCache.has(first) || pendingRequests.has(first)
-      ? Promise.resolve()
-      : speakText(first).catch(() => {});
+  const toPreload = texts.filter(
+    (t) => !audioCache.has(t) && !pendingRequests.has(t),
+  );
+  if (toPreload.length === 0) return;
 
-  if (rest.length > 0) {
-    firstPromise.then(() => {
-      const uncachedRest = rest.filter(
-        (t) => !audioCache.has(t) && !pendingRequests.has(t),
-      );
-      if (uncachedRest.length > 0) {
-        Promise.all(uncachedRest.map((text) => speakText(text).catch(() => {})));
-      }
-    });
+  const results = await Promise.allSettled(
+    toPreload.map((text) => speakText(text)),
+  );
+
+  const failed: string[] = [];
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === "rejected") {
+      failed.push(toPreload[i]);
+    }
   }
 
-  await firstPromise;
+  if (failed.length > 0) {
+    const retryTargets = failed.filter((t) => !failedPreloads.has(t));
+    for (const t of failed) {
+      failedPreloads.add(t);
+    }
+
+    if (retryTargets.length > 0) {
+      setTimeout(
+        () => {
+          for (const t of retryTargets) {
+            failedPreloads.delete(t);
+          }
+          preloadAudio(retryTargets);
+        },
+        jitteredDelay(PRELOAD_RETRY_DELAY_MS, 0.3),
+      );
+    }
+  }
 }
 
 export function isAudioCached(text: string): boolean {
@@ -302,12 +327,14 @@ export function createAudioController(getText: () => string): AudioController {
 
     stop() {
       aborted = true;
-      if (currentController === controller) {
+      const wasCurrentController = currentController === controller;
+      if (wasCurrentController) {
         const audio = getGlobalAudio();
         audio.pause();
         audio.onended = null;
         audio.onerror = null;
         currentController = null;
+        notifyGlobalState(null, "idle");
       }
       setState("idle");
     },
