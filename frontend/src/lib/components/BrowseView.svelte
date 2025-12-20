@@ -79,7 +79,7 @@
 
     <div class="browse-content">
         <main class="word-list-section">
-            <div class="mobile-search-bar lg:hidden">
+            <div class="search-bar">
                 <div class="search-container">
                     <svg
                         class="search-icon"
@@ -104,7 +104,7 @@
                     />
                 </div>
                 <button
-                    class="filter-btn"
+                    class="filter-btn lg:hidden"
                     onclick={openFilterSheet}
                     type="button"
                     title="篩選條件"
@@ -290,7 +290,7 @@
         flex-shrink: 0;
     }
 
-    .mobile-search-bar {
+    .search-bar {
         flex-shrink: 0;
         display: flex;
         align-items: center;

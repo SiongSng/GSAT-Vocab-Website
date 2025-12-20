@@ -1,7 +1,6 @@
 <script lang="ts">
     import {
         getFilters,
-        setSearchTerm,
         setPosFilter,
         setVocabTypeFilter,
         toggleLevel,
@@ -16,7 +15,6 @@
     const filters = getFilters();
     const app = getAppStore();
 
-    let searchValue = $state(filters.searchTerm);
     let isAdvancedOpen = $state(false);
 
     const posOptions: { value: PosFilter; label: string }[] = [
@@ -35,21 +33,6 @@
     ];
 
     const levelOptions = [1, 2, 3, 4, 5, 6];
-
-    let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    function handleSearchInput(e: Event) {
-        const target = e.target as HTMLInputElement;
-        searchValue = target.value;
-
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
-        }
-
-        searchTimeout = setTimeout(() => {
-            setSearchTerm(searchValue);
-        }, 300);
-    }
 
     function handlePosClick(pos: PosFilter) {
         setPosFilter(pos);
@@ -75,7 +58,6 @@
 
     function handleReset() {
         resetFilters();
-        searchValue = "";
     }
 
     function toggleAdvanced() {
@@ -144,30 +126,6 @@
                         </svg>
                     </button>
                 </div>
-            </div>
-
-            <div class="search-container">
-                <svg
-                    class="search-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                    />
-                </svg>
-                <input
-                    type="text"
-                    placeholder="搜尋單字..."
-                    class="search-input"
-                    value={searchValue}
-                    oninput={handleSearchInput}
-                />
             </div>
 
             <div class="filter-section">
@@ -311,41 +269,6 @@
     .sidebar-collapsed:hover {
         background-color: var(--color-surface-hover);
         color: var(--color-content-secondary);
-    }
-
-    .search-container {
-        position: relative;
-    }
-
-    .search-icon {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 1rem;
-        height: 1rem;
-        color: var(--color-content-tertiary);
-        pointer-events: none;
-    }
-
-    .search-input {
-        width: 100%;
-        background-color: var(--color-surface-secondary);
-        border: none;
-        border-radius: 0.375rem;
-        padding: 0.5rem 0.75rem 0.5rem 2.25rem;
-        font-size: 0.875rem;
-        transition: all 0.15s ease;
-        color: var(--color-content-primary);
-    }
-
-    .search-input::placeholder {
-        color: var(--color-content-tertiary);
-    }
-
-    .search-input:focus {
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
     }
 
     .section-header {
