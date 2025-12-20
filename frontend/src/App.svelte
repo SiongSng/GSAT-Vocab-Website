@@ -7,6 +7,7 @@
     import LoadingOverlay from "$lib/components/LoadingOverlay.svelte";
     import QuickLookupSidebar from "$lib/components/lookup/QuickLookupSidebar.svelte";
     import QuickLookupSheet from "$lib/components/lookup/QuickLookupSheet.svelte";
+    import PWAInstallPrompt from "$lib/components/PWAInstallPrompt.svelte";
     import { getAppStore, setMobile } from "$lib/stores/app.svelte";
     import {
         loadVocabData,
@@ -18,6 +19,7 @@
         destroyRouter,
         getRouterStore,
     } from "$lib/stores/router.svelte";
+    import { updatePageSEO } from "$lib/utils/seo";
 
     const app = getAppStore();
     const router = getRouterStore();
@@ -26,6 +28,12 @@
     $effect(() => {
         router.route;
         syncWordFromRoute();
+    });
+
+    $effect(() => {
+        const route = router.route;
+        const lemma = route.name === "word" ? route.params.lemma : undefined;
+        updatePageSEO(route.name, lemma);
     });
 
     onMount(() => {
@@ -72,6 +80,7 @@
 
 <QuickLookupSidebar />
 <QuickLookupSheet />
+<PWAInstallPrompt />
 
 <style>
     .app {
