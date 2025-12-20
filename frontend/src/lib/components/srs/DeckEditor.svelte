@@ -85,6 +85,10 @@
         isDropdownOpen = true;
     }
 
+    function handleInput() {
+        isDropdownOpen = true;
+    }
+
     function handleInputBlur() {
         if (blurTimeoutId) {
             clearTimeout(blurTimeoutId);
@@ -169,6 +173,7 @@
                         bind:value={searchQuery}
                         onkeydown={handleKeydown}
                         onfocus={handleInputFocus}
+                        oninput={handleInput}
                         onblur={handleInputBlur}
                         class="search-input"
                         placeholder="搜尋單字..."
