@@ -232,6 +232,13 @@ export async function loadVocabData(): Promise<void> {
 
   isLoading = true;
   error = null;
+  loadProgress = {
+    phase: "checking",
+    current: 0,
+    total: 100,
+    message: "正在檢查本機資料...",
+  };
+  document.getElementById("initial-loader")?.remove();
 
   try {
     const hasLocalData = await tryLoadFromIndexedDB();
@@ -244,6 +251,7 @@ export async function loadVocabData(): Promise<void> {
     console.error("Failed to load vocab data:", e);
   } finally {
     isLoading = false;
+    loadProgress = null;
   }
 }
 
