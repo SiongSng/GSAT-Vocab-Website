@@ -198,7 +198,30 @@ export function ensureCard(lemma: string, senseId: string): SRSCard {
 
 export function updateCard(card: SRSCard): void {
   cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
+  setLastUpdated(Date.now());
   scheduleSave();
+}
+
+export async function setAllCards(cards: SRSCard[]): Promise<void> {
+  const database = await getDB();
+  const tx = database.transaction(CARDS_STORE, "readwrite");
+  const store = tx.objectStore(CARDS_STORE);
+  await store.clear();
+  cardsCache.clear();
+  for (const card of cards) {
+    cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
+    await store.put(card);
+  }
+  await tx.done;
+}
+
+export async function getLastUpdated(): Promise<number> {
+  const val = await getMeta("last_updated");
+  return typeof val === "number" ? val : 0;
+}
+
+export async function setLastUpdated(ts: number): Promise<void> {
+  await setMeta("last_updated", ts);
 }
 
 export async function addReviewLog(log: SRSReviewLog): Promise<void> {

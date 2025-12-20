@@ -1,6 +1,7 @@
 <script lang="ts">
     import { getAppStore, setMode } from "$lib/stores/app.svelte";
     import type { ViewMode } from "$lib/types";
+    import SyncButton from "$lib/components/srs/SyncButton.svelte";
 
     const app = getAppStore();
 
@@ -31,6 +32,10 @@
     </div>
 
     <div class="flex items-center gap-1 sm:gap-2">
+        <SyncButton />
+        
+        <div class="w-px h-4 bg-border mx-1 hidden sm:block"></div>
+
         <button
             class="mode-btn p-2 rounded-md transition-all"
             class:active={app.mode === "browse"}
