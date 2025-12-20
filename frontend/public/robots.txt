@@ -1,0 +1,24 @@
+# Robots.txt for GSAT Vocab Website
+
+User-agent: *
+Allow: /
+
+# Disallow service worker and manifest
+Disallow: /sw.js
+Disallow: /workbox-*.js
+Disallow: /manifest.webmanifest
+
+# Disallow data files (can be large)
+Disallow: /data/
+
+# Allow all other content
+Allow: /word/
+Allow: /flashcard
+Allow: /quiz
+
+
+# Sitemap
+Sitemap: https://siongsng.github.io/GSAT-Vocab-Website/sitemap.xml
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1

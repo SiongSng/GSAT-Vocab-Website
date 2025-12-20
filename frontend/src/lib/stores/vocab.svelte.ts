@@ -10,6 +10,7 @@ import { getRouterStore, navigate } from "./router.svelte";
 import { openMobileDetail } from "./app.svelte";
 import { initVocabDB, buildIndex, getEntry, getEntriesCount } from "./vocab-db";
 import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
+import { updateWordStructuredData } from "$lib/utils/seo";
 
 let vocabIndex: VocabIndexItem[] = $state.raw([]);
 let selectedEntry: VocabEntry | null = $state.raw(null);
@@ -269,9 +270,26 @@ export async function selectWord(lemma: string): Promise<void> {
   try {
     const entry = await getEntry(lemma);
     selectedEntry = entry ?? null;
+
+    if (entry) {
+      const definitions = entry.senses.map((s) => s.zh_def);
+      const examples = entry.senses
+        .flatMap((s) => s.examples?.map((ex) => ex.text) ?? [])
+        .filter((text) => text.length > 0);
+
+      updateWordStructuredData({
+        lemma: entry.lemma,
+        pos: entry.pos,
+        definitions,
+        examples,
+      });
+    } else {
+      updateWordStructuredData(null);
+    }
   } catch (e) {
     console.error("Failed to load word detail:", e);
     selectedEntry = null;
+    updateWordStructuredData(null);
   } finally {
     isLoadingDetail = false;
   }
@@ -296,6 +314,7 @@ export function syncWordFromRoute(): void {
 export function clearSelectedWord(): void {
   selectedEntry = null;
   selectedLemma = null;
+  updateWordStructuredData(null);
 }
 
 export function setSearchTerm(term: string): void {
