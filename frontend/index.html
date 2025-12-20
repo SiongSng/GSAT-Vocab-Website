@@ -103,13 +103,23 @@
             href="/apple-touch-icon.png"
         />
 
-        <!-- Fonts -->
+        <!-- Preconnect: Critical origins for faster resource loading -->
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <!-- Fonts: Non-blocking load with print media trick -->
         <link
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600&family=Noto+Sans+TC:wght@400;500;600;700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600&family=Noto+Sans+TC:wght@400;500;600&display=swap"
             rel="stylesheet"
+            media="print"
+            onload="this.media = 'all'"
         />
+        <noscript>
+            <link
+                href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600&family=Noto+Sans+TC:wght@400;500;600&display=swap"
+                rel="stylesheet"
+            />
+        </noscript>
 
         <!-- Structured Data: WebSite with SearchAction -->
         <script type="application/ld+json">

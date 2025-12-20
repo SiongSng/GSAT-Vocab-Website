@@ -47,7 +47,15 @@
         };
 
         mediaQuery.addEventListener("change", handleMediaChange);
-        loadVocabData();
+
+        // Defer data loading until after first paint to improve LCP
+        // requestAnimationFrame ensures we're past the current frame,
+        // then setTimeout(0) yields to the browser for painting
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                loadVocabData();
+            }, 0);
+        });
 
         return () => {
             destroyRouter();
