@@ -10,7 +10,8 @@
         isEditing: boolean;
     }
 
-    let { initialName, initialLemmas, onSave, onCancel, isEditing }: Props = $props();
+    let { initialName, initialLemmas, onSave, onCancel, isEditing }: Props =
+        $props();
 
     const vocab = getVocabStore();
 
@@ -20,6 +21,8 @@
     let error: string | null = $state(null);
     let isDropdownOpen = $state(false);
     let searchInputEl: HTMLInputElement | null = $state(null);
+    let isSelectingItem = $state(false);
+    let blurTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const selectedSet = $derived(new Set(selectedLemmas));
 
@@ -38,13 +41,16 @@
         return results;
     });
 
-    const showDropdown = $derived(isDropdownOpen && searchQuery.trim() && searchResults.length > 0);
+    const showDropdown = $derived(
+        isDropdownOpen && searchQuery.trim() && searchResults.length > 0,
+    );
 
     function addWord(lemma: string) {
         if (!selectedSet.has(lemma)) {
             selectedLemmas = [...selectedLemmas, lemma];
         }
         searchQuery = "";
+        isSelectingItem = false;
         searchInputEl?.focus();
     }
 
@@ -80,9 +86,23 @@
     }
 
     function handleInputBlur() {
-        setTimeout(() => {
-            isDropdownOpen = false;
-        }, 150);
+        if (blurTimeoutId) {
+            clearTimeout(blurTimeoutId);
+        }
+        blurTimeoutId = setTimeout(() => {
+            if (!isSelectingItem) {
+                isDropdownOpen = false;
+            }
+            blurTimeoutId = null;
+        }, 200);
+    }
+
+    function handleItemPointerDown() {
+        isSelectingItem = true;
+    }
+
+    function handleItemClick(lemma: string) {
+        addWord(lemma);
     }
 </script>
 
@@ -97,8 +117,18 @@
             class="p-1.5 -m-1.5 rounded-md text-content-tertiary hover:text-content-primary hover:bg-surface-hover transition-colors"
             aria-label="關閉"
         >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M6 18 18 6M6 6l12 12"
+                />
             </svg>
         </button>
     </div>
@@ -119,8 +149,18 @@
             <label for="word-search" class="field-label">新增單字</label>
             <div class="search-container">
                 <div class="search-box">
-                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    <svg
+                        class="search-icon"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                        />
                     </svg>
                     <input
                         id="word-search"
@@ -142,7 +182,8 @@
                             <button
                                 type="button"
                                 class="dropdown-item"
-                                onmousedown={() => addWord(item.lemma)}
+                                onpointerdown={handleItemPointerDown}
+                                onclick={() => handleItemClick(item.lemma)}
                             >
                                 <span class="item-lemma">{item.lemma}</span>
                                 <span class="item-pos">{item.primary_pos}</span>
@@ -171,8 +212,18 @@
                             onclick={() => removeWord(lemma)}
                         >
                             <span>{lemma}</span>
-                            <svg class="chip-x" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            <svg
+                                class="chip-x"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                stroke-width="2"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M6 18 18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     {/each}
@@ -184,8 +235,18 @@
 
         {#if error}
             <div class="error-box">
-                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                <svg
+                    class="w-4 h-4 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                    />
                 </svg>
                 {error}
             </div>

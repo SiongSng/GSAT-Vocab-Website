@@ -275,6 +275,23 @@
         return selectedDeck.lemmas.filter((lemma) => newSet.has(lemma));
     });
 
+    const customDueCount = $derived.by(() => {
+        if (!selectedDeck) return 0;
+        const now = new Date();
+        const cards = getAllCards();
+        const deckSet = new Set(selectedDeck.lemmas);
+        let count = 0;
+        for (const card of cards) {
+            if (!deckSet.has(card.lemma)) continue;
+            if (card.state === State.New) {
+                count++;
+            } else if (new Date(card.due) <= now) {
+                count++;
+            }
+        }
+        return count;
+    });
+
     const deckLearnedCountMap = $derived.by(() => {
         const cards = getAllCards();
         const learnedSet = new Set<string>();
@@ -496,7 +513,8 @@
                 <div class="deck-list">
                     {#each customDecks as deck}
                         {@const isSelected = selectedDeckId === deck.id}
-                        {@const learnedCount = deckLearnedCountMap.get(deck.id) || 0}
+                        {@const learnedCount =
+                            deckLearnedCountMap.get(deck.id) || 0}
                         {@const total = deck.lemmas.length}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div
@@ -512,7 +530,9 @@
                             <div class="deck-content">
                                 <div class="deck-name">{deck.name}</div>
                                 <div class="deck-meta">
-                                    <span class="deck-progress-learned">{learnedCount}</span>
+                                    <span class="deck-progress-learned"
+                                        >{learnedCount}</span
+                                    >
                                     <span class="deck-progress-sep">/</span>
                                     <span>{total}</span>
                                 </div>
@@ -574,18 +594,18 @@
                         <button
                             type="button"
                             onclick={handleStartCustomDeck}
-                            disabled={customNewCardPool.length === 0 ||
+                            disabled={customDueCount === 0 ||
                                 !vocab.index ||
                                 vocab.index.length === 0}
                             class="btn-start-secondary"
                         >
-                            {#if customNewCardPool.length > 0}
+                            {#if customDueCount > 0}
                                 開始練習
                                 <span class="btn-start-count"
-                                    >{customNewCardPool.length} 張</span
+                                    >{customDueCount} 張</span
                                 >
                             {:else}
-                                已全部學完
+                                今日完成
                             {/if}
                         </button>
                     </div>
@@ -637,9 +657,7 @@
                     >智慧排序</span
                 >
                 <p class="text-xs text-content-tertiary mt-0.5">
-                    {smartMode
-                        ? "依重要程度排序新卡片"
-                        : "隨機順序呈現新卡片"}
+                    {smartMode ? "依重要程度排序新卡片" : "隨機順序呈現新卡片"}
                 </p>
             </div>
             <button
@@ -662,7 +680,10 @@
 
         <div class="slider-field">
             <div class="slider-header">
-                <label for="new-card-limit" class="text-sm font-medium text-content-secondary">
+                <label
+                    for="new-card-limit"
+                    class="text-sm font-medium text-content-secondary"
+                >
                     每日新卡片
                 </label>
                 <span class="slider-value">{newCardLimit}</span>
@@ -1097,7 +1118,9 @@
         background: var(--color-content-primary);
         border-radius: 50%;
         cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
     }
 
     .slider-input::-webkit-slider-thumb:hover {
@@ -1112,7 +1135,9 @@
         border: none;
         border-radius: 50%;
         cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
     }
 
     .slider-input::-moz-range-thumb:hover {
