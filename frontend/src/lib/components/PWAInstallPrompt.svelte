@@ -9,6 +9,19 @@
 
     const pwa = getPWAStore();
 
+    let isLandscape = $state(false);
+
+    $effect(() => {
+        if (typeof window === "undefined") return;
+        const mq = window.matchMedia("(orientation: landscape)");
+        isLandscape = mq.matches;
+        const handler = (e: MediaQueryListEvent) => {
+            isLandscape = e.matches;
+        };
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
+    });
+
     async function handleInstall() {
         if (pwa.isIOS) {
             showIOSInstallGuide();
@@ -19,7 +32,7 @@
 </script>
 
 {#if pwa.showInstallBanner && !pwa.isStandalone}
-    <div class="install-banner">
+    <div class="install-banner" class:ipad={pwa.isIPad}>
         <div class="banner-content">
             <div class="banner-icon">
                 <svg
@@ -57,7 +70,7 @@
             </div>
             <div class="banner-text">
                 <h3>安裝到桌面</h3>
-                <p>免下載，離線也能背單字</p>
+                <p>免下載，沒網路也能背單字</p>
             </div>
         </div>
         <div class="banner-actions">
@@ -90,6 +103,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
         class="ios-guide-overlay"
+        class:ipad={pwa.isIPad}
         onclick={hideIOSInstallGuide}
         onkeydown={(e) => e.key === "Escape" && hideIOSInstallGuide()}
         role="presentation"
@@ -109,7 +123,11 @@
                 <li>
                     <span class="step-number">1</span>
                     <div class="step-content">
-                        <span>點擊 Safari 下方的分享按鈕</span>
+                        <span
+                            >{pwa.isIPad && isLandscape
+                                ? "點擊 Safari 右上角的分享按鈕"
+                                : "點擊 Safari 下方的分享按鈕"}</span
+                        >
                         <div class="share-icon">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path
@@ -158,9 +176,81 @@
         justify-content: space-between;
         gap: 12px;
         padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
         background: var(--color-surface-primary);
         border-top: 1px solid var(--color-border);
         box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Tablet landscape: compact card at top-right */
+    @media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+        .install-banner:global(.ipad) {
+            top: 12px;
+            bottom: auto;
+            left: auto;
+            right: 12px;
+            width: auto;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 14px;
+            border-top: none;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .install-banner:global(.ipad) .banner-content {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .install-banner:global(.ipad) .banner-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .install-banner:global(.ipad) .banner-text h3 {
+            font-size: 14px;
+        }
+
+        .install-banner:global(.ipad) .banner-text p {
+            font-size: 12px;
+        }
+
+        .install-banner:global(.ipad) .banner-actions {
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .install-banner:global(.ipad) .install-btn {
+            width: 100%;
+            padding: 10px 16px;
+        }
+
+        .install-banner:global(.ipad) .dismiss-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+        }
+    }
+
+    /* Tablet portrait: centered bottom banner with max-width */
+    @media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+        .install-banner:global(.ipad) {
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+            width: calc(100% - 32px);
+            max-width: 400px;
+            border-radius: 12px 12px 0 0;
+            padding: 14px 20px;
+            padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        }
     }
 
     .banner-content {
@@ -366,10 +456,37 @@
 
     .arrow-indicator {
         position: absolute;
-        bottom: 40px;
+        bottom: calc(40px + env(safe-area-inset-bottom, 0px));
         left: 50%;
         transform: translateX(-50%);
         animation: bounce 1s infinite;
+    }
+
+    /* Tablet landscape: arrow points to top-right */
+    @media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+        .ios-guide-overlay:global(.ipad) .arrow-indicator {
+            bottom: auto;
+            top: 40px;
+            left: auto;
+            right: 60px;
+            transform: rotate(180deg);
+            animation: bounce-up 1s infinite;
+        }
+
+        .ios-guide-overlay:global(.ipad) .ios-guide-content {
+            margin-bottom: 0;
+            margin-top: 120px;
+        }
+    }
+
+    @keyframes bounce-up {
+        0%,
+        100% {
+            transform: rotate(180deg) translateY(0);
+        }
+        50% {
+            transform: rotate(180deg) translateY(10px);
+        }
     }
 
     .arrow-indicator svg {

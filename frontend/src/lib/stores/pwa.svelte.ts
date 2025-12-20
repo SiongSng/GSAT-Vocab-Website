@@ -6,6 +6,7 @@ type BeforeInstallPromptEvent = Event & {
 interface PWAStore {
   canInstall: boolean;
   isIOS: boolean;
+  isIPad: boolean;
   isStandalone: boolean;
   showIOSGuide: boolean;
   showInstallBanner: boolean;
@@ -16,6 +17,7 @@ let deferredPrompt: BeforeInstallPromptEvent | null = null;
 const store: PWAStore = $state({
   canInstall: false,
   isIOS: false,
+  isIPad: false,
   isStandalone: false,
   showIOSGuide: false,
   showInstallBanner: false,
@@ -28,7 +30,9 @@ function detectPlatform(): void {
     navigator.platform === "MacIntel" &&
     navigator.maxTouchPoints > 1 &&
     !("MSStream" in window);
+  const isIPadUA = /iPad/.test(ua) && !("MSStream" in window);
   store.isIOS = isIOSDevice || isIPadOS;
+  store.isIPad = isIPadUA || isIPadOS;
   store.isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     ("standalone" in navigator &&
@@ -43,11 +47,14 @@ function shouldShowBanner(): boolean {
   );
   if (dismissCount >= 5) return false;
 
+  // First 2 dismisses: show again immediately (in case of accidental tap)
+  if (dismissCount < 2) return true;
+
   const lastDismiss = localStorage.getItem("pwa-last-dismiss");
   if (lastDismiss) {
     const daysSinceLastDismiss =
       (Date.now() - parseInt(lastDismiss)) / (1000 * 60 * 60 * 24);
-    const waitDays = Math.min(dismissCount * 2, 14);
+    const waitDays = Math.min((dismissCount - 1) * 2, 14);
     if (daysSinceLastDismiss < waitDays) return false;
   }
 
@@ -94,6 +101,9 @@ export function getPWAStore() {
     },
     get isIOS() {
       return store.isIOS;
+    },
+    get isIPad() {
+      return store.isIPad;
     },
     get isStandalone() {
       return store.isStandalone;
