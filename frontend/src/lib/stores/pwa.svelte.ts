@@ -23,7 +23,12 @@ const store: PWAStore = $state({
 
 function detectPlatform(): void {
   const ua = navigator.userAgent;
-  store.isIOS = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
+  const isIOSDevice = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
+  const isIPadOS =
+    navigator.platform === "MacIntel" &&
+    navigator.maxTouchPoints > 1 &&
+    !("MSStream" in window);
+  store.isIOS = isIOSDevice || isIPadOS;
   store.isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     ("standalone" in navigator &&
