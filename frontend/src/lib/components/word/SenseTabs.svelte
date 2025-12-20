@@ -12,14 +12,36 @@
     let activeSenseIndex = $state(0);
     let playingSentenceIndex = $state<number | null>(null);
     let audioPlayer: HTMLAudioElement | null = null;
+    let examplePage = $state(0);
+    const EXAMPLES_PER_PAGE = 5;
+
+    $effect(() => {
+        lemma;
+        activeSenseIndex = 0;
+        examplePage = 0;
+    });
 
     const activeSense = $derived(senses[activeSenseIndex]);
     const showTabs = $derived(senses.length > 1);
     const maxVisibleTabs = 4;
     const hasMoreTabs = $derived(senses.length > maxVisibleTabs);
 
+    const totalExamples = $derived(activeSense?.examples?.length ?? 0);
+    const totalPages = $derived(Math.ceil(totalExamples / EXAMPLES_PER_PAGE));
+    const paginatedExamples = $derived(
+        activeSense?.examples?.slice(
+            examplePage * EXAMPLES_PER_PAGE,
+            (examplePage + 1) * EXAMPLES_PER_PAGE,
+        ) ?? [],
+    );
+
     function selectSense(index: number) {
         activeSenseIndex = index;
+        examplePage = 0;
+    }
+
+    function goToPage(page: number) {
+        examplePage = page;
     }
 
     function truncateDef(def: string, maxLen: number = 8): string {
@@ -99,11 +121,15 @@
         <!-- Single sense: larger display -->
         <div class="single-sense mb-4">
             <div class="flex items-center gap-2 mb-2">
-                <span class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded">
+                <span
+                    class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded"
+                >
                     {activeSense.pos}
                 </span>
                 {#if activeSense.tested_in_exam}
-                    <span class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded">
+                    <span
+                        class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded"
+                    >
                         曾考
                     </span>
                 {/if}
@@ -130,7 +156,9 @@
                         >
                     {/if}
                     {#if activeSense.en_def}
-                        <p class="text-sm text-content-secondary leading-relaxed">
+                        <p
+                            class="text-sm text-content-secondary leading-relaxed"
+                        >
                             {activeSense.en_def}
                         </p>
                     {/if}
@@ -139,19 +167,77 @@
 
             {#if activeSense.examples?.length > 0}
                 <div class="examples-block">
-                    <h4
-                        class="text-xs font-medium text-content-tertiary uppercase tracking-wider mb-3"
-                    >
-                        真實考題例句
-                    </h4>
+                    <div class="flex items-center justify-between mb-3">
+                        <h4
+                            class="text-xs font-medium text-content-tertiary uppercase tracking-wider"
+                        >
+                            真實考題例句
+                            {#if totalExamples > EXAMPLES_PER_PAGE}
+                                <span class="normal-case"
+                                    >({totalExamples})</span
+                                >
+                            {/if}
+                        </h4>
+                        {#if totalPages > 1}
+                            <div class="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    disabled={examplePage === 0}
+                                    onclick={() => goToPage(examplePage - 1)}
+                                    aria-label="上一頁"
+                                >
+                                    <svg
+                                        class="w-4 h-4 text-content-tertiary"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke-width="1.5"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M15.75 19.5 8.25 12l7.5-7.5"
+                                        />
+                                    </svg>
+                                </button>
+                                <span
+                                    class="text-xs text-content-tertiary px-1"
+                                >
+                                    {examplePage + 1} / {totalPages}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    disabled={examplePage >= totalPages - 1}
+                                    onclick={() => goToPage(examplePage + 1)}
+                                    aria-label="下一頁"
+                                >
+                                    <svg
+                                        class="w-4 h-4 text-content-tertiary"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke-width="1.5"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        {/if}
+                    </div>
                     <div class="space-y-3">
-                        {#each activeSense.examples as example, i}
+                        {#each paginatedExamples as example, i (examplePage * EXAMPLES_PER_PAGE + i)}
                             <div
                                 class="example-item bg-surface-primary rounded-lg p-4 border border-border shadow-card"
                             >
-                                <p
-                                    class="text-content-primary leading-relaxed"
-                                >
+                                <p class="text-content-primary leading-relaxed">
                                     <ClickableWord
                                         text={example.text}
                                         highlightWord={lemma}
@@ -169,9 +255,14 @@
                                         type="button"
                                         class="p-1.5 rounded-md hover:bg-surface-hover transition-colors"
                                         class:animate-pulse={playingSentenceIndex ===
-                                            i}
+                                            examplePage * EXAMPLES_PER_PAGE + i}
                                         onclick={() =>
-                                            playSentenceAudio(example.text, i)}
+                                            playSentenceAudio(
+                                                example.text,
+                                                examplePage *
+                                                    EXAMPLES_PER_PAGE +
+                                                    i,
+                                            )}
                                         title="播放例句"
                                     >
                                         <svg
