@@ -12,6 +12,7 @@
     let activeSenseIndex = $state(0);
     let playingSentenceIndex = $state<number | null>(null);
     let audioPlayer: HTMLAudioElement | null = null;
+    let showExamExamples = $state(true);
     let examplePage = $state(0);
     const EXAMPLES_PER_PAGE = 5;
 
@@ -19,6 +20,7 @@
         lemma;
         activeSenseIndex = 0;
         examplePage = 0;
+        showExamExamples = true;
     });
 
     const activeSense = $derived(senses[activeSenseIndex]);
@@ -38,6 +40,7 @@
     function selectSense(index: number) {
         activeSenseIndex = index;
         examplePage = 0;
+        showExamExamples = true;
     }
 
     function goToPage(page: number) {
@@ -94,19 +97,21 @@
 </script>
 
 <div class="sense-tabs-container">
+    <!-- Tabs for multiple senses -->
     {#if showTabs}
         <div class="flex gap-1 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
             {#each senses.slice(0, maxVisibleTabs) as sense, i}
                 <button
                     type="button"
-                    class="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-md transition-all {activeSenseIndex ===
-                    i
-                        ? 'bg-accent-soft text-accent'
-                        : 'bg-surface-page text-content-secondary hover:bg-surface-hover hover:text-content-primary'}"
+                    class="sense-tab"
+                    class:active={activeSenseIndex === i}
                     onclick={() => selectSense(i)}
                 >
-                    <span class="text-xs opacity-70">{sense.pos}</span>
-                    <span class="ml-1">{truncateDef(sense.zh_def)}</span>
+                    <span class="tab-pos">{sense.pos}</span>
+                    <span class="tab-def">{truncateDef(sense.zh_def)}</span>
+                    {#if sense.tested_in_exam}
+                        <span class="tab-tested-dot"></span>
+                    {/if}
                 </button>
             {/each}
             {#if hasMoreTabs}
@@ -117,186 +122,30 @@
                 </span>
             {/if}
         </div>
-    {:else if activeSense}
-        <!-- Single sense: larger display -->
-        <div class="single-sense mb-4">
-            <div class="flex items-center gap-2 mb-2">
-                <span
-                    class="text-xs font-medium px-2 py-0.5 bg-accent-soft text-accent rounded"
-                >
-                    {activeSense.pos}
-                </span>
-                {#if activeSense.tested_in_exam}
-                    <span
-                        class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded"
-                    >
-                        曾考
-                    </span>
-                {/if}
-            </div>
-            <p class="text-lg text-content-primary leading-relaxed">
-                {activeSense.zh_def}
-            </p>
-            {#if activeSense.en_def}
-                <p class="text-sm text-content-secondary mt-1 leading-relaxed">
-                    {activeSense.en_def}
-                </p>
-            {/if}
-        </div>
     {/if}
 
     {#if activeSense}
-        <div class="sense-content space-y-4">
-            {#if showTabs && (activeSense.tested_in_exam || activeSense.en_def)}
-                <div class="definition-block flex items-start gap-2">
-                    {#if activeSense.tested_in_exam}
-                        <span
-                            class="text-xs font-medium px-1.5 py-0.5 bg-srs-good-soft text-srs-good rounded flex-shrink-0"
-                            >曾考</span
-                        >
-                    {/if}
-                    {#if activeSense.en_def}
-                        <p
-                            class="text-sm text-content-secondary leading-relaxed"
-                        >
-                            {activeSense.en_def}
-                        </p>
-                    {/if}
-                </div>
-            {/if}
-
-            {#if activeSense.examples?.length > 0}
-                <div class="examples-block">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4
-                            class="text-xs font-medium text-content-tertiary uppercase tracking-wider"
-                        >
-                            真實考題例句
-                            {#if totalExamples > EXAMPLES_PER_PAGE}
-                                <span class="normal-case"
-                                    >({totalExamples})</span
-                                >
-                            {/if}
-                        </h4>
-                        {#if totalPages > 1}
-                            <div class="flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    disabled={examplePage === 0}
-                                    onclick={() => goToPage(examplePage - 1)}
-                                    aria-label="上一頁"
-                                >
-                                    <svg
-                                        class="w-4 h-4 text-content-tertiary"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke-width="1.5"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="M15.75 19.5 8.25 12l7.5-7.5"
-                                        />
-                                    </svg>
-                                </button>
-                                <span
-                                    class="text-xs text-content-tertiary px-1"
-                                >
-                                    {examplePage + 1} / {totalPages}
-                                </span>
-                                <button
-                                    type="button"
-                                    class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    disabled={examplePage >= totalPages - 1}
-                                    onclick={() => goToPage(examplePage + 1)}
-                                    aria-label="下一頁"
-                                >
-                                    <svg
-                                        class="w-4 h-4 text-content-tertiary"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke-width="1.5"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="m8.25 4.5 7.5 7.5-7.5 7.5"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
+        <div class="sense-content">
+            <!-- Definition Block - Primary focus -->
+            <div class="definition-block mb-4">
+                {#if !showTabs}
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="pos-tag">{activeSense.pos}</span>
+                        {#if activeSense.tested_in_exam}
+                            <span class="tested-tag">曾考</span>
                         {/if}
                     </div>
-                    <div class="space-y-3">
-                        {#each paginatedExamples as example, i (examplePage * EXAMPLES_PER_PAGE + i)}
-                            <div
-                                class="example-item bg-surface-primary rounded-lg p-4 border border-border shadow-card"
-                            >
-                                <p class="text-content-primary leading-relaxed">
-                                    <ClickableWord
-                                        text={example.text}
-                                        highlightWord={lemma}
-                                    />
-                                </p>
-                                <div
-                                    class="flex items-center justify-between mt-3"
-                                >
-                                    <span
-                                        class="text-xs text-content-tertiary bg-surface-page px-2 py-1 rounded"
-                                    >
-                                        {formatSource(example.source)}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        class="p-1.5 rounded-md hover:bg-surface-hover transition-colors"
-                                        class:animate-pulse={playingSentenceIndex ===
-                                            examplePage * EXAMPLES_PER_PAGE + i}
-                                        onclick={() =>
-                                            playSentenceAudio(
-                                                example.text,
-                                                examplePage *
-                                                    EXAMPLES_PER_PAGE +
-                                                    i,
-                                            )}
-                                        title="播放例句"
-                                    >
-                                        <svg
-                                            class="w-4 h-4 text-content-tertiary"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                                            />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
+                {/if}
+                <p class="zh-def">{activeSense.zh_def}</p>
+                {#if activeSense.en_def}
+                    <p class="en-def">{activeSense.en_def}</p>
+                {/if}
+            </div>
 
+            <!-- Learning Example - LLM generated, prioritized -->
             {#if activeSense.generated_example}
-                <div class="generated-example-block">
-                    <h4
-                        class="text-xs font-medium text-content-tertiary uppercase tracking-wider mb-2"
-                    >
-                        學習例句
-                    </h4>
-                    <p
-                        class="text-sm text-content-secondary italic leading-relaxed"
-                    >
+                <div class="learning-example mb-4">
+                    <p class="example-text">
                         <ClickableWord
                             text={activeSense.generated_example}
                             highlightWord={lemma}
@@ -304,6 +153,316 @@
                     </p>
                 </div>
             {/if}
+
+            <!-- Exam Examples - Secondary, collapsible -->
+            {#if totalExamples > 0}
+                <div class="exam-examples-section">
+                    <button
+                        type="button"
+                        class="exam-toggle"
+                        onclick={() => (showExamExamples = !showExamExamples)}
+                    >
+                        <span>歷屆考題 ({totalExamples})</span>
+                        <svg
+                            class="w-4 h-4 transition-transform {showExamExamples
+                                ? 'rotate-180'
+                                : ''}"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                            />
+                        </svg>
+                    </button>
+
+                    {#if showExamExamples}
+                        <div class="exam-examples-list">
+                            <div class="exam-list-header">
+                                {#if totalPages > 1}
+                                    <div class="pagination-controls">
+                                        <button
+                                            type="button"
+                                            class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            disabled={examplePage === 0}
+                                            onclick={() =>
+                                                goToPage(examplePage - 1)}
+                                            aria-label="上一頁"
+                                        >
+                                            <svg
+                                                class="w-4 h-4 text-content-tertiary"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke-width="1.5"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M15.75 19.5 8.25 12l7.5-7.5"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <span
+                                            class="text-xs text-content-tertiary"
+                                        >
+                                            {examplePage + 1}/{totalPages}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            class="p-1 rounded hover:bg-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            disabled={examplePage >=
+                                                totalPages - 1}
+                                            onclick={() =>
+                                                goToPage(examplePage + 1)}
+                                            aria-label="下一頁"
+                                        >
+                                            <svg
+                                                class="w-4 h-4 text-content-tertiary"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke-width="1.5"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                                                />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                {/if}
+                            </div>
+                            <div class="exam-items">
+                                {#each paginatedExamples as example, i (examplePage * EXAMPLES_PER_PAGE + i)}
+                                    <div class="exam-item">
+                                        <p class="exam-text">
+                                            <ClickableWord
+                                                text={example.text}
+                                                highlightWord={lemma}
+                                            />
+                                        </p>
+                                        <div class="exam-meta">
+                                            <span class="exam-source">
+                                                {formatSource(example.source)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                class="p-1 rounded hover:bg-surface-hover transition-colors"
+                                                class:animate-pulse={playingSentenceIndex ===
+                                                    examplePage *
+                                                        EXAMPLES_PER_PAGE +
+                                                        i}
+                                                onclick={() =>
+                                                    playSentenceAudio(
+                                                        example.text,
+                                                        examplePage *
+                                                            EXAMPLES_PER_PAGE +
+                                                            i,
+                                                    )}
+                                                title="播放例句"
+                                            >
+                                                <svg
+                                                    class="w-3.5 h-3.5 text-content-tertiary"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke-width="1.5"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
         </div>
     {/if}
 </div>
+
+<style>
+    /* Sense Tabs */
+    .sense-tab {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        flex-shrink: 0;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 6px;
+        background: var(--color-surface-page);
+        color: var(--color-content-secondary);
+        transition: all 0.15s ease;
+        position: relative;
+    }
+
+    .sense-tab:hover {
+        background: var(--color-surface-hover);
+        color: var(--color-content-primary);
+    }
+
+    .sense-tab.active {
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .tab-pos {
+        font-size: 0.75rem;
+        opacity: 0.7;
+    }
+
+    .tab-tested-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-srs-good);
+        margin-left: 0.25rem;
+    }
+
+    /* Definition Block */
+    .pos-tag {
+        font-size: 0.75rem;
+        font-weight: 500;
+        padding: 0.125rem 0.5rem;
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+        border-radius: 4px;
+    }
+
+    .tested-tag {
+        font-size: 0.6875rem;
+        font-weight: 500;
+        padding: 0.125rem 0.375rem;
+        background: var(--color-srs-good-soft);
+        color: var(--color-srs-good);
+        border-radius: 4px;
+    }
+
+    .zh-def {
+        font-size: 1.125rem;
+        font-weight: 500;
+        color: var(--color-content-primary);
+        line-height: 1.5;
+        margin-bottom: 0.25rem;
+    }
+
+    .en-def {
+        font-size: 0.875rem;
+        color: var(--color-content-secondary);
+        line-height: 1.5;
+    }
+
+    /* Learning Example */
+    .learning-example {
+        padding: 0.75rem;
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+    }
+
+    .example-text {
+        font-size: 0.9375rem;
+        color: var(--color-content-primary);
+        line-height: 1.6;
+    }
+
+    /* Exam Examples */
+    .exam-examples-section {
+        margin-top: 0.5rem;
+    }
+
+    .exam-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--color-content-tertiary);
+        transition: color 0.15s ease;
+    }
+
+    .exam-toggle:hover {
+        color: var(--color-content-secondary);
+    }
+
+    .exam-examples-list {
+        animation: fadeIn 0.15s ease-out;
+    }
+
+    .exam-list-header {
+        display: flex;
+        justify-content: flex-end;
+        min-height: 0;
+    }
+
+    .pagination-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .exam-items {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.375rem;
+    }
+
+    .exam-item {
+        padding: 0.75rem;
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+    }
+
+    .exam-text {
+        font-size: 0.875rem;
+        color: var(--color-content-primary);
+        line-height: 1.5;
+        margin-bottom: 0.5rem;
+    }
+
+    .exam-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .exam-source {
+        font-size: 0.6875rem;
+        color: var(--color-content-tertiary);
+        background: var(--color-surface-page);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
