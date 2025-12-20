@@ -191,9 +191,9 @@
                 />
             </div>
 
-            <div class="space-y-2">
+            <div class="filter-section">
                 <div class="flex items-center gap-1.5">
-                    <h3 class="section-header mb-0">詞彙等級</h3>
+                    <h3 class="section-header">詞彙等級</h3>
                     <HelpTooltip
                         text="大考中心官方難度分級：1-2 基礎、3-4 中級、5-6 進階"
                     />
@@ -212,8 +212,8 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <h3 class="section-header mb-0">詞彙類型</h3>
+            <div class="filter-section">
+                <h3 class="section-header">詞彙類型</h3>
                 <div class="flex flex-wrap gap-1.5">
                     {#each typeOptions as option}
                         <button
@@ -228,8 +228,8 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <h3 class="section-header mb-0">詞性</h3>
+            <div class="filter-section">
+                <h3 class="section-header">詞性</h3>
                 <div class="flex flex-wrap gap-1.5">
                     {#each posOptions as option}
                         <button
@@ -244,13 +244,13 @@
                 </div>
             </div>
 
-            <div class="space-y-2">
+            <div class="filter-section">
                 <button
                     class="flex items-center justify-between w-full text-left"
                     onclick={toggleAdvanced}
                     type="button"
                 >
-                    <h3 class="section-header mb-0">進階篩選</h3>
+                    <h3 class="section-header">進階篩選</h3>
                     <svg
                         class="w-4 h-4 text-content-tertiary transition-transform duration-200"
                         class:rotate-180={isAdvancedOpen}
@@ -376,7 +376,14 @@
         font-size: 0.8125rem;
         font-weight: 600;
         color: var(--color-section-header);
-        margin-bottom: 0.75rem;
+        line-height: 1;
+        margin: 0;
+    }
+
+    .filter-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
     }
 
     .filter-chip {
