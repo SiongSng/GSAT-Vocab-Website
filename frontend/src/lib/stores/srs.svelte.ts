@@ -223,15 +223,13 @@ export function addSenseToSRS(lemma: string, senseId: string): void {
 
 function getEligibleNewCards(
   excludeSet: Set<string>,
-  poolSet?: Set<string>,
+  orderedPool?: string[],
 ): SRSCard[] {
   const allNewCards = getNewCards();
-  const eligible: SRSCard[] = [];
-  const lemmasWithPrimaryQueued = new Set<string>();
+  const cardMap = new Map<string, SRSCard[]>();
 
   for (const card of allNewCards) {
     if (excludeSet.has(card.lemma)) continue;
-    if (poolSet && !poolSet.has(card.lemma)) continue;
 
     const isPrimarySense =
       card.sense_id === "primary" ||
@@ -239,17 +237,28 @@ function getEligibleNewCards(
         (c) => c.sense_id === "primary" && c !== card,
       );
 
-    if (isPrimarySense) {
-      eligible.push(card);
-      lemmasWithPrimaryQueued.add(card.lemma);
-    } else {
-      if (shouldUnlockSecondarySenses(card.lemma)) {
-        eligible.push(card);
-      }
+    const isEligible =
+      isPrimarySense || shouldUnlockSecondarySenses(card.lemma);
+
+    if (isEligible) {
+      const existing = cardMap.get(card.lemma) || [];
+      existing.push(card);
+      cardMap.set(card.lemma, existing);
     }
   }
 
-  return eligible;
+  if (orderedPool && orderedPool.length > 0) {
+    const result: SRSCard[] = [];
+    for (const lemma of orderedPool) {
+      const cards = cardMap.get(lemma);
+      if (cards) {
+        result.push(...cards);
+      }
+    }
+    return result;
+  }
+
+  return Array.from(cardMap.values()).flat();
 }
 
 export function startStudySession(options?: {
@@ -276,13 +285,10 @@ export function startStudySession(options?: {
     .filter((c) => !excludeSet.has(c.lemma))
     .slice(0, reviewLimit);
 
-  const poolSet =
-    options?.newCardPool && options.newCardPool.length > 0
-      ? new Set(options.newCardPool)
-      : undefined;
-
-  const eligibleNewCards = getEligibleNewCards(excludeSet, poolSet);
-  shuffleArray(eligibleNewCards);
+  const eligibleNewCards = getEligibleNewCards(
+    excludeSet,
+    options?.newCardPool,
+  );
   const newCards = eligibleNewCards.slice(0, newLimit);
 
   queue.push(...learningCards);
