@@ -28,10 +28,21 @@ function escapeXml(unsafe) {
 
 function generateSitemap() {
   console.log("Reading vocab data...");
-  const vocabData = JSON.parse(readFileSync(VOCAB_JSON_PATH, "utf-8"));
-  const entries = vocabData.entries || [];
 
-  console.log(`Found ${entries.length} vocabulary entries`);
+  let entries = [];
+  try {
+    const vocabData = JSON.parse(readFileSync(VOCAB_JSON_PATH, "utf-8"));
+    entries = vocabData.entries || [];
+    console.log(`Found ${entries.length} vocabulary entries`);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      console.warn(
+        "⚠ vocab.json not found, generating sitemap with static pages only",
+      );
+    } else {
+      throw error;
+    }
+  }
 
   const now = new Date().toISOString().split("T")[0];
 
