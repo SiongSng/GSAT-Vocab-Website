@@ -1,7 +1,12 @@
 import { db } from "$lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuthStore } from "./auth.svelte";
-import { getAllCards, setAllCards, getLastUpdated, setLastUpdated } from "./srs-storage";
+import {
+  getAllCards,
+  setAllCards,
+  getLastUpdated,
+  setLastUpdated,
+} from "./srs-storage";
 import type { SRSCard } from "$lib/types/srs";
 
 interface SyncState {
@@ -15,7 +20,7 @@ const STORAGE_KEY = "gsat_last_sync_time";
 const state = $state<SyncState>({
   status: "idle",
   lastSyncError: null,
-  lastSyncTime: Number(localStorage.getItem(STORAGE_KEY)) || 0
+  lastSyncTime: Number(localStorage.getItem(STORAGE_KEY)) || 0,
 });
 
 const auth = getAuthStore();
@@ -32,7 +37,10 @@ function compressCard(card: SRSCard) {
   return {
     lm: card.lemma,
     sid: card.sense_id,
-    du: card.due instanceof Date ? card.due.getTime() : new Date(card.due).getTime(),
+    du:
+      card.due instanceof Date
+        ? card.due.getTime()
+        : new Date(card.due).getTime(),
     s: card.stability,
     d: card.difficulty,
     sc: card.scheduled_days,
@@ -40,8 +48,12 @@ function compressCard(card: SRSCard) {
     l: card.lapses,
     st: card.state,
     ls: card.learning_steps,
-    lr: card.last_review ? (card.last_review instanceof Date ? card.last_review.getTime() : new Date(card.last_review).getTime()) : null
-  }; 
+    lr: card.last_review
+      ? card.last_review instanceof Date
+        ? card.last_review.getTime()
+        : new Date(card.last_review).getTime()
+      : null,
+  };
 }
 
 function decompressCard(c: any): SRSCard {
@@ -58,15 +70,21 @@ function decompressCard(c: any): SRSCard {
     lapses: c.l,
     state: c.st,
     learning_steps: c.ls || [],
-    last_review: c.lr ? new Date(c.lr) : undefined
+    last_review: c.lr ? new Date(c.lr) : undefined,
   };
 }
 
 export function getSyncStore() {
   return {
-    get status() { return state.status; },
-    get lastSyncError() { return state.lastSyncError; },
-    get lastSyncTime() { return state.lastSyncTime; },
+    get status() {
+      return state.status;
+    },
+    get lastSyncError() {
+      return state.lastSyncError;
+    },
+    get lastSyncTime() {
+      return state.lastSyncTime;
+    },
 
     async syncWithCloud(forceOverwriteLocal = false) {
       if (!auth.user) {
@@ -79,7 +97,9 @@ export function getSyncStore() {
       const now = Date.now();
       if (state.status === "syncing") return;
       if (!forceOverwriteLocal && now - state.lastSyncTime < SYNC_COOLDOWN_MS) {
-        const remaining = Math.ceil((SYNC_COOLDOWN_MS - (now - state.lastSyncTime)) / 1000);
+        const remaining = Math.ceil(
+          (SYNC_COOLDOWN_MS - (now - state.lastSyncTime)) / 1000,
+        );
         state.lastSyncError = `同步過於頻繁，請稍候 ${remaining} 秒`;
         state.status = "error";
         return { rateLimited: true, remaining };
@@ -91,7 +111,7 @@ export function getSyncStore() {
       try {
         const userDocRef = doc(db, `users/${auth.user.uid}/sync/data`);
         const docSnap = await getDoc(userDocRef);
-        
+
         const localLastUpdated = await getLastUpdated();
         const localCards = getAllCards();
 
@@ -101,7 +121,11 @@ export function getSyncStore() {
 
           if (cloudLastUpdated > localLastUpdated && !forceOverwriteLocal) {
             state.status = "conflict";
-            return { conflict: true, cloudTime: cloudLastUpdated, localTime: localLastUpdated };
+            return {
+              conflict: true,
+              cloudTime: cloudLastUpdated,
+              localTime: localLastUpdated,
+            };
           }
 
           if (cloudLastUpdated > localLastUpdated && forceOverwriteLocal) {
@@ -118,29 +142,34 @@ export function getSyncStore() {
         // Local is newer or cloud doesn't exist: Upload local to cloud
         const compressedCards = localCards.map(compressCard);
         const newTimestamp = Date.now();
-        
+
         await setDoc(userDocRef, {
           cards: compressedCards,
-          last_updated: newTimestamp
+          last_updated: newTimestamp,
         });
-        
+
         await setLastUpdated(newTimestamp);
         updateLastSyncTime(Date.now());
         state.status = "success";
         return { success: true };
-
       } catch (error: any) {
         console.error("Sync failed:", error);
         // Friendly messages for common blocking issues
         const msg = String(error?.message || "");
-        if (/Cross-Origin-Opener-Policy|window\.close|window\.closed/i.test(msg) || /ERR_BLOCKED_BY_CLIENT/i.test(msg)) {
-          state.lastSyncError = "無法連線到雲端：瀏覽器或擴充套件可能阻擋了 Firebase 請求（請關閉廣告封鎖器或允許 firestore.googleapis.com）。";
+        if (
+          /Cross-Origin-Opener-Policy|window\.close|window\.closed/i.test(
+            msg,
+          ) ||
+          /ERR_BLOCKED_BY_CLIENT/i.test(msg)
+        ) {
+          state.lastSyncError =
+            "無法連線到雲端：瀏覽器或擴充套件可能阻擋了 Firebase 請求（請關閉廣告封鎖器或允許 firestore.googleapis.com）。";
         } else {
           state.lastSyncError = msg || "同步失敗";
         }
         state.status = "error";
         throw error;
       }
-    }
+    },
   };
 }
