@@ -55,11 +55,16 @@
     --tracking-tighter: -0.8px;
 }
 
+:root {
+    color-scheme: light;
+}
+
 html,
 body {
     height: 100%;
     margin: 0;
     padding: 0;
+    background-color: var(--color-surface-page);
 }
 
 #app {

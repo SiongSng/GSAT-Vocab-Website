@@ -11,6 +11,7 @@ export default defineConfig({
     tailwindcss(),
     svelte(),
     VitePWA({
+      minify: false,
       registerType: "autoUpdate",
       includeAssets: [
         "favicon.ico",
@@ -18,14 +19,20 @@ export default defineConfig({
         "favicon-16x16.png",
         "favicon-32x32.png",
         "apple-touch-icon.png",
+        "pwa-192x192.png",
+        "pwa-512x512.png",
+        "pwa-1024x1024.png",
+        "pwa-maskable-192x192.png",
+        "pwa-maskable-512x512.png",
+        "pwa-maskable-1024x1024.png",
       ],
       manifest: {
         name: "學測高頻單字",
         short_name: "學測單字",
         description:
           "從歷屆學測試題萃取 5000+ 高頻單字，智慧複習排程搭配詞頻統計與字根拆解，備考效率大提升。",
-        theme_color: "#207dff",
-        background_color: "#f8fafc",
+        theme_color: "#f7f7f7",
+        background_color: "#f7f7f7",
         display: "standalone",
         orientation: "portrait-primary",
         scope: base,
@@ -46,6 +53,12 @@ export default defineConfig({
             purpose: "any",
           },
           {
+            src: "pwa-1024x1024.png",
+            sizes: "1024x1024",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
             src: "pwa-maskable-192x192.png",
             sizes: "192x192",
             type: "image/png",
@@ -54,6 +67,12 @@ export default defineConfig({
           {
             src: "pwa-maskable-512x512.png",
             sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+          {
+            src: "pwa-maskable-1024x1024.png",
+            sizes: "1024x1024",
             type: "image/png",
             purpose: "maskable",
           },
