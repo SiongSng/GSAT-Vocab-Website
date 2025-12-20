@@ -36,6 +36,27 @@ export type AudioState = "idle" | "loading" | "playing" | "error";
 
 let globalAudio: HTMLAudioElement | null = null;
 let currentController: AudioController | null = null;
+let currentPlayingText: string | null = null;
+let globalStateSubscribers: Set<
+  (text: string | null, state: AudioState) => void
+> = new Set();
+
+function notifyGlobalState(text: string | null, state: AudioState) {
+  currentPlayingText = text;
+  for (const cb of globalStateSubscribers) {
+    cb(text, state);
+  }
+}
+
+export function subscribeToGlobalAudioState(
+  callback: (text: string | null, state: AudioState) => void,
+): () => void {
+  globalStateSubscribers.add(callback);
+  callback(currentPlayingText, currentController?.getState() ?? "idle");
+  return () => {
+    globalStateSubscribers.delete(callback);
+  };
+}
 
 function getGlobalAudio(): HTMLAudioElement {
   if (!globalAudio) {
@@ -191,11 +212,15 @@ export function createAudioController(getText: () => string): AudioController {
   let state: AudioState = "idle";
   let subscribers: Set<(state: AudioState) => void> = new Set();
   let aborted = false;
+  let currentText: string | null = null;
 
   function setState(newState: AudioState) {
     state = newState;
     for (const cb of subscribers) {
       cb(newState);
+    }
+    if (currentController === controller) {
+      notifyGlobalState(currentText, newState);
     }
   }
 
@@ -209,12 +234,12 @@ export function createAudioController(getText: () => string): AudioController {
       currentController = controller;
 
       aborted = false;
+      currentText = getText();
       setState("loading");
 
       let url: string;
       try {
-        const text = getText();
-        url = await speakText(text);
+        url = await speakText(currentText);
       } catch (err) {
         console.error("[TTS] Synthesis failed:", err);
         if (!aborted) {

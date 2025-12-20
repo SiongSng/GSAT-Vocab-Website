@@ -1,5 +1,10 @@
 <script lang="ts">
-    import { createAudioController, isAudioCached, type AudioState } from "$lib/tts";
+    import {
+        createAudioController,
+        isAudioCached,
+        subscribeToGlobalAudioState,
+        type AudioState,
+    } from "$lib/tts";
 
     interface Props {
         text: string;
@@ -8,23 +13,42 @@
         class?: string;
     }
 
-    let { text, size = "md", variant = "ghost", class: className = "" }: Props = $props();
+    let {
+        text,
+        size = "md",
+        variant = "ghost",
+        class: className = "",
+    }: Props = $props();
 
-    let audioState = $state<AudioState>("idle");
-    let controller = $state<ReturnType<typeof createAudioController> | null>(null);
+    let localState = $state<AudioState>("idle");
+    let globalState = $state<AudioState>("idle");
+    let globalText = $state<string | null>(null);
+    let controller = $state<ReturnType<typeof createAudioController> | null>(
+        null,
+    );
 
     const isCached = $derived(isAudioCached(text));
+    const isGlobalMatch = $derived(globalText === text);
+    const audioState = $derived(isGlobalMatch ? globalState : localState);
 
     $effect(() => {
         const ctrl = createAudioController(() => text);
         controller = ctrl;
 
-        const unsubscribe = ctrl.subscribe((state) => {
-            audioState = state;
+        const unsubscribeLocal = ctrl.subscribe((state) => {
+            localState = state;
         });
 
+        const unsubscribeGlobal = subscribeToGlobalAudioState(
+            (playingText, state) => {
+                globalText = playingText;
+                globalState = state;
+            },
+        );
+
         return () => {
-            unsubscribe();
+            unsubscribeLocal();
+            unsubscribeGlobal();
             ctrl.stop();
         };
     });
@@ -59,21 +83,23 @@
 
 <button
     type="button"
-    class="audio-button {sizeClasses[size]} {variantClasses[variant]} {className}"
+    class="audio-button {sizeClasses[size]} {variantClasses[
+        variant
+    ]} {className}"
     class:loading={audioState === "loading"}
     class:playing={audioState === "playing"}
     class:error={audioState === "error"}
     class:cached={isCached}
     onclick={handleClick}
     disabled={audioState === "loading"}
-    title={audioState === "loading" ? "載入中..." : audioState === "playing" ? "停止播放" : "播放發音"}
+    title={audioState === "loading"
+        ? "載入中..."
+        : audioState === "playing"
+          ? "停止播放"
+          : "播放發音"}
 >
     {#if audioState === "loading"}
-        <svg
-            class="spinner {iconSizes[size]}"
-            viewBox="0 0 24 24"
-            fill="none"
-        >
+        <svg class="spinner {iconSizes[size]}" viewBox="0 0 24 24" fill="none">
             <circle
                 class="spinner-track"
                 cx="12"
