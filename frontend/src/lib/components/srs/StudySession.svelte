@@ -19,31 +19,47 @@
 
     let vocabEntry: VocabEntry | null = $state(null);
     let isLoadingDetail = $state(false);
-    let autoSpeak = $state(true);
-    let currentLemma = $state<string | null>(null);
+    let lastCardKey = $state<string | null>(null);
 
-    const audioController = createAudioController(() => currentLemma ?? "");
+    function getCardKey(
+        card: { lemma: string; sense_id: string } | null,
+    ): string | null {
+        return card ? `${card.lemma}:${card.sense_id}` : null;
+    }
+
+    const audioController = createAudioController(
+        () => srs.currentCard?.lemma ?? "",
+    );
 
     const ratingMap = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
-    $effect(() => {
+    function getAutoSpeak(): boolean {
         try {
-            const saved = localStorage.getItem("gsat_srs_auto_speak");
-            autoSpeak = saved !== "false";
+            const saved = localStorage.getItem("gsat_srs_study_settings");
+            if (saved) {
+                const settings = JSON.parse(saved);
+                return settings.autoSpeak ?? true;
+            }
         } catch {
-            autoSpeak = true;
+            // ignore
         }
-    });
+        return true;
+    }
 
     $effect(() => {
         const card = srs.currentCard;
-        if (card) {
-            loadWordDetail(card.lemma);
-            if (autoSpeak) {
-                currentLemma = card.lemma;
-                setTimeout(() => audioController.play(), 100);
+        const cardKey = getCardKey(card);
+
+        if (cardKey && cardKey !== lastCardKey) {
+            lastCardKey = cardKey;
+            loadWordDetail(card!.lemma);
+
+            if (getAutoSpeak()) {
+                audioController.stop();
+                setTimeout(() => audioController.play(), 50);
             }
-        } else {
+        } else if (!card) {
+            lastCardKey = null;
             vocabEntry = null;
         }
     });
