@@ -19,6 +19,8 @@ let error: string | null = $state(null);
 
 let loadProgress: LoadProgress | null = $state(null);
 
+let lemmaSet: Set<string> = $state.raw(new Set());
+
 let searchTerm = $state("");
 let pos: PosFilter = $state("all");
 let vocabType: VocabTypeFilter = $state("all");
@@ -101,6 +103,9 @@ export function getVocabStore() {
   return {
     get index() {
       return vocabIndex;
+    },
+    get lemmaSet() {
+      return lemmaSet;
     },
     get selectedEntry() {
       return selectedEntry;
@@ -187,6 +192,7 @@ async function tryLoadFromIndexedDB(): Promise<boolean> {
     if (count > 0) {
       const index = await buildIndex(createIndexItem);
       vocabIndex = index;
+      lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
       return true;
     }
   } catch (e) {
@@ -210,6 +216,7 @@ async function downloadAndBuildIndex(): Promise<void> {
 
     const index = await buildIndex(createIndexItem);
     vocabIndex = index;
+    lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
     loadProgress = null;
   } catch (e) {
     console.error("Failed to download vocab data:", e);

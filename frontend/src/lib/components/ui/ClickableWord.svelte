@@ -11,14 +11,6 @@
 
     const vocab = getVocabStore();
 
-    const lemmaSet = $derived.by(() => {
-        const set = new Set<string>();
-        for (const item of vocab.index) {
-            set.add(item.lemma.toLowerCase());
-        }
-        return set;
-    });
-
     const highlightVariants = $derived.by(() => {
         if (!highlightWord) return new Set<string>();
         const lower = highlightWord.toLowerCase();
@@ -51,11 +43,65 @@
         lemma: string | null;
     }
 
+    function getBaseForms(word: string): string[] {
+        const forms = [word];
+
+        if (word.endsWith("s")) {
+            forms.push(word.slice(0, -1));
+        }
+        if (word.endsWith("es")) {
+            forms.push(word.slice(0, -2));
+        }
+        if (word.endsWith("ies")) {
+            forms.push(word.slice(0, -3) + "y");
+        }
+        if (word.endsWith("ed")) {
+            forms.push(word.slice(0, -2));
+            forms.push(word.slice(0, -1));
+            if (
+                word.length > 3 &&
+                word[word.length - 3] === word[word.length - 4]
+            ) {
+                forms.push(word.slice(0, -3));
+            }
+        }
+        if (word.endsWith("ing")) {
+            forms.push(word.slice(0, -3));
+            forms.push(word.slice(0, -3) + "e");
+            if (
+                word.length > 4 &&
+                word[word.length - 4] === word[word.length - 5]
+            ) {
+                forms.push(word.slice(0, -4));
+            }
+        }
+        if (word.endsWith("er")) {
+            forms.push(word.slice(0, -2));
+            forms.push(word.slice(0, -1));
+        }
+        if (word.endsWith("est")) {
+            forms.push(word.slice(0, -3));
+            forms.push(word.slice(0, -2));
+        }
+        if (word.endsWith("ly")) {
+            forms.push(word.slice(0, -2));
+        }
+        if (word.endsWith("ier")) {
+            forms.push(word.slice(0, -3) + "y");
+        }
+        if (word.endsWith("iest")) {
+            forms.push(word.slice(0, -4) + "y");
+        }
+
+        return forms;
+    }
+
     const parts = $derived.by(() => {
         const result: TextPart[] = [];
         const wordRegex = /([a-zA-Z]+(?:'[a-zA-Z]+)?)/g;
         let lastIndex = 0;
         let match: RegExpExecArray | null;
+        const currentLemmaSet = vocab.lemmaSet;
 
         while ((match = wordRegex.exec(text)) !== null) {
             if (match.index > lastIndex) {
@@ -72,10 +118,10 @@
             const isHighlighted = highlightVariants.has(lowerWord);
 
             let foundLemma: string | null = null;
-            if (lemmaSet.size > 0 && !isHighlighted) {
+            if (currentLemmaSet.size > 0 && !isHighlighted) {
                 const baseForms = getBaseForms(lowerWord);
                 for (const form of baseForms) {
-                    if (lemmaSet.has(form)) {
+                    if (currentLemmaSet.has(form)) {
                         foundLemma = form;
                         break;
                     }
@@ -104,53 +150,6 @@
         return result;
     });
 
-    function getBaseForms(word: string): string[] {
-        const forms = [word];
-
-        if (word.endsWith("s")) {
-            forms.push(word.slice(0, -1));
-        }
-        if (word.endsWith("es")) {
-            forms.push(word.slice(0, -2));
-        }
-        if (word.endsWith("ies")) {
-            forms.push(word.slice(0, -3) + "y");
-        }
-        if (word.endsWith("ed")) {
-            forms.push(word.slice(0, -2));
-            forms.push(word.slice(0, -1));
-            if (word.length > 3 && word[word.length - 3] === word[word.length - 4]) {
-                forms.push(word.slice(0, -3));
-            }
-        }
-        if (word.endsWith("ing")) {
-            forms.push(word.slice(0, -3));
-            forms.push(word.slice(0, -3) + "e");
-            if (word.length > 4 && word[word.length - 4] === word[word.length - 5]) {
-                forms.push(word.slice(0, -4));
-            }
-        }
-        if (word.endsWith("er")) {
-            forms.push(word.slice(0, -2));
-            forms.push(word.slice(0, -1));
-        }
-        if (word.endsWith("est")) {
-            forms.push(word.slice(0, -3));
-            forms.push(word.slice(0, -2));
-        }
-        if (word.endsWith("ly")) {
-            forms.push(word.slice(0, -2));
-        }
-        if (word.endsWith("ier")) {
-            forms.push(word.slice(0, -3) + "y");
-        }
-        if (word.endsWith("iest")) {
-            forms.push(word.slice(0, -4) + "y");
-        }
-
-        return forms;
-    }
-
     function handleClick(lemma: string) {
         openLookup(lemma);
     }
@@ -162,8 +161,7 @@
             >{:else if part.isClickable && part.lemma}<button
                 type="button"
                 class="clickable-word"
-                onclick={() => handleClick(part.lemma!)}
-                >{part.text}</button
+                onclick={() => handleClick(part.lemma!)}>{part.text}</button
             >{:else}{part.text}{/if}{/each}</span
 >
 
