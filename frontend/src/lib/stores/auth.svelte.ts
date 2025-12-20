@@ -43,22 +43,39 @@ onAuthStateChanged(auth, (user) => {
   state.initialized = true;
 });
 
-// Detect in-app browsers that don't support popup well
-// Note: Electron is NOT included here - redirect doesn't work in Electron either
-// For Electron, popup is preferred as it can be configured to work
+// Detect environments that need redirect flow instead of popup
 function isInAppBrowser(): boolean {
   const ua = navigator.userAgent || "";
   // LINE, Facebook, Instagram, WeChat, etc.
   return /Line|FBAN|FBAV|Instagram|MicroMessenger|WebView/i.test(ua);
 }
 
-function shouldUseRedirect(): boolean {
-  return isInAppBrowser();
-}
-
 function isElectron(): boolean {
   const ua = navigator.userAgent || "";
-  return /Electron/i.test(ua);
+  // Check UA for Electron
+  if (/Electron/i.test(ua)) return true;
+  // Detect Electron webview: check for Electron-specific APIs or process object
+  if (typeof window !== "undefined") {
+    // Electron exposes process in renderer with nodeIntegration or via preload
+    if ((window as any).process?.versions?.electron) return true;
+    // Some Electron apps set this
+    if ((window as any).electronAPI) return true;
+  }
+  return false;
+}
+
+function isEmbedded(): boolean {
+  try {
+    // Detect if running inside iframe or webview (window !== top)
+    return window.self !== window.top;
+  } catch {
+    // Cross-origin iframe will throw, which means we're embedded
+    return true;
+  }
+}
+
+function shouldUseRedirect(): boolean {
+  return isInAppBrowser() || isElectron() || isEmbedded();
 }
 
 export function getAuthStore() {
@@ -74,9 +91,6 @@ export function getAuthStore() {
     },
     get loginError() {
       return state.loginError;
-    },
-    get isElectron() {
-      return isElectron();
     },
 
     clearError() {
@@ -94,14 +108,8 @@ export function getAuthStore() {
         }
       } catch (error: any) {
         const code = error?.code || "";
-        // Popup blocked: fallback to redirect (but not in Electron)
+        // Popup blocked: fallback to redirect
         if (code === "auth/popup-blocked") {
-          if (isElectron()) {
-            state.loginError =
-              "無法開啟登入視窗。請在一般瀏覽器中開啟此網站進行登入。";
-            state.loading = false;
-            return;
-          }
           await signInWithRedirect(auth, googleProvider);
           return;
         }
