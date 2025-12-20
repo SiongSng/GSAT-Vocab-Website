@@ -84,6 +84,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         globIgnores: ["data/**"],
+        navigateFallbackDenylist: [/^\/sitemap\.xml$/, /^\/robots\.txt$/],
         runtimeCaching: [
           {
             urlPattern: /\/data\/.*\.(?:json|gz)$/i,
