@@ -13,6 +13,9 @@ import {
   forceSave,
   hasCardForLemma,
   getCardsByLemma,
+  shouldUnlockSecondarySenses,
+  updateDailyStats,
+  addSessionLog,
 } from "./srs-storage";
 import type {
   SRSCard,
@@ -21,7 +24,7 @@ import type {
   StudySessionStats,
   DailyLimits,
 } from "$lib/types/srs";
-import { DEFAULT_DAILY_LIMITS } from "$lib/types/srs";
+import { DEFAULT_DAILY_LIMITS, getPrioritizedSenses } from "$lib/types/srs";
 import { preloadAudio } from "$lib/tts";
 import type { VocabEntry, VocabSense } from "$lib/types/vocab";
 
@@ -43,6 +46,7 @@ interface SRSStore {
   newCardsStudiedToday: number;
   reviewsToday: number;
   statsVersion: number;
+  sessionId: string | null;
 }
 
 const store: SRSStore = $state({
@@ -59,6 +63,7 @@ const store: SRSStore = $state({
   newCardsStudiedToday: 0,
   reviewsToday: 0,
   statsVersion: 0,
+  sessionId: null,
 });
 
 function createEmptySessionStats(): StudySessionStats {
@@ -195,8 +200,56 @@ export function addWordsToSRS(lemmas: string[]): void {
   }
 }
 
+export function addWordWithAllSenses(entry: VocabEntry): void {
+  const prioritizedSenses = getPrioritizedSenses(entry);
+  if (prioritizedSenses.length === 0) {
+    ensureCard(entry.lemma, "primary");
+    return;
+  }
+  for (const { sense } of prioritizedSenses) {
+    ensureCard(entry.lemma, sense.sense_id);
+  }
+}
+
+export function addWordsWithAllSenses(entries: VocabEntry[]): void {
+  for (const entry of entries) {
+    addWordWithAllSenses(entry);
+  }
+}
+
 export function addSenseToSRS(lemma: string, senseId: string): void {
   ensureCard(lemma, senseId);
+}
+
+function getEligibleNewCards(
+  excludeSet: Set<string>,
+  poolSet?: Set<string>,
+): SRSCard[] {
+  const allNewCards = getNewCards();
+  const eligible: SRSCard[] = [];
+  const lemmasWithPrimaryQueued = new Set<string>();
+
+  for (const card of allNewCards) {
+    if (excludeSet.has(card.lemma)) continue;
+    if (poolSet && !poolSet.has(card.lemma)) continue;
+
+    const isPrimarySense =
+      card.sense_id === "primary" ||
+      !getCardsByLemma(card.lemma).some(
+        (c) => c.sense_id === "primary" && c !== card,
+      );
+
+    if (isPrimarySense) {
+      eligible.push(card);
+      lemmasWithPrimaryQueued.add(card.lemma);
+    } else {
+      if (shouldUnlockSecondarySenses(card.lemma)) {
+        eligible.push(card);
+      }
+    }
+  }
+
+  return eligible;
 }
 
 export function startStudySession(options?: {
@@ -223,17 +276,14 @@ export function startStudySession(options?: {
     .filter((c) => !excludeSet.has(c.lemma))
     .slice(0, reviewLimit);
 
-  let newCards: SRSCard[];
-  if (options?.newCardPool && options.newCardPool.length > 0) {
-    const poolSet = new Set(options.newCardPool);
-    const candidates = getNewCards().filter((c) => poolSet.has(c.lemma));
-    shuffleArray(candidates);
-    newCards = candidates.slice(0, newLimit);
-  } else {
-    const candidates = getNewCards().filter((c) => !excludeSet.has(c.lemma));
-    shuffleArray(candidates);
-    newCards = candidates.slice(0, newLimit);
-  }
+  const poolSet =
+    options?.newCardPool && options.newCardPool.length > 0
+      ? new Set(options.newCardPool)
+      : undefined;
+
+  const eligibleNewCards = getEligibleNewCards(excludeSet, poolSet);
+  shuffleArray(eligibleNewCards);
+  const newCards = eligibleNewCards.slice(0, newLimit);
 
   queue.push(...learningCards);
   queue.push(...reviewCards);
@@ -246,6 +296,7 @@ export function startStudySession(options?: {
   store.isStudying = true;
   store.isFlipped = false;
   store.sessionStats = createEmptySessionStats();
+  store.sessionId = crypto.randomUUID?.() ?? `session-${Date.now()}`;
 
   if (queue.length > 0) {
     setCurrentCard(queue[0]);
@@ -318,6 +369,8 @@ export async function rateCard(rating: Rating): Promise<void> {
   };
   await addReviewLog(reviewLog);
 
+  await updateDailyStats(rating, wasNew);
+
   store.sessionStats.cardsStudied++;
   switch (rating) {
     case Rating.Again:
@@ -365,7 +418,18 @@ function moveToNextCard(): void {
   }
 }
 
-export function endStudySession(): void {
+export async function endStudySession(): Promise<void> {
+  if (store.sessionId && store.sessionStats.cardsStudied > 0) {
+    const startTime = store.sessionStats.startTime.getTime();
+    const endTime = Date.now();
+    await addSessionLog(
+      store.sessionId,
+      startTime,
+      endTime,
+      store.sessionStats.cardsStudied,
+    );
+  }
+
   store.isStudying = false;
   store.currentCard = null;
   store.currentSense = null;
@@ -373,6 +437,7 @@ export function endStudySession(): void {
   store.currentCardIndex = 0;
   store.isFlipped = false;
   store.schedulingInfo = null;
+  store.sessionId = null;
   store.statsVersion++;
   forceSave();
 }
@@ -458,12 +523,15 @@ export function findSenseForCard(
 ): VocabSense | null {
   if (!entry || !entry.senses || entry.senses.length === 0) return null;
 
+  const prioritized = getPrioritizedSenses(entry);
+  if (prioritized.length === 0) return entry.senses[0];
+
   if (card.sense_id === "primary") {
-    return entry.senses[0];
+    return prioritized[0].sense;
   }
 
-  const sense = entry.senses.find((s) => s.sense_id === card.sense_id);
-  return sense || entry.senses[0];
+  const found = prioritized.find((p) => p.sense.sense_id === card.sense_id);
+  return found?.sense || prioritized[0].sense;
 }
 
 export function getSenseIndex(
@@ -471,7 +539,12 @@ export function getSenseIndex(
   senseId: string,
 ): number {
   if (!entry || !entry.senses) return 0;
+
+  const prioritized = getPrioritizedSenses(entry);
+  if (prioritized.length === 0) return 0;
+
   if (senseId === "primary") return 0;
-  const idx = entry.senses.findIndex((s) => s.sense_id === senseId);
+
+  const idx = prioritized.findIndex((p) => p.sense.sense_id === senseId);
   return idx >= 0 ? idx : 0;
 }

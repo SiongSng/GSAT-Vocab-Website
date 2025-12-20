@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { SRSCard } from "$lib/types/srs";
+    import { getPrioritizedSenses } from "$lib/types/srs";
     import type { VocabEntry } from "$lib/types/vocab";
     import StateBadge from "./StateBadge.svelte";
     import WordDetailModal from "./WordDetailModal.svelte";
@@ -27,7 +28,10 @@
         return getSenseIndex(vocabEntry, card.sense_id);
     });
 
-    const totalSenses = $derived(vocabEntry?.senses?.length ?? 0);
+    const totalSenses = $derived.by(() => {
+        if (!vocabEntry) return 0;
+        return getPrioritizedSenses(vocabEntry).length;
+    });
 
     const memoryTip = $derived(vocabEntry?.root_info?.memory_strategy ?? null);
 
@@ -104,10 +108,7 @@
         <div class="flashcard-face flashcard-front">
             <div class="flex items-center justify-between">
                 <StateBadge state={card.state} />
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div onclick={(e) => e.stopPropagation()}>
-                    <AudioButton text={card.lemma} size="lg" />
-                </div>
+                <AudioButton text={card.lemma} size="lg" />
             </div>
 
             <div
@@ -143,11 +144,7 @@
                         </span>
                     {/if}
                 </div>
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                <div
-                    class="flex items-center gap-1"
-                    onclick={(e) => e.stopPropagation()}
-                >
+                <div class="flex items-center gap-1">
                     <AudioButton text={card.lemma} size="md" />
                     <button
                         type="button"
@@ -253,16 +250,15 @@
                                             ? "真實考題"
                                             : "學習例句"}
                                     </span>
-                                    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                                    <div onclick={(e) => e.stopPropagation()}>
-                                        <AudioButton
-                                            text={currentExample.text}
-                                            size="sm"
-                                        />
-                                    </div>
+                                    <AudioButton
+                                        text={currentExample.text}
+                                        size="sm"
+                                    />
                                 </div>
+                                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
                                 <p
                                     class="text-sm text-content-secondary leading-relaxed"
+                                    onclick={(e) => e.stopPropagation()}
                                 >
                                     <ClickableWord
                                         text={currentExample.text}

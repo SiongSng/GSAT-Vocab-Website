@@ -1,13 +1,20 @@
 import { openDB, type IDBPDatabase, deleteDB } from "idb";
-import type { SRSCard, SRSReviewLog } from "$lib/types/srs";
+import type {
+  SRSCard,
+  SRSReviewLog,
+  DailyStats,
+  SessionLog,
+} from "$lib/types/srs";
 import { createCardKey } from "$lib/types/srs";
-import { createEmptyCard, State } from "ts-fsrs";
+import { createEmptyCard, State, Rating } from "ts-fsrs";
 
 const DB_NAME = "gsat-vocab-srs-v2";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const CARDS_STORE = "cards";
 const LOGS_STORE = "logs";
 const META_STORE = "meta";
+const DAILY_STATS_STORE = "daily_stats";
+const SESSION_LOGS_STORE = "session_logs";
 
 const OLD_DB_NAME = "gsat-vocab-srs";
 
@@ -15,6 +22,8 @@ interface SRSDatabase {
   cards: SRSCard;
   logs: SRSReviewLog;
   meta: { key: string; value: unknown };
+  daily_stats: DailyStats;
+  session_logs: SessionLog;
 }
 
 let db: IDBPDatabase<SRSDatabase> | null = null;
@@ -27,26 +36,43 @@ async function getDB(): Promise<IDBPDatabase<SRSDatabase>> {
   if (db) return db;
 
   db = await openDB<SRSDatabase>(DB_NAME, DB_VERSION, {
-    upgrade(database) {
-      if (!database.objectStoreNames.contains(CARDS_STORE)) {
-        const cardsStore = database.createObjectStore(CARDS_STORE, {
-          keyPath: ["lemma", "sense_id"],
-        });
-        cardsStore.createIndex("due", "due");
-        cardsStore.createIndex("state", "state");
-        cardsStore.createIndex("lemma", "lemma");
+    upgrade(database, oldVersion) {
+      if (oldVersion < 1) {
+        if (!database.objectStoreNames.contains(CARDS_STORE)) {
+          const cardsStore = database.createObjectStore(CARDS_STORE, {
+            keyPath: ["lemma", "sense_id"],
+          });
+          cardsStore.createIndex("due", "due");
+          cardsStore.createIndex("state", "state");
+          cardsStore.createIndex("lemma", "lemma");
+        }
+
+        if (!database.objectStoreNames.contains(LOGS_STORE)) {
+          const logsStore = database.createObjectStore(LOGS_STORE, {
+            keyPath: ["lemma", "sense_id", "review"],
+          });
+          logsStore.createIndex("lemma", "lemma");
+          logsStore.createIndex("review", "review");
+        }
+
+        if (!database.objectStoreNames.contains(META_STORE)) {
+          database.createObjectStore(META_STORE, { keyPath: "key" });
+        }
       }
 
-      if (!database.objectStoreNames.contains(LOGS_STORE)) {
-        const logsStore = database.createObjectStore(LOGS_STORE, {
-          keyPath: ["lemma", "sense_id", "review"],
-        });
-        logsStore.createIndex("lemma", "lemma");
-        logsStore.createIndex("review", "review");
-      }
+      if (oldVersion < 2) {
+        if (!database.objectStoreNames.contains(DAILY_STATS_STORE)) {
+          database.createObjectStore(DAILY_STATS_STORE, { keyPath: "date" });
+        }
 
-      if (!database.objectStoreNames.contains(META_STORE)) {
-        database.createObjectStore(META_STORE, { keyPath: "key" });
+        if (!database.objectStoreNames.contains(SESSION_LOGS_STORE)) {
+          const sessionStore = database.createObjectStore(SESSION_LOGS_STORE, {
+            keyPath: "id",
+            autoIncrement: true,
+          });
+          sessionStore.createIndex("session_id", "session_id");
+          sessionStore.createIndex("start", "start");
+        }
       }
     },
   });
@@ -57,7 +83,7 @@ async function getDB(): Promise<IDBPDatabase<SRSDatabase>> {
 async function migrateFromOldDB(): Promise<boolean> {
   try {
     const databases = await indexedDB.databases();
-    const oldExists = databases.some(d => d.name === OLD_DB_NAME);
+    const oldExists = databases.some((d) => d.name === OLD_DB_NAME);
     if (!oldExists) return false;
 
     const oldDB = await openDB(OLD_DB_NAME, 1);
@@ -96,10 +122,14 @@ export async function initStorage(): Promise<void> {
   const migrated = await migrateFromOldDB();
   if (migrated) {
     const cards = await database.getAll(CARDS_STORE);
-    cardsCache = new Map(cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]));
+    cardsCache = new Map(
+      cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
+    );
   } else {
     const cards = await database.getAll(CARDS_STORE);
-    cardsCache = new Map(cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]));
+    cardsCache = new Map(
+      cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
+    );
   }
 }
 
@@ -135,13 +165,13 @@ export function getNewCards(): SRSCard[] {
 
 export function getLearningCards(): SRSCard[] {
   return getAllCards().filter(
-    (card) => card.state === State.Learning || card.state === State.Relearning
+    (card) => card.state === State.Learning || card.state === State.Relearning,
   );
 }
 
 export function getReviewCards(now: Date = new Date()): SRSCard[] {
   return getAllCards().filter(
-    (card) => card.state === State.Review && new Date(card.due) <= now
+    (card) => card.state === State.Review && new Date(card.due) <= now,
   );
 }
 
@@ -176,11 +206,14 @@ export async function addReviewLog(log: SRSReviewLog): Promise<void> {
   await database.add(LOGS_STORE, log);
 }
 
-export async function getReviewLogs(lemma: string, senseId?: string): Promise<SRSReviewLog[]> {
+export async function getReviewLogs(
+  lemma: string,
+  senseId?: string,
+): Promise<SRSReviewLog[]> {
   const database = await getDB();
   const allLogs = await database.getAllFromIndex(LOGS_STORE, "lemma", lemma);
   if (senseId) {
-    return allLogs.filter(log => log.sense_id === senseId);
+    return allLogs.filter((log) => log.sense_id === senseId);
   }
   return allLogs;
 }
@@ -206,7 +239,7 @@ async function flushToIndexedDB(): Promise<void> {
   const store = tx.objectStore(CARDS_STORE);
 
   const promises: Promise<IDBValidKey>[] = Array.from(cardsCache.values()).map(
-    (card) => store.put(card)
+    (card) => store.put(card),
   );
   await Promise.all(promises);
   await tx.done;
@@ -254,15 +287,165 @@ export function hasCardForLemma(lemma: string): boolean {
 
 export function getPrimaryCard(lemma: string): SRSCard | undefined {
   const cards = getCardsByLemma(lemma);
-  return cards.find(c => c.sense_id === "primary") || cards[0];
+  return cards.find((c) => c.sense_id === "primary") || cards[0];
 }
 
-export function getStableSenseCards(lemma: string, stabilityThreshold: number = 10): SRSCard[] {
-  return getCardsByLemma(lemma).filter(card => card.stability >= stabilityThreshold);
+export function getStableSenseCards(
+  lemma: string,
+  stabilityThreshold: number = 10,
+): SRSCard[] {
+  return getCardsByLemma(lemma).filter(
+    (card) => card.stability >= stabilityThreshold,
+  );
 }
 
 export function shouldUnlockSecondarySenses(lemma: string): boolean {
   const primaryCard = getCard(lemma, "primary");
   if (!primaryCard) return false;
   return primaryCard.stability >= 10 && primaryCard.state === State.Review;
+}
+
+function getTodayDateKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function createEmptyDailyStats(date: string): DailyStats {
+  return {
+    date,
+    new_cards: 0,
+    reviews: 0,
+    again: 0,
+    hard: 0,
+    good: 0,
+    easy: 0,
+    study_time_ms: 0,
+    updated_at: Date.now(),
+  };
+}
+
+export async function getDailyStats(
+  rangeStart?: string,
+  rangeEnd?: string,
+): Promise<DailyStats[]> {
+  const database = await getDB();
+  const all = await database.getAll(DAILY_STATS_STORE);
+
+  if (!rangeStart && !rangeEnd) return all;
+
+  return all.filter((stat) => {
+    if (rangeStart && stat.date < rangeStart) return false;
+    if (rangeEnd && stat.date > rangeEnd) return false;
+    return true;
+  });
+}
+
+export async function getTodayStats(): Promise<DailyStats> {
+  const today = getTodayDateKey();
+  const database = await getDB();
+  const stats = await database.get(DAILY_STATS_STORE, today);
+  return stats || createEmptyDailyStats(today);
+}
+
+export async function updateDailyStats(
+  rating: Rating,
+  wasNew: boolean,
+  studyTimeMs: number = 0,
+): Promise<void> {
+  const today = getTodayDateKey();
+  const database = await getDB();
+  let stats = await database.get(DAILY_STATS_STORE, today);
+
+  if (!stats) {
+    stats = createEmptyDailyStats(today);
+  }
+
+  if (wasNew) {
+    stats.new_cards++;
+  } else {
+    stats.reviews++;
+  }
+
+  switch (rating) {
+    case Rating.Again:
+      stats.again++;
+      break;
+    case Rating.Hard:
+      stats.hard++;
+      break;
+    case Rating.Good:
+      stats.good++;
+      break;
+    case Rating.Easy:
+      stats.easy++;
+      break;
+  }
+
+  stats.study_time_ms += studyTimeMs;
+  stats.updated_at = Date.now();
+
+  await database.put(DAILY_STATS_STORE, stats);
+}
+
+export async function getReviewLogsFiltered(options: {
+  lemma?: string;
+  sense_id?: string;
+  rangeStart?: Date;
+  rangeEnd?: Date;
+}): Promise<SRSReviewLog[]> {
+  const database = await getDB();
+  let logs: SRSReviewLog[];
+
+  if (options.lemma) {
+    logs = await database.getAllFromIndex(LOGS_STORE, "lemma", options.lemma);
+    if (options.sense_id) {
+      logs = logs.filter((log) => log.sense_id === options.sense_id);
+    }
+  } else {
+    logs = await database.getAll(LOGS_STORE);
+  }
+
+  if (options.rangeStart || options.rangeEnd) {
+    logs = logs.filter((log) => {
+      const reviewTime = new Date(log.review).getTime();
+      if (options.rangeStart && reviewTime < options.rangeStart.getTime())
+        return false;
+      if (options.rangeEnd && reviewTime > options.rangeEnd.getTime())
+        return false;
+      return true;
+    });
+  }
+
+  return logs;
+}
+
+export async function addSessionLog(
+  sessionId: string,
+  start: number,
+  end: number,
+  studied: number,
+): Promise<void> {
+  const database = await getDB();
+  await database.add(SESSION_LOGS_STORE, {
+    session_id: sessionId,
+    start,
+    end,
+    studied,
+  });
+}
+
+export async function getSessions(
+  rangeStart?: Date,
+  rangeEnd?: Date,
+): Promise<SessionLog[]> {
+  const database = await getDB();
+  const all = await database.getAll(SESSION_LOGS_STORE);
+
+  if (!rangeStart && !rangeEnd) return all;
+
+  return all.filter((session) => {
+    if (rangeStart && session.start < rangeStart.getTime()) return false;
+    if (rangeEnd && session.end > rangeEnd.getTime()) return false;
+    return true;
+  });
 }
