@@ -9,11 +9,7 @@
         setTestedOnly,
         resetFilters,
     } from "$lib/stores/vocab.svelte";
-    import {
-        getAppStore,
-        closeSidebar,
-        toggleFilterCollapsed,
-    } from "$lib/stores/app.svelte";
+    import { getAppStore, toggleFilterCollapsed } from "$lib/stores/app.svelte";
     import type { PosFilter, VocabTypeFilter } from "$lib/types";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
 
@@ -23,12 +19,12 @@
     let searchValue = $state(filters.searchTerm);
     let isAdvancedOpen = $state(false);
 
-    const posOptions: { value: PosFilter; label: string; abbr: string }[] = [
-        { value: "all", label: "全部", abbr: "全部" },
-        { value: "NOUN", label: "名詞", abbr: "n." },
-        { value: "VERB", label: "動詞", abbr: "v." },
-        { value: "ADJ", label: "形容詞", abbr: "adj." },
-        { value: "ADV", label: "副詞", abbr: "adv." },
+    const posOptions: { value: PosFilter; label: string }[] = [
+        { value: "all", label: "全部" },
+        { value: "NOUN", label: "名詞" },
+        { value: "VERB", label: "動詞" },
+        { value: "ADJ", label: "形容詞" },
+        { value: "ADV", label: "副詞" },
     ];
 
     const typeOptions: { value: VocabTypeFilter; label: string }[] = [
@@ -82,27 +78,14 @@
         searchValue = "";
     }
 
-    function handleOverlayClick() {
-        closeSidebar();
-    }
-
     function toggleAdvanced() {
         isAdvancedOpen = !isAdvancedOpen;
     }
 </script>
 
-{#if app.isSidebarOpen && app.isMobile}
+{#if app.isFilterCollapsed}
     <button
-        class="fixed inset-0 bg-black/20 z-30 lg:hidden"
-        onclick={handleOverlayClick}
-        aria-label="Close sidebar"
-        type="button"
-    ></button>
-{/if}
-
-{#if !app.isMobile && app.isFilterCollapsed}
-    <button
-        class="sidebar-collapsed"
+        class="sidebar-collapsed hidden lg:flex"
         onclick={toggleFilterCollapsed}
         type="button"
         title="展開篩選"
@@ -124,9 +107,7 @@
     </button>
 {:else}
     <aside
-        class="sidebar h-full bg-surface-primary border-r border-border flex flex-col transition-transform duration-300 ease-in-out"
-        class:translate-x-0={app.isSidebarOpen || !app.isMobile}
-        class:-translate-x-full={!app.isSidebarOpen && app.isMobile}
+        class="sidebar hidden lg:flex h-full bg-surface-primary border-r border-border flex-col"
     >
         <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
             <div class="flex items-center justify-between">
@@ -141,29 +122,27 @@
                     >
                         重設
                     </button>
-                    {#if !app.isMobile}
-                        <button
-                            class="p-1 rounded hover:bg-surface-hover text-content-tertiary"
-                            onclick={toggleFilterCollapsed}
-                            type="button"
-                            title="收合篩選"
+                    <button
+                        class="p-1 rounded hover:bg-surface-hover text-content-tertiary"
+                        onclick={toggleFilterCollapsed}
+                        type="button"
+                        title="收合篩選"
+                    >
+                        <svg
+                            class="w-4 h-4"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
                         >
-                            <svg
-                                class="w-4 h-4"
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke-width="1.5"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"
-                                />
-                            </svg>
-                        </button>
-                    {/if}
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"
+                            />
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -320,7 +299,6 @@
     .sidebar-collapsed {
         height: 100%;
         width: 48px;
-        display: flex;
         align-items: center;
         justify-content: center;
         background-color: var(--color-surface-primary);
@@ -367,8 +345,6 @@
 
     .search-input:focus {
         outline: none;
-        ring: 2px;
-        ring-color: rgba(var(--color-accent-rgb), 0.2);
         box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
     }
 
@@ -440,17 +416,5 @@
         width: 15rem;
         min-width: 200px;
         flex-shrink: 0;
-    }
-
-    @media (max-width: 1023px) {
-        .sidebar {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            z-index: 40;
-            width: 80%;
-            max-width: 18rem;
-        }
     }
 </style>

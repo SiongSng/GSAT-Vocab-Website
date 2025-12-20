@@ -2,12 +2,14 @@
     import WordList from "./WordList.svelte";
     import WordDetail from "./WordDetail.svelte";
     import Sidebar from "./Sidebar.svelte";
-    import { getVocabStore, getFilters, setSortBy } from "$lib/stores/vocab.svelte";
+    import FilterSheet from "./FilterSheet.svelte";
     import {
-        getAppStore,
-        toggleSidebar,
-        toggleGridMode,
-    } from "$lib/stores/app.svelte";
+        getVocabStore,
+        getFilters,
+        setSortBy,
+        setSearchTerm,
+    } from "$lib/stores/vocab.svelte";
+    import { getAppStore, toggleGridMode } from "$lib/stores/app.svelte";
     import type { SortOption } from "$lib/types";
 
     const vocab = getVocabStore();
@@ -15,6 +17,30 @@
     const app = getAppStore();
 
     let isSortDropdownOpen = $state(false);
+    let isFilterSheetOpen = $state(false);
+    let mobileSearchValue = $state(filters.searchTerm);
+    let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function handleMobileSearchInput(e: Event) {
+        const target = e.target as HTMLInputElement;
+        mobileSearchValue = target.value;
+
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+
+        searchTimeout = setTimeout(() => {
+            setSearchTerm(mobileSearchValue);
+        }, 300);
+    }
+
+    function openFilterSheet() {
+        isFilterSheetOpen = true;
+    }
+
+    function closeFilterSheet() {
+        isFilterSheetOpen = false;
+    }
 
     const sortOptions: { value: SortOption; label: string }[] = [
         { value: "importance_desc", label: "重要性優先" },
@@ -28,7 +54,10 @@
     ];
 
     function getCurrentSortLabel(): string {
-        return sortOptions.find((o) => o.value === filters.sortBy)?.label ?? "重要性優先";
+        return (
+            sortOptions.find((o) => o.value === filters.sortBy)?.label ??
+            "重要性優先"
+        );
     }
 
     function handleSortSelect(option: SortOption) {
@@ -50,6 +79,53 @@
 
     <div class="browse-content">
         <main class="word-list-section">
+            <div class="mobile-search-bar lg:hidden">
+                <div class="search-container">
+                    <svg
+                        class="search-icon"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                        />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="搜尋單字..."
+                        class="search-input"
+                        value={mobileSearchValue}
+                        oninput={handleMobileSearchInput}
+                    />
+                </div>
+                <button
+                    class="filter-btn"
+                    onclick={openFilterSheet}
+                    type="button"
+                    title="篩選條件"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-5 h-5"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
+                        />
+                    </svg>
+                </button>
+            </div>
+
             <div class="results-header">
                 <p class="text-sm text-content-secondary">
                     {#if vocab.isLoading}
@@ -79,7 +155,9 @@
                                     d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5"
                                 />
                             </svg>
-                            <span class="text-xs hidden sm:inline">{getCurrentSortLabel()}</span>
+                            <span class="text-xs hidden sm:inline"
+                                >{getCurrentSortLabel()}</span
+                            >
                             <svg
                                 class="w-3 h-3 hidden sm:block"
                                 xmlns="http://www.w3.org/2000/svg"
@@ -107,8 +185,10 @@
                                 {#each sortOptions as option}
                                     <button
                                         class="sort-option"
-                                        class:active={filters.sortBy === option.value}
-                                        onclick={() => handleSortSelect(option.value)}
+                                        class:active={filters.sortBy ===
+                                            option.value}
+                                        onclick={() =>
+                                            handleSortSelect(option.value)}
                                         type="button"
                                     >
                                         {#if filters.sortBy === option.value}
@@ -135,27 +215,7 @@
                             </div>
                         {/if}
                     </div>
-                    <button
-                        class="lg:hidden p-1.5 rounded-md hover:bg-surface-hover transition-colors"
-                        onclick={toggleSidebar}
-                        title="顯示篩選器"
-                        type="button"
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                            class="w-5 h-5 text-content-tertiary"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
-                            />
-                        </svg>
-                    </button>
+
                     <button
                         class="p-1.5 rounded-md transition-colors"
                         class:bg-accent-soft={app.isGridMode}
@@ -193,14 +253,15 @@
         </main>
 
         <div
-            class="detail-wrapper
-"
+            class="detail-wrapper"
             class:mobile-active={app.isMobileDetailOpen}
         >
             <WordDetail />
         </div>
     </div>
 </div>
+
+<FilterSheet isOpen={isFilterSheetOpen} onClose={closeFilterSheet} />
 
 <style>
     .browse-view {
@@ -227,6 +288,68 @@
         background-color: var(--color-surface-primary);
         border-right: 1px solid var(--color-border);
         flex-shrink: 0;
+    }
+
+    .mobile-search-bar {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--color-border);
+        background-color: var(--color-surface-primary);
+    }
+
+    .search-container {
+        position: relative;
+        flex: 1;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1rem;
+        height: 1rem;
+        color: var(--color-content-tertiary);
+        pointer-events: none;
+    }
+
+    .search-input {
+        width: 100%;
+        background-color: var(--color-surface-secondary);
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+        font-size: 0.875rem;
+        transition: all 0.15s ease;
+        color: var(--color-content-primary);
+    }
+
+    .search-input::placeholder {
+        color: var(--color-content-tertiary);
+    }
+
+    .search-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(var(--color-accent-rgb), 0.2);
+    }
+
+    .filter-btn {
+        flex-shrink: 0;
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        color: var(--color-content-tertiary);
+        transition: all 0.15s ease;
+        background-color: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    .filter-btn:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-content-secondary);
     }
 
     .results-header {
