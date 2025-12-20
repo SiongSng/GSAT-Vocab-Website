@@ -2,7 +2,11 @@
     import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { getNewCards, getAllCards } from "$lib/stores/srs-storage";
+    import {
+        getNewCards,
+        getAllCards,
+        getLearningCards,
+    } from "$lib/stores/srs-storage";
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
@@ -248,6 +252,11 @@
         return new Set(getNewCards().map((c) => c.lemma));
     });
 
+    const dueLearningCount = $derived.by(() => {
+        const now = new Date();
+        return getLearningCards().filter((c) => new Date(c.due) <= now).length;
+    });
+
     const existingLemmaSet = $derived.by(() => {
         return new Set(getAllCards().map((c) => c.lemma));
     });
@@ -340,15 +349,13 @@
     );
 
     const todayTotal = $derived(
-        srs.deckStats.reviewCount +
-            srs.deckStats.learningCount +
-            actualNewCardCount,
+        srs.deckStats.reviewCount + dueLearningCount + actualNewCardCount,
     );
 
     const hasCardsToStudy = $derived(
         srs.deckStats.reviewCount > 0 ||
-            srs.deckStats.learningCount > 0 ||
-            filteredNewCardPool.length > 0,
+            dueLearningCount > 0 ||
+            actualNewCardCount > 0,
     );
 
     const excludedLemmas = $derived.by(() => {
@@ -404,9 +411,7 @@
                 </div>
                 <div class="stats-item">
                     <span class="stats-dot stats-dot-learning"></span>
-                    <span class="stats-value"
-                        >{srs.deckStats.learningCount}</span
-                    >
+                    <span class="stats-value">{dueLearningCount}</span>
                     <span class="stats-label">熟悉中</span>
                     <HelpTooltip
                         text="正在學習的卡片，需要多次練習來鞏固記憶"

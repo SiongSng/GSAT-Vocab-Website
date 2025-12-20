@@ -52,7 +52,15 @@
     }
 
     function handleStart(newCardPool: string[], excludeLemmas: Set<string>) {
-        startStudySession({ newLimit: getNewCardLimit(), newCardPool, excludeLemmas });
+        startStudySession({
+            newLimit: getNewCardLimit(),
+            newCardPool,
+            excludeLemmas,
+        });
+        if (srs.studyQueue.length === 0) {
+            endStudySession();
+            return;
+        }
         viewState = "studying";
     }
 

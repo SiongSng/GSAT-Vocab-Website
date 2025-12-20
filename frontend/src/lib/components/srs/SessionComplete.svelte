@@ -1,5 +1,7 @@
 <script lang="ts">
-    import { getSRSStore, getUniqueLemmaCount } from "$lib/stores/srs.svelte";
+    import { getSRSStore } from "$lib/stores/srs.svelte";
+    import { getAllCards } from "$lib/stores/srs-storage";
+    import { State } from "ts-fsrs";
 
     interface Props {
         onBackToDashboard: () => void;
@@ -8,6 +10,17 @@
     let { onBackToDashboard }: Props = $props();
 
     const srs = getSRSStore();
+
+    const learnedLemmaCount = $derived.by(() => {
+        const cards = getAllCards();
+        const learnedLemmas = new Set<string>();
+        for (const card of cards) {
+            if (card.state !== State.New) {
+                learnedLemmas.add(card.lemma);
+            }
+        }
+        return learnedLemmas.size;
+    });
 
     const sessionDuration = $derived.by(() => {
         const start = srs.sessionStats.startTime;
@@ -50,23 +63,35 @@
             srs.deckStats.learningCount > 0 ||
             srs.deckStats.reviewCount > 0,
     );
-
-    const uniqueLemmaCount = $derived(getUniqueLemmaCount());
 </script>
 
 <div
-    class="bg-surface-primary rounded-lg border border-border p-7 max-w-lg mx-auto"
+    class="bg-surface-primary rounded-lg border border-border shadow-card p-7 max-w-lg mx-auto"
 >
     <div class="text-center mb-7">
-        <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-srs-good/10 flex items-center justify-center">
-            <svg class="w-6 h-6 text-srs-good" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+        <div
+            class="w-12 h-12 mx-auto mb-3 rounded-full bg-srs-good/10 flex items-center justify-center"
+        >
+            <svg
+                class="w-6 h-6 text-srs-good"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="m4.5 12.75 6 6 9-13.5"
+                />
             </svg>
         </div>
         <h2 class="text-xl font-semibold tracking-tight text-content-primary">
             今日完成
         </h2>
-        <p class="text-base text-content-tertiary mt-1">學習時間: {sessionDuration}</p>
+        <p class="text-base text-content-tertiary mt-1">
+            學習時間: {sessionDuration}
+        </p>
     </div>
 
     <div class="grid grid-cols-2 gap-3 mb-6">
@@ -82,7 +107,7 @@
             <div
                 class="text-2xl font-semibold text-content-primary tracking-tight"
             >
-                {uniqueLemmaCount}
+                {learnedLemmaCount}
             </div>
             <div class="text-sm text-content-tertiary mt-1">已學詞彙</div>
         </div>
@@ -90,47 +115,69 @@
 
     {#if total > 0}
         <div class="mb-6 p-4 rounded-md bg-surface-page/40">
-            <div class="text-sm font-medium text-content-secondary mb-3">正確率分布</div>
+            <div class="text-sm font-medium text-content-secondary mb-3">
+                正確率分布
+            </div>
             <div class="space-y-2.5">
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-content-tertiary w-10">簡單</span>
-                    <div class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden">
+                    <div
+                        class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden"
+                    >
                         <div
                             class="h-full bg-srs-easy transition-all duration-500"
                             style="width: {ratingStats.easy.percent}%"
                         ></div>
                     </div>
-                    <span class="text-xs text-content-secondary w-14 text-right">{ratingStats.easy.percent}% ({ratingStats.easy.count})</span>
+                    <span class="text-xs text-content-secondary w-14 text-right"
+                        >{ratingStats.easy.percent}% ({ratingStats.easy
+                            .count})</span
+                    >
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-content-tertiary w-10">良好</span>
-                    <div class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden">
+                    <div
+                        class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden"
+                    >
                         <div
                             class="h-full bg-srs-good transition-all duration-500"
                             style="width: {ratingStats.good.percent}%"
                         ></div>
                     </div>
-                    <span class="text-xs text-content-secondary w-14 text-right">{ratingStats.good.percent}% ({ratingStats.good.count})</span>
+                    <span class="text-xs text-content-secondary w-14 text-right"
+                        >{ratingStats.good.percent}% ({ratingStats.good
+                            .count})</span
+                    >
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-content-tertiary w-10">困難</span>
-                    <div class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden">
+                    <div
+                        class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden"
+                    >
                         <div
                             class="h-full bg-srs-hard transition-all duration-500"
                             style="width: {ratingStats.hard.percent}%"
                         ></div>
                     </div>
-                    <span class="text-xs text-content-secondary w-14 text-right">{ratingStats.hard.percent}% ({ratingStats.hard.count})</span>
+                    <span class="text-xs text-content-secondary w-14 text-right"
+                        >{ratingStats.hard.percent}% ({ratingStats.hard
+                            .count})</span
+                    >
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-xs text-content-tertiary w-10">重來</span>
-                    <div class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden">
+                    <div
+                        class="flex-1 h-3 bg-surface-secondary rounded-full overflow-hidden"
+                    >
                         <div
                             class="h-full bg-srs-again transition-all duration-500"
                             style="width: {ratingStats.again.percent}%"
                         ></div>
                     </div>
-                    <span class="text-xs text-content-secondary w-14 text-right">{ratingStats.again.percent}% ({ratingStats.again.count})</span>
+                    <span class="text-xs text-content-secondary w-14 text-right"
+                        >{ratingStats.again.percent}% ({ratingStats.again
+                            .count})</span
+                    >
                 </div>
             </div>
         </div>
@@ -165,7 +212,7 @@
 
     <button
         onclick={onBackToDashboard}
-        class="w-full py-2.5 px-5 bg-content-primary text-white rounded-lg text-base font-medium hover:opacity-90 transition-opacity"
+        class="w-full py-2.5 px-5 bg-content-primary text-white rounded-md text-base font-medium hover:opacity-90 transition-opacity"
     >
         {hasMoreCards ? "繼續學習" : "返回首頁"}
     </button>
