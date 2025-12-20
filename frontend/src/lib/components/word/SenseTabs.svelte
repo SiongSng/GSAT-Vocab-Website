@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { VocabSense } from "$lib/types/vocab";
-    import { speakText } from "$lib/tts";
     import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
+    import AudioButton from "$lib/components/ui/AudioButton.svelte";
 
     interface Props {
         senses: VocabSense[];
@@ -10,8 +10,6 @@
 
     let { senses, lemma }: Props = $props();
     let activeSenseIndex = $state(0);
-    let playingSentenceIndex = $state<number | null>(null);
-    let audioPlayer: HTMLAudioElement | null = null;
     let showExamExamples = $state(true);
     let examplePage = $state(0);
     const EXAMPLES_PER_PAGE = 5;
@@ -50,21 +48,6 @@
     function truncateDef(def: string, maxLen: number = 8): string {
         if (def.length <= maxLen) return def;
         return def.slice(0, maxLen) + "…";
-    }
-
-    async function playSentenceAudio(text: string, index: number) {
-        if (playingSentenceIndex === index) return;
-        playingSentenceIndex = index;
-        try {
-            const url = await speakText(text);
-            if (!audioPlayer) audioPlayer = new Audio();
-            audioPlayer.src = url;
-            audioPlayer.onended = () => (playingSentenceIndex = null);
-            audioPlayer.onerror = () => (playingSentenceIndex = null);
-            await audioPlayer.play();
-        } catch {
-            playingSentenceIndex = null;
-        }
     }
 
     function formatSource(source: {
@@ -151,6 +134,10 @@
                             highlightWord={lemma}
                         />
                     </p>
+                    <AudioButton
+                        text={activeSense.generated_example}
+                        size="sm"
+                    />
                 </div>
             {/if}
 
@@ -242,7 +229,7 @@
                                 {/if}
                             </div>
                             <div class="exam-items">
-                                {#each paginatedExamples as example, i (examplePage * EXAMPLES_PER_PAGE + i)}
+                                {#each paginatedExamples as example, idx (example.text + example.source.year + example.source.exam_type + idx)}
                                     <div class="exam-item">
                                         <p class="exam-text">
                                             <ClickableWord
@@ -254,37 +241,10 @@
                                             <span class="exam-source">
                                                 {formatSource(example.source)}
                                             </span>
-                                            <button
-                                                type="button"
-                                                class="p-1 rounded hover:bg-surface-hover transition-colors"
-                                                class:animate-pulse={playingSentenceIndex ===
-                                                    examplePage *
-                                                        EXAMPLES_PER_PAGE +
-                                                        i}
-                                                onclick={() =>
-                                                    playSentenceAudio(
-                                                        example.text,
-                                                        examplePage *
-                                                            EXAMPLES_PER_PAGE +
-                                                            i,
-                                                    )}
-                                                title="播放例句"
-                                            >
-                                                <svg
-                                                    class="w-3.5 h-3.5 text-content-tertiary"
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke-width="1.5"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                                                    />
-                                                </svg>
-                                            </button>
+                                            <AudioButton
+                                                text={example.text}
+                                                size="sm"
+                                            />
                                         </div>
                                     </div>
                                 {/each}
@@ -372,6 +332,9 @@
 
     /* Learning Example */
     .learning-example {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
         padding: 0.75rem;
         background: var(--color-surface-primary);
         border: 1px solid var(--color-border);
@@ -379,6 +342,7 @@
     }
 
     .example-text {
+        flex: 1;
         font-size: 0.9375rem;
         color: var(--color-content-primary);
         line-height: 1.6;

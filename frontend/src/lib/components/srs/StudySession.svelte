@@ -5,10 +5,10 @@
         flipCard,
         rateCard,
         showAnswer,
-        playCurrentCardAudio,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getEntry } from "$lib/stores/vocab-db";
+    import { speakText } from "$lib/tts";
     import type { VocabEntry } from "$lib/types/vocab";
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
@@ -20,6 +20,7 @@
     let vocabEntry: VocabEntry | null = $state(null);
     let isLoadingDetail = $state(false);
     let autoSpeak = $state(true);
+    let autoSpeakAudio: HTMLAudioElement | null = null;
 
     const ratingMap = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
@@ -32,12 +33,25 @@
         }
     });
 
+    async function autoPlayAudio(lemma: string) {
+        try {
+            const url = await speakText(lemma);
+            if (!autoSpeakAudio) {
+                autoSpeakAudio = new Audio();
+            }
+            autoSpeakAudio.src = url;
+            await autoSpeakAudio.play();
+        } catch {
+            // ignore auto-speak errors
+        }
+    }
+
     $effect(() => {
         const card = srs.currentCard;
         if (card) {
             loadWordDetail(card.lemma);
             if (autoSpeak) {
-                setTimeout(() => playCurrentCardAudio(), 100);
+                setTimeout(() => autoPlayAudio(card.lemma), 100);
             }
         } else {
             vocabEntry = null;
@@ -47,7 +61,7 @@
     async function loadWordDetail(lemma: string) {
         isLoadingDetail = true;
         try {
-            vocabEntry = await getEntry(lemma) ?? null;
+            vocabEntry = (await getEntry(lemma)) ?? null;
         } catch {
             vocabEntry = null;
         } finally {

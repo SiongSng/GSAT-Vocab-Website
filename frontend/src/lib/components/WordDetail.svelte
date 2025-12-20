@@ -2,8 +2,8 @@
     import { tick } from "svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore, closeMobileDetail } from "$lib/stores/app.svelte";
-    import { speakText } from "$lib/tts";
     import SenseTabs from "$lib/components/word/SenseTabs.svelte";
+    import AudioButton from "$lib/components/ui/AudioButton.svelte";
     import StatisticsSection from "$lib/components/word/StatisticsSection.svelte";
     import ConfusionNotes from "$lib/components/word/ConfusionNotes.svelte";
     import RelatedWords from "$lib/components/word/RelatedWords.svelte";
@@ -12,8 +12,6 @@
     const vocab = getVocabStore();
     const app = getAppStore();
 
-    let audioPlayer: HTMLAudioElement | null = null;
-    let isPlayingWord = $state(false);
     let showSkeleton = $state(false);
     let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
     let activeDeepDive = $state<string | null>(null);
@@ -88,21 +86,6 @@
     });
 
     const importancePercentage = $derived(Math.round(importanceScore() * 100));
-
-    async function playWordAudio() {
-        if (!entry || isPlayingWord) return;
-        isPlayingWord = true;
-        try {
-            const url = await speakText(entry.lemma);
-            if (!audioPlayer) audioPlayer = new Audio();
-            audioPlayer.src = url;
-            audioPlayer.onended = () => (isPlayingWord = false);
-            audioPlayer.onerror = () => (isPlayingWord = false);
-            await audioPlayer.play();
-        } catch {
-            isPlayingWord = false;
-        }
-    }
 
     function handleBackClick() {
         closeMobileDetail();
@@ -236,28 +219,7 @@
                             {/if}
                         </div>
                     </div>
-                    <button
-                        class="p-2 rounded-md hover:bg-surface-hover transition-colors"
-                        class:animate-pulse={isPlayingWord}
-                        onclick={playWordAudio}
-                        title="播放發音"
-                        type="button"
-                    >
-                        <svg
-                            class="w-5 h-5 text-content-tertiary hover:text-content-secondary transition-colors"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
-                            />
-                        </svg>
-                    </button>
+                    <AudioButton text={entry.lemma} size="md" />
                 </div>
 
                 <!-- Memory Tip -->

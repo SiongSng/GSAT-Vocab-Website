@@ -2,8 +2,9 @@
     import type { SRSCard } from "$lib/types/srs";
     import type { VocabEntry } from "$lib/types/vocab";
     import StateBadge from "./StateBadge.svelte";
-    import { playCurrentCardAudio, findSenseForCard, getSenseIndex } from "$lib/stores/srs.svelte";
+    import { findSenseForCard, getSenseIndex } from "$lib/stores/srs.svelte";
     import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
+    import AudioButton from "$lib/components/ui/AudioButton.svelte";
 
     interface Props {
         card: SRSCard;
@@ -45,7 +46,14 @@
         return null;
     });
 
-    function formatSource(source: { year: number; exam_type: string; section_type: string; question_number?: number } | null): string {
+    function formatSource(
+        source: {
+            year: number;
+            exam_type: string;
+            section_type: string;
+            question_number?: number;
+        } | null,
+    ): string {
         if (!source) return "AI 生成例句";
         const examTypeMap: Record<string, string> = {
             gsat: "學測",
@@ -88,28 +96,10 @@
         >
             <div class="flex items-center justify-between">
                 <StateBadge state={card.state} />
-                <button
-                    onclick={(e) => {
-                        e.stopPropagation();
-                        playCurrentCardAudio();
-                    }}
-                    class="p-2 rounded-md hover:bg-surface-hover transition-colors"
-                    aria-label="播放發音"
-                >
-                    <svg
-                        class="w-6 h-6 text-content-tertiary"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
-                        />
-                    </svg>
-                </button>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div onclick={(e) => e.stopPropagation()}>
+                    <AudioButton text={card.lemma} size="lg" />
+                </div>
             </div>
 
             <div
@@ -140,33 +130,17 @@
                 <div class="flex items-center gap-2">
                     <StateBadge state={card.state} />
                     {#if totalSenses > 1}
-                        <span class="text-xs text-content-tertiary bg-surface-page px-2 py-0.5 rounded">
+                        <span
+                            class="text-xs text-content-tertiary bg-surface-page px-2 py-0.5 rounded"
+                        >
                             涵義 {senseIndex + 1}/{totalSenses}
                         </span>
                     {/if}
                 </div>
-                <button
-                    onclick={(e) => {
-                        e.stopPropagation();
-                        playCurrentCardAudio();
-                    }}
-                    class="p-2 rounded-md hover:bg-surface-hover transition-colors"
-                    aria-label="播放發音"
-                >
-                    <svg
-                        class="w-6 h-6 text-content-tertiary"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z"
-                        />
-                    </svg>
-                </button>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                <div onclick={(e) => e.stopPropagation()}>
+                    <AudioButton text={card.lemma} size="lg" />
+                </div>
             </div>
 
             <div class="text-center mb-4">
@@ -194,11 +168,15 @@
                 {:else if currentSense}
                     <div class="space-y-4">
                         <div class="border-b border-border/60 pb-4">
-                            <p class="text-base text-content-primary leading-relaxed">
+                            <p
+                                class="text-base text-content-primary leading-relaxed"
+                            >
                                 {currentSense.zh_def}
                             </p>
                             {#if currentSense.en_def}
-                                <p class="text-sm text-content-tertiary mt-1 leading-relaxed">
+                                <p
+                                    class="text-sm text-content-tertiary mt-1 leading-relaxed"
+                                >
                                     {currentSense.en_def}
                                 </p>
                             {/if}
@@ -207,17 +185,38 @@
                         {#if currentExample}
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-xs font-medium text-content-tertiary uppercase tracking-wider">
-                                        {currentExample.source ? "真實考題" : "學習例句"}
+                                    <span
+                                        class="text-xs font-medium text-content-tertiary uppercase tracking-wider"
+                                    >
+                                        {currentExample.source
+                                            ? "真實考題"
+                                            : "學習例句"}
                                     </span>
                                 </div>
-                                <p class="text-sm text-content-secondary leading-relaxed">
-                                    <ClickableWord text={currentExample.text} highlightWord={card.lemma} />
+                                <p
+                                    class="text-sm text-content-secondary leading-relaxed"
+                                >
+                                    <ClickableWord
+                                        text={currentExample.text}
+                                        highlightWord={card.lemma}
+                                    />
                                 </p>
                                 {#if currentExample.source}
-                                    <div class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                    <div
+                                        class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary"
+                                    >
+                                        <svg
+                                            class="w-3 h-3"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            stroke-width="1.5"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+                                            />
                                         </svg>
                                         {formatSource(currentExample.source)}
                                     </div>

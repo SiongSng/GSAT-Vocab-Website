@@ -22,7 +22,7 @@ import type {
   DailyLimits,
 } from "$lib/types/srs";
 import { DEFAULT_DAILY_LIMITS } from "$lib/types/srs";
-import { speakText, preloadAudio } from "$lib/tts";
+import { preloadAudio } from "$lib/tts";
 import type { VocabEntry, VocabSense } from "$lib/types/vocab";
 
 export { Rating, State };
@@ -428,22 +428,6 @@ function shuffleArray<T>(array: T[]): void {
   }
 }
 
-let audioPlayer: HTMLAudioElement | null = null;
-
-export async function playCurrentCardAudio(): Promise<void> {
-  if (!store.currentCard) return;
-  try {
-    const url = await speakText(store.currentCard.lemma);
-    if (!audioPlayer) {
-      audioPlayer = new Audio();
-    }
-    audioPlayer.src = url;
-    await audioPlayer.play();
-  } catch {
-    // ignore audio playback errors
-  }
-}
-
 export function getRemainingNewCards(): number {
   return Math.max(0, store.dailyLimits.newCards - store.newCardsStudiedToday);
 }
@@ -468,20 +452,26 @@ export function getLemmaHasCard(lemma: string): boolean {
   return hasCardForLemma(lemma);
 }
 
-export function findSenseForCard(card: SRSCard, entry: VocabEntry | null): VocabSense | null {
+export function findSenseForCard(
+  card: SRSCard,
+  entry: VocabEntry | null,
+): VocabSense | null {
   if (!entry || !entry.senses || entry.senses.length === 0) return null;
 
   if (card.sense_id === "primary") {
     return entry.senses[0];
   }
 
-  const sense = entry.senses.find(s => s.sense_id === card.sense_id);
+  const sense = entry.senses.find((s) => s.sense_id === card.sense_id);
   return sense || entry.senses[0];
 }
 
-export function getSenseIndex(entry: VocabEntry | null, senseId: string): number {
+export function getSenseIndex(
+  entry: VocabEntry | null,
+  senseId: string,
+): number {
   if (!entry || !entry.senses) return 0;
   if (senseId === "primary") return 0;
-  const idx = entry.senses.findIndex(s => s.sense_id === senseId);
+  const idx = entry.senses.findIndex((s) => s.sense_id === senseId);
   return idx >= 0 ? idx : 0;
 }

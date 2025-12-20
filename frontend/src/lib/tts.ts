@@ -1,23 +1,171 @@
 import { EdgeTTS } from "edge-tts-universal/browser";
 
 const VOICE = "en-US-JennyNeural";
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+function getSynthesisTimeout(): number {
+  const nav = navigator as Navigator & {
+    connection?: {
+      effectiveType?: string;
+      saveData?: boolean;
+    };
+  };
+
+  const conn = nav.connection;
+  if (!conn) return 5000;
+
+  if (conn.saveData) return 10000;
+
+  switch (conn.effectiveType) {
+    case "slow-2g":
+    case "2g":
+      return 10000;
+    case "3g":
+      return 6000;
+    case "4g":
+    default:
+      return 2500;
+  }
+}
 
 const audioCache = new Map<string, string>();
+const pendingRequests = new Map<string, Promise<string>>();
+
+export type AudioState = "idle" | "loading" | "playing" | "error";
+
+let globalAudio: HTMLAudioElement | null = null;
+let currentController: AudioController | null = null;
+
+function getGlobalAudio(): HTMLAudioElement {
+  if (!globalAudio) {
+    globalAudio = new Audio();
+  }
+  return globalAudio;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+async function synthesizeOnce(text: string): Promise<Blob> {
+  const timeout = getSynthesisTimeout();
+  console.log(
+    `[TTS] Synthesizing: "${text.substring(0, 30)}..." (timeout: ${timeout}ms)`,
+  );
+
+  const tts = new EdgeTTS(text, VOICE);
+
+  let result;
+  try {
+    result = await withTimeout(
+      tts.synthesize(),
+      timeout,
+      `TTS synthesis timeout after ${timeout}ms`,
+    );
+  } catch (err) {
+    console.error("[TTS] synthesize() failed:", err);
+    throw err;
+  }
+
+  if (!result.audio || result.audio.size === 0) {
+    console.error("[TTS] Empty audio response");
+    throw new Error("Empty audio response");
+  }
+
+  console.log(`[TTS] Got audio blob, size: ${result.audio.size}`);
+  return result.audio;
+}
+
+async function synthesizeWithRetry(text: string): Promise<string> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay =
+        BASE_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 500;
+      console.log(
+        `[TTS] Retry attempt ${attempt + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`,
+      );
+      await sleep(delay);
+    }
+
+    try {
+      console.log(`[TTS] Attempt ${attempt + 1}/${MAX_RETRIES}`);
+      const audioBlob = await synthesizeOnce(text);
+      const url = URL.createObjectURL(audioBlob);
+      if (attempt > 0) {
+        console.log(`[TTS] Success on retry attempt ${attempt + 1}`);
+      }
+      return url;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(
+        `[TTS] Attempt ${attempt + 1}/${MAX_RETRIES} failed:`,
+        lastError.message,
+      );
+    }
+  }
+
+  console.error(`[TTS] All ${MAX_RETRIES} attempts failed`);
+  throw lastError || new Error("TTS synthesis failed");
+}
 
 export async function speakText(text: string): Promise<string> {
   const cached = audioCache.get(text);
-  if (cached) return cached;
+  if (cached) {
+    console.log("[TTS] Cache hit");
+    return cached;
+  }
 
-  const tts = new EdgeTTS(text, VOICE);
-  const result = await tts.synthesize();
-  const url = URL.createObjectURL(result.audio);
+  const pending = pendingRequests.get(text);
+  if (pending) {
+    console.log("[TTS] Returning pending request");
+    return pending;
+  }
 
-  audioCache.set(text, url);
-  return url;
+  console.log("[TTS] Starting new synthesis request");
+  const request = synthesizeWithRetry(text)
+    .then((url) => {
+      audioCache.set(text, url);
+      pendingRequests.delete(text);
+      return url;
+    })
+    .catch((err) => {
+      pendingRequests.delete(text);
+      throw err;
+    });
+
+  pendingRequests.set(text, request);
+  return request;
 }
 
 export async function preloadAudio(texts: string[]): Promise<void> {
-  const uncached = texts.filter((t) => !audioCache.has(t));
+  const uncached = texts.filter(
+    (t) => !audioCache.has(t) && !pendingRequests.has(t),
+  );
   await Promise.all(uncached.map((text) => speakText(text).catch(() => {})));
 }
 
@@ -30,4 +178,132 @@ export function clearAudioCache(): void {
     URL.revokeObjectURL(url);
   }
   audioCache.clear();
+}
+
+export interface AudioController {
+  play: () => Promise<void>;
+  stop: () => void;
+  getState: () => AudioState;
+  subscribe: (callback: (state: AudioState) => void) => () => void;
+}
+
+export function createAudioController(getText: () => string): AudioController {
+  let state: AudioState = "idle";
+  let subscribers: Set<(state: AudioState) => void> = new Set();
+  let aborted = false;
+
+  function setState(newState: AudioState) {
+    state = newState;
+    for (const cb of subscribers) {
+      cb(newState);
+    }
+  }
+
+  const controller: AudioController = {
+    async play() {
+      if (state === "loading" || state === "playing") return;
+
+      if (currentController && currentController !== controller) {
+        currentController.stop();
+      }
+      currentController = controller;
+
+      aborted = false;
+      setState("loading");
+
+      let url: string;
+      try {
+        const text = getText();
+        url = await speakText(text);
+      } catch (err) {
+        console.error("[TTS] Synthesis failed:", err);
+        if (!aborted) {
+          setState("error");
+          currentController = null;
+          setTimeout(() => {
+            if (state === "error") setState("idle");
+          }, 2000);
+        }
+        return;
+      }
+
+      if (aborted) {
+        setState("idle");
+        return;
+      }
+
+      const audio = getGlobalAudio();
+
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+
+      audio.src = url;
+
+      audio.onended = () => {
+        if (currentController === controller) {
+          setState("idle");
+          currentController = null;
+        }
+      };
+
+      audio.onerror = () => {
+        if (currentController === controller) {
+          setState("error");
+          currentController = null;
+          setTimeout(() => {
+            if (state === "error") setState("idle");
+          }, 2000);
+        }
+      };
+
+      try {
+        await audio.play();
+        if (!aborted) {
+          setState("playing");
+        }
+      } catch (err) {
+        console.error("[TTS] Audio play failed:", err);
+        if (!aborted) {
+          setState("error");
+          currentController = null;
+          setTimeout(() => {
+            if (state === "error") setState("idle");
+          }, 2000);
+        }
+      }
+    },
+
+    stop() {
+      aborted = true;
+      if (currentController === controller) {
+        const audio = getGlobalAudio();
+        audio.pause();
+        audio.onended = null;
+        audio.onerror = null;
+        currentController = null;
+      }
+      setState("idle");
+    },
+
+    getState() {
+      return state;
+    },
+
+    subscribe(callback: (state: AudioState) => void) {
+      subscribers.add(callback);
+      callback(state);
+      return () => {
+        subscribers.delete(callback);
+      };
+    },
+  };
+
+  return controller;
+}
+
+export function stopAllAudio(): void {
+  if (currentController) {
+    currentController.stop();
+  }
 }
