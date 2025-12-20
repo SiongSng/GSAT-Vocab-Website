@@ -12,7 +12,7 @@
     const yearDistribution = $derived.by(() => {
         const yearCounts = new Map<number, number>();
         for (const sense of senses) {
-            for (const example of sense.examples) {
+            for (const example of sense.examples ?? []) {
                 const year = example.source.year;
                 yearCounts.set(year, (yearCounts.get(year) ?? 0) + 1);
             }
@@ -26,7 +26,8 @@
         const posCounts = new Map<string, number>();
         for (const sense of senses) {
             const pos = sense.pos;
-            const count = sense.examples.length > 0 ? sense.examples.length : 1;
+            const exampleCount = sense.examples?.length ?? 0;
+            const count = exampleCount > 0 ? exampleCount : 1;
             posCounts.set(pos, (posCounts.get(pos) ?? 0) + count);
         }
         const total = Array.from(posCounts.values()).reduce((a, b) => a + b, 0);

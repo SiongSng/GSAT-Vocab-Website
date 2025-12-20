@@ -1,4 +1,9 @@
-export type VocabTier = "tested" | "translation" | "phrase" | "pattern" | "basic";
+export type VocabTier =
+  | "tested"
+  | "translation"
+  | "phrase"
+  | "pattern"
+  | "basic";
 
 export type VocabType = "word" | "phrase" | "pattern";
 
@@ -48,7 +53,7 @@ export interface VocabSense {
   zh_def: string;
   en_def: string;
   tested_in_exam: boolean;
-  examples: ExamExample[];
+  examples?: ExamExample[];
   generated_example: string;
 }
 
