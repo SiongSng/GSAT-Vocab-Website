@@ -53,7 +53,8 @@
         };
     });
 
-    function handleClick() {
+    function handleClick(e: MouseEvent) {
+        e.stopPropagation();
         if (!controller) return;
 
         if (audioState === "playing") {

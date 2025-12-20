@@ -93,10 +93,6 @@ function withTimeout<T>(
 
 async function synthesizeOnce(text: string): Promise<Blob> {
   const timeout = getSynthesisTimeout();
-  console.log(
-    `[TTS] Synthesizing: "${text.substring(0, 30)}..." (timeout: ${timeout}ms)`,
-  );
-
   const tts = new EdgeTTS(text, VOICE);
 
   let result;
@@ -116,7 +112,6 @@ async function synthesizeOnce(text: string): Promise<Blob> {
     throw new Error("Empty audio response");
   }
 
-  console.log(`[TTS] Got audio blob, size: ${result.audio.size}`);
   return result.audio;
 }
 
@@ -127,19 +122,12 @@ async function synthesizeWithRetry(text: string): Promise<string> {
     if (attempt > 0) {
       const delay =
         BASE_DELAY_MS * Math.pow(2, attempt - 1) + Math.random() * 500;
-      console.log(
-        `[TTS] Retry attempt ${attempt + 1}/${MAX_RETRIES} after ${Math.round(delay)}ms`,
-      );
       await sleep(delay);
     }
 
     try {
-      console.log(`[TTS] Attempt ${attempt + 1}/${MAX_RETRIES}`);
       const audioBlob = await synthesizeOnce(text);
       const url = URL.createObjectURL(audioBlob);
-      if (attempt > 0) {
-        console.log(`[TTS] Success on retry attempt ${attempt + 1}`);
-      }
       return url;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -157,17 +145,14 @@ async function synthesizeWithRetry(text: string): Promise<string> {
 export async function speakText(text: string): Promise<string> {
   const cached = audioCache.get(text);
   if (cached) {
-    console.log("[TTS] Cache hit");
     return cached;
   }
 
   const pending = pendingRequests.get(text);
   if (pending) {
-    console.log("[TTS] Returning pending request");
     return pending;
   }
 
-  console.log("[TTS] Starting new synthesis request");
   const request = synthesizeWithRetry(text)
     .then((url) => {
       audioCache.set(text, url);
@@ -184,10 +169,26 @@ export async function speakText(text: string): Promise<string> {
 }
 
 export async function preloadAudio(texts: string[]): Promise<void> {
-  const uncached = texts.filter(
-    (t) => !audioCache.has(t) && !pendingRequests.has(t),
-  );
-  await Promise.all(uncached.map((text) => speakText(text).catch(() => {})));
+  if (texts.length === 0) return;
+
+  const [first, ...rest] = texts;
+  const firstPromise =
+    audioCache.has(first) || pendingRequests.has(first)
+      ? Promise.resolve()
+      : speakText(first).catch(() => {});
+
+  if (rest.length > 0) {
+    firstPromise.then(() => {
+      const uncachedRest = rest.filter(
+        (t) => !audioCache.has(t) && !pendingRequests.has(t),
+      );
+      if (uncachedRest.length > 0) {
+        Promise.all(uncachedRest.map((text) => speakText(text).catch(() => {})));
+      }
+    });
+  }
+
+  await firstPromise;
 }
 
 export function isAudioCached(text: string): boolean {
