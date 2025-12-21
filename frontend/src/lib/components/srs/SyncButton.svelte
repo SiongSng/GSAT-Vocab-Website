@@ -19,6 +19,16 @@
         auth.user && Date.now() - sync.lastSyncTime > STALE_THRESHOLD,
     );
 
+    function isWebView(): boolean {
+        const ua = navigator.userAgent;
+        return (
+            /Electron/i.test(ua) ||
+            /WebView/i.test(ua) ||
+            (/iPhone|iPad|iPod/i.test(ua) && !/Safari/i.test(ua)) ||
+            /wv\)/.test(ua)
+        );
+    }
+
     async function handleSync() {
         if (sync.status === "syncing") return;
 
@@ -30,6 +40,11 @@
 
         showErrorPopover = false;
         if (!auth.user) {
+            if (isWebView()) {
+                openExternalLogin();
+                return;
+            }
+
             try {
                 await auth.login({ method: "redirect" });
             } catch (e) {
