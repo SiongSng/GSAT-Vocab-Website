@@ -32,6 +32,20 @@ let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const SAVE_DEBOUNCE_MS = 1000;
 
+type DataChangeCallback = () => void;
+const dataChangeCallbacks: Set<DataChangeCallback> = new Set();
+
+export function onDataChange(callback: DataChangeCallback): () => void {
+  dataChangeCallbacks.add(callback);
+  return () => dataChangeCallbacks.delete(callback);
+}
+
+function notifyDataChange(): void {
+  for (const callback of dataChangeCallbacks) {
+    callback();
+  }
+}
+
 async function getDB(): Promise<IDBPDatabase<SRSDatabase>> {
   if (db) return db;
 
@@ -552,4 +566,6 @@ export async function importDatabase(
   for (const card of snapshot.cards) {
     cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
   }
+
+  notifyDataChange();
 }

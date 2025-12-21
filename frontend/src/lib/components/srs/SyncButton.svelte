@@ -2,6 +2,7 @@
     import { getAuthStore } from "$lib/stores/auth.svelte";
     import { getSyncStore } from "$lib/stores/sync.svelte";
     import Portal from "$lib/components/Portal.svelte";
+    import { onDestroy } from "svelte";
 
     const auth = getAuthStore();
     const sync = getSyncStore();
@@ -14,6 +15,25 @@
     let conflictData = $state<{ cloudTime: number; localTime: number } | null>(
         null,
     );
+
+    const unsubscribeLogin = auth.onLogin(async () => {
+        try {
+            const result = await sync.syncWithCloud();
+            if (result?.conflict) {
+                conflictData = {
+                    cloudTime: result.cloudTime,
+                    localTime: result.localTime,
+                };
+                showConflictDialog = true;
+            }
+        } catch (e) {
+            console.error("Auto sync after login failed:", e);
+        }
+    });
+
+    onDestroy(() => {
+        unsubscribeLogin();
+    });
 
     const STALE_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
     const isStale = $derived(
@@ -108,8 +128,7 @@
             await auth.loginWithToken(tokenInput.trim());
             showTokenDialog = false;
             tokenInput = "";
-            await sync.syncWithCloud();
-        } catch (e: any) {
+        } catch {
             tokenError = auth.loginError || "驗證失敗，請重試";
         }
     }

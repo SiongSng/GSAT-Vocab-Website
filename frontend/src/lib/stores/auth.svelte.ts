@@ -24,13 +24,33 @@ const state = $state<AuthState>({
   loginErrorCode: null,
 });
 
+type LoginCallback = () => void;
+const loginCallbacks: Set<LoginCallback> = new Set();
+
+function notifyLogin(): void {
+  for (const callback of loginCallbacks) {
+    callback();
+  }
+}
+
+let previousUser: User | null = null;
+
 void authReady
   .catch(() => undefined)
   .finally(() => {
     onAuthStateChanged(auth, (user) => {
+      const wasLoggedOut = previousUser === null;
+      const isNowLoggedIn = user !== null;
+
       state.user = user;
       state.loading = false;
       state.initialized = true;
+
+      if (wasLoggedOut && isNowLoggedIn) {
+        notifyLogin();
+      }
+
+      previousUser = user;
     });
   });
 
@@ -50,6 +70,11 @@ export function getAuthStore() {
     },
     get loginErrorCode() {
       return state.loginErrorCode;
+    },
+
+    onLogin(callback: LoginCallback): () => void {
+      loginCallbacks.add(callback);
+      return () => loginCallbacks.delete(callback);
     },
 
     clearError() {

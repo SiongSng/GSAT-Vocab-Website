@@ -7,11 +7,13 @@
         getAllCards,
         getLearningCards,
         getTodayStats,
+        onDataChange,
     } from "$lib/stores/srs-storage";
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import DeckEditor from "./DeckEditor.svelte";
+    import { onDestroy } from "svelte";
 
     interface Props {
         onStart: (
@@ -70,6 +72,17 @@
     let selectedDeckId: string | null = $state(null);
     let isDeckModalOpen = $state(false);
     let editingDeckId: string | null = $state(null);
+    let dataVersion = $state(0);
+
+    const unsubscribeDataChange = onDataChange(() => {
+        dataVersion++;
+        loadTodayStats();
+        loadCustomDecks();
+    });
+
+    onDestroy(() => {
+        unsubscribeDataChange();
+    });
 
     function loadSettings(): void {
         try {
@@ -290,15 +303,18 @@
     }
 
     const newCardLemmas = $derived.by(() => {
+        dataVersion;
         return new Set(getNewCards().map((c) => c.lemma));
     });
 
     const dueLearningCount = $derived.by(() => {
+        dataVersion;
         const now = new Date();
         return getLearningCards().filter((c) => new Date(c.due) <= now).length;
     });
 
     const existingLemmaSet = $derived.by(() => {
+        dataVersion;
         return new Set(getAllCards().map((c) => c.lemma));
     });
 
@@ -320,12 +336,14 @@
     });
 
     const customNewCardPool = $derived.by(() => {
+        dataVersion;
         if (!selectedDeck) return [];
         const newSet = new Set(getNewCards().map((c) => c.lemma));
         return selectedDeck.lemmas.filter((lemma) => newSet.has(lemma));
     });
 
     const customDueCount = $derived.by(() => {
+        dataVersion;
         if (!selectedDeck) return 0;
         const now = new Date();
         const cards = getAllCards();
@@ -343,6 +361,7 @@
     });
 
     const deckLearnedCountMap = $derived.by(() => {
+        dataVersion;
         const cards = getAllCards();
         const learnedSet = new Set<string>();
         for (const card of cards) {
@@ -362,6 +381,7 @@
     });
 
     const learnedLemmaCount = $derived.by(() => {
+        dataVersion;
         const cards = getAllCards();
         const learnedLemmas = new Set<string>();
         for (const card of cards) {
