@@ -1,8 +1,8 @@
 import { EdgeTTS } from "edge-tts-universal/browser";
 
 const VOICE = "en-US-JennyNeural";
-const MAX_RETRIES = 3;
-const BASE_DELAY_MS = 1000;
+const PARALLEL_ATTEMPTS = 3;
+const STAGGER_DELAY_MS = 100;
 
 function getSynthesisTimeout(): number {
   const nav = navigator as Navigator & {
@@ -94,22 +94,20 @@ function withTimeout<T>(
 
 async function synthesizeOnce(text: string): Promise<Blob> {
   const timeout = getSynthesisTimeout();
-  const tts = new EdgeTTS(text, VOICE);
 
   let result;
   try {
+    const tts = new EdgeTTS(text, VOICE);
     result = await withTimeout(
       tts.synthesize(),
       timeout,
       `TTS synthesis timeout after ${timeout}ms`,
     );
   } catch (err) {
-    console.error("[TTS] synthesize() failed:", err);
-    throw err;
+    throw err instanceof Error ? err : new Error(String(err));
   }
 
   if (!result.audio || result.audio.size === 0) {
-    console.error("[TTS] Empty audio response");
     throw new Error("Empty audio response");
   }
 
@@ -121,31 +119,34 @@ function jitteredDelay(baseMs: number, jitterRatio: number = 0.5): number {
   return Math.max(0, baseMs + jitter);
 }
 
-async function synthesizeWithRetry(text: string): Promise<string> {
-  let lastError: Error | null = null;
+async function synthesizeWithRace(text: string): Promise<string> {
+  const errors: Error[] = [];
+  let resolved = false;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      const baseDelay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-      const delay = jitteredDelay(baseDelay, 0.5);
-      await sleep(delay);
+  const raceAttempt = async (index: number): Promise<Blob> => {
+    if (index > 0) {
+      await sleep(STAGGER_DELAY_MS * index);
     }
+    if (resolved) {
+      throw new Error("Already resolved");
+    }
+    return synthesizeOnce(text);
+  };
 
-    try {
-      const audioBlob = await synthesizeOnce(text);
-      const url = URL.createObjectURL(audioBlob);
-      return url;
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      console.warn(
-        `[TTS] Attempt ${attempt + 1}/${MAX_RETRIES} failed:`,
-        lastError.message,
-      );
-    }
+  const attempts = Array.from({ length: PARALLEL_ATTEMPTS }, (_, i) =>
+    raceAttempt(i).catch((err) => {
+      errors.push(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }),
+  );
+
+  try {
+    const audioBlob = await Promise.any(attempts);
+    resolved = true;
+    return URL.createObjectURL(audioBlob);
+  } catch {
+    throw errors[0] || new Error("TTS synthesis failed");
   }
-
-  console.error(`[TTS] All ${MAX_RETRIES} attempts failed`);
-  throw lastError || new Error("TTS synthesis failed");
 }
 
 export async function speakText(text: string): Promise<string> {
@@ -159,7 +160,7 @@ export async function speakText(text: string): Promise<string> {
     return pending;
   }
 
-  const request = synthesizeWithRetry(text)
+  const request = synthesizeWithRace(text)
     .then((url) => {
       audioCache.set(text, url);
       pendingRequests.delete(text);
