@@ -83,8 +83,8 @@
         }
     }
 
-    async function handleRate(rating: Rating) {
-        await rateCard(rating);
+    function handleRate(rating: Rating) {
+        rateCard(rating);
     }
 
     function handleKeydown(event: KeyboardEvent) {

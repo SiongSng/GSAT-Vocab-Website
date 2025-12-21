@@ -362,7 +362,7 @@ export function showAnswer(): void {
   store.isFlipped = true;
 }
 
-export async function rateCard(rating: Rating): Promise<void> {
+export function rateCard(rating: Rating): void {
   if (!store.currentCard || !store.schedulingInfo) return;
   if (rating === Rating.Manual) return;
 
@@ -381,15 +381,6 @@ export async function rateCard(rating: Rating): Promise<void> {
   };
 
   updateCard(updatedCard);
-
-  const reviewLog: SRSReviewLog = {
-    ...log,
-    lemma: store.currentCard.lemma,
-    sense_id: store.currentCard.sense_id,
-  };
-  await addReviewLog(reviewLog);
-
-  await updateDailyStats(rating, wasNew);
 
   store.sessionStats.cardsStudied++;
   switch (rating) {
@@ -419,8 +410,18 @@ export async function rateCard(rating: Rating): Promise<void> {
     store.studyQueue.push(updatedCard);
   }
 
-  store.statsVersion++;
   moveToNextCard();
+
+  const reviewLog: SRSReviewLog = {
+    ...log,
+    lemma: updatedCard.lemma,
+    sense_id: updatedCard.sense_id,
+  };
+  queueMicrotask(() => {
+    addReviewLog(reviewLog);
+    updateDailyStats(rating, wasNew);
+    store.statsVersion++;
+  });
 }
 
 function moveToNextCard(): void {
