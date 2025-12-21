@@ -1,6 +1,7 @@
 import { auth, googleProvider, authReady } from "$lib/firebase";
 import {
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -70,14 +71,31 @@ export function getAuthStore() {
       state.loginError = null;
     },
 
-    async login() {
+    async login(options?: { method?: "popup" | "redirect" }) {
       state.loading = true;
       state.loginError = null;
       try {
         await authReady;
-        await signInWithRedirect(auth, googleProvider);
+        const method = options?.method ?? "popup";
+        if (method === "redirect") {
+          await signInWithRedirect(auth, googleProvider);
+        } else {
+          await signInWithPopup(auth, googleProvider);
+        }
       } catch (error: any) {
         const code = error?.code || "";
+        if (code === "auth/popup-blocked") {
+          state.loginError = "登入視窗被阻擋（請允許彈出視窗，或改用導向登入）。";
+          state.loading = false;
+          return;
+        }
+        if (
+          code === "auth/popup-closed-by-user" ||
+          code === "auth/cancelled-popup-request"
+        ) {
+          state.loading = false;
+          return;
+        }
         if (
           code === "auth/operation-not-supported-in-this-environment" ||
           code === "auth/web-storage-unsupported"
