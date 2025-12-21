@@ -1,7 +1,6 @@
 import { auth, googleProvider, authReady } from "$lib/firebase";
 import {
   onAuthStateChanged,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -22,19 +21,26 @@ const state = $state<AuthState>({
   loginError: null,
 });
 
-// Handle redirect result on page load after persistence is ready
-authReady.then(() => {
-  getRedirectResult(auth)
-    .then((result) => {
+let initPromise: Promise<void> | null = null;
+
+export async function initAuth(): Promise<void> {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    await authReady;
+    try {
+      const result = await getRedirectResult(auth);
       if (result?.user) {
         state.user = result.user;
       }
-    })
-    .catch((error) => {
+    } catch (error: any) {
       console.error("Redirect sign-in error:", error);
       state.loginError = error?.message || "登入失敗";
-    });
-});
+    }
+  })();
+
+  return initPromise;
+}
 
 // Initialize auth listener
 onAuthStateChanged(auth, (user) => {
@@ -43,40 +49,7 @@ onAuthStateChanged(auth, (user) => {
   state.initialized = true;
 });
 
-// Detect environments that need redirect flow instead of popup
-function isInAppBrowser(): boolean {
-  const ua = navigator.userAgent || "";
-  // LINE, Facebook, Instagram, WeChat, etc.
-  return /Line|FBAN|FBAV|Instagram|MicroMessenger|WebView/i.test(ua);
-}
-
-function isElectron(): boolean {
-  const ua = navigator.userAgent || "";
-  // Check UA for Electron
-  if (/Electron/i.test(ua)) return true;
-  // Detect Electron webview: check for Electron-specific APIs or process object
-  if (typeof window !== "undefined") {
-    // Electron exposes process in renderer with nodeIntegration or via preload
-    if ((window as any).process?.versions?.electron) return true;
-    // Some Electron apps set this
-    if ((window as any).electronAPI) return true;
-  }
-  return false;
-}
-
-function isEmbedded(): boolean {
-  try {
-    // Detect if running inside iframe or webview (window !== top)
-    return window.self !== window.top;
-  } catch {
-    // Cross-origin iframe will throw, which means we're embedded
-    return true;
-  }
-}
-
-function shouldUseRedirect(): boolean {
-  return isInAppBrowser() || isElectron() || isEmbedded();
-}
+void initAuth();
 
 export function getAuthStore() {
   return {
@@ -101,23 +74,16 @@ export function getAuthStore() {
       state.loading = true;
       state.loginError = null;
       try {
-        if (shouldUseRedirect()) {
-          await signInWithRedirect(auth, googleProvider);
-        } else {
-          await signInWithPopup(auth, googleProvider);
-        }
+        await authReady;
+        await signInWithRedirect(auth, googleProvider);
       } catch (error: any) {
         const code = error?.code || "";
-        // Popup blocked: fallback to redirect
-        if (code === "auth/popup-blocked") {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        }
-        // User closed popup: silently ignore
         if (
-          code === "auth/popup-closed-by-user" ||
-          code === "auth/cancelled-popup-request"
+          code === "auth/operation-not-supported-in-this-environment" ||
+          code === "auth/web-storage-unsupported"
         ) {
+          state.loginError =
+            "此環境無法完成 Google 登入（可能是 WebView 限制了必要的儲存/導向流程）。";
           state.loading = false;
           return;
         }

@@ -24,8 +24,7 @@
             showErrorPopover = true;
             return;
         }
-
-        showErrorPopover = false;
+                    await auth.login();
         if (!auth.user) {
             try {
                 await auth.login();

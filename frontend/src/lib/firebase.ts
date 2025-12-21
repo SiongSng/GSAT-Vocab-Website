@@ -23,7 +23,6 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Set persistence: try IndexedDB first, fallback to localStorage for Electron compatibility
 export const authReady = setPersistence(auth, indexedDBLocalPersistence).catch(
   () => setPersistence(auth, browserLocalPersistence),
 );

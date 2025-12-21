@@ -2,11 +2,13 @@ import "./app.css";
 import App from "./App.svelte";
 import { mount } from "svelte";
 import { initPWA } from "$lib/stores/pwa.svelte";
+import { initAuth } from "$lib/stores/auth.svelte";
 
-initPWA();
+void (async () => {
+  await initAuth();
+  initPWA();
 
-const app = mount(App, {
-  target: document.getElementById("app")!,
-});
-
-export default app;
+  mount(App, {
+    target: document.getElementById("app")!,
+  });
+})();
