@@ -383,12 +383,18 @@
         return pool.map((w) => w.lemma);
     });
 
+    const isUnlimited = $derived(newCardLimit >= 55);
+
     const remainingDailyNewCards = $derived(
-        Math.max(0, newCardLimit - todayNewCardsStudied),
+        isUnlimited
+            ? Infinity
+            : Math.max(0, newCardLimit - todayNewCardsStudied),
     );
 
     const actualNewCardCount = $derived(
-        Math.min(remainingDailyNewCards, filteredNewCardPool.length),
+        isUnlimited
+            ? Math.min(20, filteredNewCardPool.length)
+            : Math.min(remainingDailyNewCards, filteredNewCardPool.length),
     );
 
     const todayTotal = $derived(
@@ -711,13 +717,15 @@
                         type="range"
                         bind:value={newCardLimit}
                         min="0"
-                        max="50"
+                        max="55"
                         step="5"
                         class="slider-input"
                     />
-                    <span class="slider-value">{newCardLimit}</span>
+                    <span class="slider-value"
+                        >{newCardLimit >= 55 ? "∞" : newCardLimit}</span
+                    >
                 </div>
-                {#if todayNewCardsStudied > 0}
+                {#if todayNewCardsStudied > 0 && !isUnlimited}
                     <p class="setting-row-hint full-width">
                         今日已學習 {todayNewCardsStudied} 張，剩餘 {remainingDailyNewCards}
                         張
