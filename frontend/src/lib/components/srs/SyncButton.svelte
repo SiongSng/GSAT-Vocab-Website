@@ -20,7 +20,7 @@
         if (sync.status === "syncing") return;
 
         // If already in error state, clicking shows the popover
-        if (sync.status === "error" && !showErrorPopover) {
+        if ((sync.status === "error" || auth.loginError) && !showErrorPopover) {
             showErrorPopover = true;
             return;
         }
@@ -30,10 +30,14 @@
             try {
                 await auth.login({ method: "redirect" });
             } catch (e) {
+                showErrorPopover = true;
                 return;
             }
 
-            if (!auth.user) return;
+            if (!auth.user) {
+                if (auth.loginError) showErrorPopover = true;
+                return;
+            }
         }
 
         try {
@@ -179,11 +183,13 @@
             {/if}
         </button>
 
-        {#if sync.status === "error" && showErrorPopover}
+        {#if showErrorPopover && (sync.status === "error" || auth.loginError)}
             <div class="error-popover">
                 <div class="popover-header">
                     <h4 class="popover-title">
-                        {sync.lastSyncError?.includes("頻繁")
+                        {auth.loginError
+                            ? "登入失敗"
+                            : sync.lastSyncError?.includes("頻繁")
                             ? "同步冷卻中"
                             : "同步發生錯誤"}
                     </h4>
@@ -210,8 +216,10 @@
                     </button>
                 </div>
                 <p class="popover-desc">
-                    {sync.lastSyncError ||
-                        "連線至雲端時發生問題，請檢查網路狀態或稍後再試。"}
+                    {auth.loginError
+                        ? `${auth.loginError}${auth.loginErrorCode ? ` (${auth.loginErrorCode})` : ""}`
+                        : sync.lastSyncError ||
+                          "連線至雲端時發生問題，請檢查網路狀態或稍後再試。"}
                 </p>
             </div>
         {/if}

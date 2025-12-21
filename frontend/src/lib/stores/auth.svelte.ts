@@ -13,6 +13,7 @@ interface AuthState {
   loading: boolean;
   initialized: boolean;
   loginError: string | null;
+  loginErrorCode: string | null;
 }
 
 const state = $state<AuthState>({
@@ -20,6 +21,7 @@ const state = $state<AuthState>({
   loading: true,
   initialized: false,
   loginError: null,
+  loginErrorCode: null,
 });
 
 let initPromise: Promise<void> | null = null;
@@ -72,14 +74,19 @@ export function getAuthStore() {
     get loginError() {
       return state.loginError;
     },
+    get loginErrorCode() {
+      return state.loginErrorCode;
+    },
 
     clearError() {
       state.loginError = null;
+      state.loginErrorCode = null;
     },
 
     async login(options?: { method?: "popup" | "redirect" }) {
       state.loading = true;
       state.loginError = null;
+      state.loginErrorCode = null;
       try {
         await authReady;
         const method = options?.method ?? "redirect";
@@ -90,6 +97,7 @@ export function getAuthStore() {
         }
       } catch (error: any) {
         const code = error?.code || "";
+        state.loginErrorCode = code || null;
         if (code === "auth/popup-blocked") {
           state.loginError = "登入視窗被阻擋（請允許彈出視窗，或改用導向登入）。";
           state.loading = false;
