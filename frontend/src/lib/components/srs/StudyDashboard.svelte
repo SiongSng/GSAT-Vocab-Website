@@ -14,6 +14,7 @@
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import DeckEditor from "./DeckEditor.svelte";
     import { onDestroy } from "svelte";
+    import { STORAGE_KEYS } from "$lib/storage-keys";
 
     interface Props {
         onStart: (
@@ -29,9 +30,6 @@
     const vocab = getVocabStore();
     const app = getAppStore();
 
-    const STORAGE_KEY = "gsat_srs_study_settings";
-    const CUSTOM_DECK_KEY = "gsat_srs_custom_decks";
-    const LEGACY_DECK_KEY = "gsat_srs_custom_deck";
     const LEVEL_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 
     export type StudyPriority = "mixed" | "new_first" | "review_first";
@@ -78,6 +76,7 @@
         dataVersion++;
         loadTodayStats();
         loadCustomDecks();
+        loadSettings();
     });
 
     onDestroy(() => {
@@ -86,7 +85,7 @@
 
     function loadSettings(): void {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY);
+            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
             if (saved) {
                 const settings: StudySettings = JSON.parse(saved);
                 newCardLimit =
@@ -112,7 +111,10 @@
                 levelFilter,
                 studyPriority,
             };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+            localStorage.setItem(
+                STORAGE_KEYS.STUDY_SETTINGS,
+                JSON.stringify(settings),
+            );
         } catch {
             // ignore
         }
@@ -176,42 +178,18 @@
 
     function saveCustomDecks(decks: CustomDeck[]): void {
         try {
-            localStorage.setItem(CUSTOM_DECK_KEY, JSON.stringify(decks));
+            localStorage.setItem(
+                STORAGE_KEYS.CUSTOM_DECKS,
+                JSON.stringify(decks),
+            );
         } catch (err) {
             console.warn("Failed to save custom decks", err);
         }
     }
 
-    function migrateLegacyDeck(): CustomDeck[] {
-        try {
-            const saved = localStorage.getItem(LEGACY_DECK_KEY);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                    const lemmas = normalizeLemmaList(parsed);
-                    if (lemmas.length > 0) {
-                        return [
-                            {
-                                id:
-                                    crypto.randomUUID?.() ??
-                                    `deck-${Date.now()}`,
-                                name: "自訂卡組",
-                                lemmas,
-                                createdAt: Date.now(),
-                            },
-                        ];
-                    }
-                }
-            }
-        } catch (err) {
-            console.warn("Failed to migrate legacy custom deck", err);
-        }
-        return [];
-    }
-
     function loadCustomDecks(): void {
         try {
-            const saved = localStorage.getItem(CUSTOM_DECK_KEY);
+            const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_DECKS);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed)) {
@@ -222,12 +200,6 @@
                         }))
                         .filter((d) => d.name && Array.isArray(d.lemmas));
                     customDecks = decks;
-                }
-            } else {
-                const legacy = migrateLegacyDeck();
-                if (legacy.length > 0) {
-                    customDecks = legacy;
-                    saveCustomDecks(legacy);
                 }
             }
         } catch (err) {

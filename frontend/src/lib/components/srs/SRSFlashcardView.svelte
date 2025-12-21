@@ -13,6 +13,7 @@
     } from "./StudyDashboard.svelte";
     import StudySession from "./StudySession.svelte";
     import SessionComplete from "./SessionComplete.svelte";
+    import { STORAGE_KEYS } from "$lib/storage-keys";
 
     type ViewState = "dashboard" | "studying" | "complete";
 
@@ -42,7 +43,7 @@
 
     function getNewCardLimit(): number {
         try {
-            const saved = localStorage.getItem("gsat_srs_study_settings");
+            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
             if (saved) {
                 const settings = JSON.parse(saved);
                 return settings.newCardLimit ?? 20;

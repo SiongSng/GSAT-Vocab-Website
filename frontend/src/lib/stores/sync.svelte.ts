@@ -10,6 +10,7 @@ import {
 } from "./srs-storage";
 import { Packr } from "msgpackr";
 import { zlibSync, unzlibSync } from "fflate";
+import { STORAGE_KEYS } from "$lib/storage-keys";
 
 const packr = new Packr({ structuredClone: true });
 
@@ -19,13 +20,10 @@ interface SyncState {
   lastSyncTime: number;
 }
 
-const STORAGE_KEY = "gsat_last_sync_time";
-const DECKS_KEY = "gsat_srs_custom_decks";
-
 const state = $state<SyncState>({
   status: "idle",
   lastSyncError: null,
-  lastSyncTime: Number(localStorage.getItem(STORAGE_KEY)) || 0,
+  lastSyncTime: Number(localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME)) || 0,
 });
 
 const auth = getAuthStore();
@@ -33,12 +31,14 @@ const SYNC_COOLDOWN_MS = 30000;
 
 function updateLastSyncTime(ts: number) {
   state.lastSyncTime = ts;
-  localStorage.setItem(STORAGE_KEY, String(ts));
+  localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, String(ts));
 }
 
 interface SyncPayload {
   db: DatabaseSnapshot;
   decks: unknown[];
+  settings: unknown | null;
+  limits: unknown | null;
   ts: number;
 }
 
@@ -64,7 +64,7 @@ function decompress(base64: string): SyncPayload {
 
 function getLocalDecks(): unknown[] {
   try {
-    const saved = localStorage.getItem(DECKS_KEY);
+    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_DECKS);
     return saved ? JSON.parse(saved) : [];
   } catch {
     return [];
@@ -72,7 +72,37 @@ function getLocalDecks(): unknown[] {
 }
 
 function setLocalDecks(decks: unknown[]): void {
-  localStorage.setItem(DECKS_KEY, JSON.stringify(decks));
+  localStorage.setItem(STORAGE_KEYS.CUSTOM_DECKS, JSON.stringify(decks));
+}
+
+function getLocalSettings(): unknown | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setLocalSettings(settings: unknown | null): void {
+  if (settings) {
+    localStorage.setItem(STORAGE_KEYS.STUDY_SETTINGS, JSON.stringify(settings));
+  }
+}
+
+function getLocalLimits(): unknown | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_LIMITS);
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setLocalLimits(limits: unknown | null): void {
+  if (limits) {
+    localStorage.setItem(STORAGE_KEYS.DAILY_LIMITS, JSON.stringify(limits));
+  }
 }
 
 export function getSyncStore() {
@@ -133,6 +163,12 @@ export function getSyncStore() {
             if (payload.decks) {
               setLocalDecks(payload.decks);
             }
+            if (payload.settings !== undefined) {
+              setLocalSettings(payload.settings);
+            }
+            if (payload.limits !== undefined) {
+              setLocalLimits(payload.limits);
+            }
             await setLastUpdated(payload.ts);
             updateLastSyncTime(Date.now());
             state.status = "success";
@@ -145,6 +181,8 @@ export function getSyncStore() {
         const payload: SyncPayload = {
           db: snapshot,
           decks: getLocalDecks(),
+          settings: getLocalSettings(),
+          limits: getLocalLimits(),
           ts: newTimestamp,
         };
         const compressed = compress(payload);

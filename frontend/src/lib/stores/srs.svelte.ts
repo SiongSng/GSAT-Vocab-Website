@@ -17,6 +17,7 @@ import {
   updateDailyStats,
   addSessionLog,
 } from "./srs-storage";
+import { STORAGE_KEYS } from "$lib/storage-keys";
 import type {
   SRSCard,
   SRSReviewLog,
@@ -155,7 +156,7 @@ export async function initSRS(): Promise<void> {
 function loadDailyProgress(): void {
   const today = getTodayKey();
   try {
-    const saved = localStorage.getItem(`gsat_srs_daily_${today}`);
+    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_STUDIED(today));
     if (saved) {
       const data = JSON.parse(saved);
       store.newCardsStudiedToday = data.newCards || 0;
@@ -174,7 +175,7 @@ function saveDailyProgress(): void {
   const today = getTodayKey();
   try {
     localStorage.setItem(
-      `gsat_srs_daily_${today}`,
+      STORAGE_KEYS.DAILY_STUDIED(today),
       JSON.stringify({
         newCards: store.newCardsStudiedToday,
         reviews: store.reviewsToday,
@@ -490,7 +491,10 @@ export function getIntervalText(rating: Rating): string {
 export function setDailyLimits(limits: Partial<DailyLimits>): void {
   store.dailyLimits = { ...store.dailyLimits, ...limits };
   try {
-    localStorage.setItem("gsat_srs_limits", JSON.stringify(store.dailyLimits));
+    localStorage.setItem(
+      STORAGE_KEYS.DAILY_LIMITS,
+      JSON.stringify(store.dailyLimits),
+    );
   } catch {
     // ignore
   }
@@ -498,7 +502,7 @@ export function setDailyLimits(limits: Partial<DailyLimits>): void {
 
 export function loadDailyLimits(): void {
   try {
-    const saved = localStorage.getItem("gsat_srs_limits");
+    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_LIMITS);
     if (saved) {
       store.dailyLimits = { ...DEFAULT_DAILY_LIMITS, ...JSON.parse(saved) };
     }

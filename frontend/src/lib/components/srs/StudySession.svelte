@@ -13,6 +13,7 @@
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
     import ProgressBar from "./ProgressBar.svelte";
+    import { STORAGE_KEYS } from "$lib/storage-keys";
 
     const srs = getSRSStore();
     const app = getAppStore();
@@ -35,7 +36,7 @@
 
     function getAutoSpeak(): boolean {
         try {
-            const saved = localStorage.getItem("gsat_srs_study_settings");
+            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
             if (saved) {
                 const settings = JSON.parse(saved);
                 return settings.autoSpeak ?? true;
