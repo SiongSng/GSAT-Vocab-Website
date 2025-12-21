@@ -4,6 +4,8 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  signInWithCredential,
+  GoogleAuthProvider,
   signOut,
   type User,
 } from "firebase/auth";
@@ -99,7 +101,8 @@ export function getAuthStore() {
         const code = error?.code || "";
         state.loginErrorCode = code || null;
         if (code === "auth/popup-blocked") {
-          state.loginError = "登入視窗被阻擋（請允許彈出視窗，或改用導向登入）。";
+          state.loginError =
+            "登入視窗被阻擋（請允許彈出視窗，或改用導向登入）。";
           state.loading = false;
           return;
         }
@@ -136,6 +139,38 @@ export function getAuthStore() {
       } finally {
         state.loading = false;
       }
+    },
+
+    async loginWithToken(idToken: string) {
+      state.loading = true;
+      state.loginError = null;
+      state.loginErrorCode = null;
+      try {
+        await authReady;
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+      } catch (error: any) {
+        const code = error?.code || "";
+        state.loginErrorCode = code || null;
+        if (
+          code === "auth/invalid-credential" ||
+          code === "auth/invalid-id-token"
+        ) {
+          state.loginError = "驗證碼無效或已過期，請重新取得。";
+        } else {
+          state.loginError = error?.message || "驗證失敗";
+        }
+        state.loading = false;
+        throw error;
+      }
+      state.loading = false;
+    },
+
+    startExternalLogin() {
+      window.open(
+        `${window.location.origin}/auth-callback.html?start=1`,
+        "_blank",
+      );
     },
   };
 }

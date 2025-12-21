@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>GSAT 單字 - 登入</title>
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: #fafafa;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 1rem;
+            }
+            .card {
+                background: #fff;
+                border: 1px solid #e5e5e5;
+                border-radius: 12px;
+                padding: 2rem;
+                max-width: 400px;
+                width: 100%;
+                text-align: center;
+            }
+            h1 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                color: #1a1a1a;
+                margin-bottom: 0.5rem;
+            }
+            .subtitle {
+                font-size: 0.875rem;
+                color: #666;
+                margin-bottom: 1.5rem;
+            }
+            .loading {
+                color: #666;
+                font-size: 0.875rem;
+            }
+            .spinner {
+                width: 24px;
+                height: 24px;
+                border: 2px solid #e5e5e5;
+                border-top-color: #3b82f6;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 0 auto 1rem;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            .error {
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                color: #dc2626;
+                padding: 0.75rem 1rem;
+                border-radius: 8px;
+                font-size: 0.875rem;
+                margin-bottom: 1rem;
+            }
+            .token-section {
+                text-align: left;
+            }
+            .token-label {
+                font-size: 0.75rem;
+                font-weight: 500;
+                color: #666;
+                margin-bottom: 0.5rem;
+            }
+            .token-box {
+                background: #f5f5f5;
+                border: 1px solid #e5e5e5;
+                border-radius: 8px;
+                padding: 0.75rem;
+                font-family: monospace;
+                font-size: 0.75rem;
+                word-break: break-all;
+                max-height: 120px;
+                overflow-y: auto;
+                margin-bottom: 1rem;
+                color: #333;
+            }
+            .copy-btn {
+                width: 100%;
+                background: #3b82f6;
+                color: #fff;
+                border: none;
+                border-radius: 8px;
+                padding: 0.75rem 1rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.15s;
+            }
+            .copy-btn:hover {
+                background: #2563eb;
+            }
+            .copy-btn.copied {
+                background: #16a34a;
+            }
+            .instructions {
+                margin-top: 1rem;
+                padding-top: 1rem;
+                border-top: 1px solid #e5e5e5;
+                font-size: 0.75rem;
+                color: #666;
+                line-height: 1.5;
+            }
+            .success-icon {
+                width: 48px;
+                height: 48px;
+                background: #dcfce7;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 1rem;
+            }
+            .success-icon svg {
+                width: 24px;
+                height: 24px;
+                color: #16a34a;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div id="loading">
+                <div class="spinner"></div>
+                <p class="loading">正在處理登入...</p>
+            </div>
+
+            <div id="error" style="display: none">
+                <h1>登入失敗</h1>
+                <p class="subtitle">請關閉此頁面後重試</p>
+                <div class="error" id="error-message"></div>
+            </div>
+
+            <div id="success" style="display: none">
+                <div class="success-icon">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="2"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m4.5 12.75 6 6 9-13.5"
+                        />
+                    </svg>
+                </div>
+                <h1>登入成功</h1>
+                <p class="subtitle">請複製以下驗證碼，貼回應用程式中</p>
+                <div class="token-section">
+                    <div class="token-label">驗證碼</div>
+                    <div class="token-box" id="token-display"></div>
+                    <button
+                        class="copy-btn"
+                        id="copy-btn"
+                        onclick="copyToken()"
+                    >
+                        複製驗證碼
+                    </button>
+                </div>
+                <div class="instructions">
+                    複製後請回到 GSAT
+                    單字網站，點選「貼上驗證碼」完成登入。此頁面可以關閉。
+                </div>
+            </div>
+        </div>
+
+        <script type="module">
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+            import {
+                getAuth,
+                getRedirectResult,
+                signInWithRedirect,
+                GoogleAuthProvider,
+            } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+            const firebaseConfig = {
+                apiKey: "AIzaSyA3vmSo8OGAQAWfyvgCLx811bJjq2PU89I",
+                authDomain: "gsat-vocab-website.firebaseapp.com",
+                projectId: "gsat-vocab-website",
+                storageBucket: "gsat-vocab-website.firebasestorage.app",
+                messagingSenderId: "752021009254",
+                appId: "1:752021009254:web:ad102469461238ac178ea7",
+            };
+
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const googleProvider = new GoogleAuthProvider();
+
+            let idToken = null;
+
+            window.copyToken = async function () {
+                if (!idToken) return;
+                try {
+                    await navigator.clipboard.writeText(idToken);
+                    const btn = document.getElementById("copy-btn");
+                    btn.textContent = "已複製！";
+                    btn.classList.add("copied");
+                    setTimeout(() => {
+                        btn.textContent = "複製驗證碼";
+                        btn.classList.remove("copied");
+                    }, 2000);
+                } catch (e) {
+                    const tokenBox = document.getElementById("token-display");
+                    const range = document.createRange();
+                    range.selectNodeContents(tokenBox);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    alert("請手動複製選取的文字 (Ctrl+C / Cmd+C)");
+                }
+            };
+
+            function showError(message) {
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("error").style.display = "block";
+                document.getElementById("error-message").textContent = message;
+            }
+
+            function showSuccess(token) {
+                idToken = token;
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("success").style.display = "block";
+                document.getElementById("token-display").textContent = token;
+            }
+
+            async function main() {
+                const params = new URLSearchParams(window.location.search);
+
+                if (params.get("start") === "1") {
+                    try {
+                        await signInWithRedirect(auth, googleProvider);
+                    } catch (error) {
+                        console.error("Redirect error:", error);
+                        showError(error.message || "無法啟動登入流程");
+                    }
+                    return;
+                }
+
+                try {
+                    const result = await getRedirectResult(auth);
+                    if (result && result.user) {
+                        const cred =
+                            GoogleAuthProvider.credentialFromResult(result);
+                        if (cred && cred.idToken) {
+                            showSuccess(cred.idToken);
+                        } else {
+                            showError("無法取得 Google 驗證碼，請重試。");
+                        }
+                    } else if (auth.currentUser) {
+                        showError("已登入但無法取得驗證碼。請先登出後重試。");
+                    } else {
+                        showError("未收到登入資訊。請從應用程式重新啟動登入。");
+                    }
+                } catch (error) {
+                    console.error("Auth error:", error);
+                    showError(error.message || "登入過程發生錯誤");
+                }
+            }
+
+            main();
+        </script>
+    </body>
+</html>

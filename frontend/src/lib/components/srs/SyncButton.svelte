@@ -7,6 +7,9 @@
 
     let showConflictDialog = $state(false);
     let showErrorPopover = $state(false);
+    let showTokenDialog = $state(false);
+    let tokenInput = $state("");
+    let tokenError = $state("");
     let conflictData = $state<{ cloudTime: number; localTime: number } | null>(
         null,
     );
@@ -72,6 +75,30 @@
             hour: "2-digit",
             minute: "2-digit",
         });
+    }
+
+    function openExternalLogin() {
+        auth.startExternalLogin();
+        showErrorPopover = false;
+        showTokenDialog = true;
+        tokenInput = "";
+        tokenError = "";
+    }
+
+    async function submitToken() {
+        if (!tokenInput.trim()) {
+            tokenError = "請貼上驗證碼";
+            return;
+        }
+        tokenError = "";
+        try {
+            await auth.loginWithToken(tokenInput.trim());
+            showTokenDialog = false;
+            tokenInput = "";
+            await sync.syncWithCloud();
+        } catch (e: any) {
+            tokenError = auth.loginError || "驗證失敗，請重試";
+        }
     }
 </script>
 
@@ -190,8 +217,8 @@
                         {auth.loginError
                             ? "登入失敗"
                             : sync.lastSyncError?.includes("頻繁")
-                            ? "同步冷卻中"
-                            : "同步發生錯誤"}
+                              ? "同步冷卻中"
+                              : "同步發生錯誤"}
                     </h4>
                     <button
                         type="button"
@@ -221,6 +248,17 @@
                         : sync.lastSyncError ||
                           "連線至雲端時發生問題，請檢查網路狀態或稍後再試。"}
                 </p>
+                {#if auth.loginError}
+                    <div class="popover-actions">
+                        <button
+                            type="button"
+                            class="external-login-btn"
+                            onclick={openExternalLogin}
+                        >
+                            在外部瀏覽器登入
+                        </button>
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
@@ -311,6 +349,80 @@
     </div>
 {/if}
 
+{#if showTokenDialog}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+        class="modal-backdrop"
+        onclick={() => (showTokenDialog = false)}
+        role="presentation"
+    >
+        <div
+            class="modal-container"
+            onclick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            tabindex="-1"
+        >
+            <div class="modal-header">
+                <button
+                    type="button"
+                    class="close-btn"
+                    onclick={() => (showTokenDialog = false)}
+                    aria-label="關閉"
+                >
+                    <svg
+                        class="w-5 h-5"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M6 18 18 6M6 6l12 12"
+                        />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-content">
+                <header class="mb-4">
+                    <h2
+                        class="text-xl font-semibold tracking-tight text-content-primary mb-2"
+                    >
+                        貼上驗證碼
+                    </h2>
+                    <p class="text-sm text-content-secondary leading-relaxed">
+                        請在外部瀏覽器完成 Google 登入後，複製驗證碼並貼到下方。
+                    </p>
+                </header>
+
+                <div class="token-input-section">
+                    <textarea
+                        class="token-input"
+                        bind:value={tokenInput}
+                        placeholder="貼上驗證碼..."
+                        rows="3"
+                    ></textarea>
+                    {#if tokenError}
+                        <p class="token-error">{tokenError}</p>
+                    {/if}
+                    <button
+                        type="button"
+                        class="submit-token-btn"
+                        onclick={submitToken}
+                        disabled={auth.loading}
+                    >
+                        {auth.loading ? "驗證中..." : "完成登入"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
 <style>
     .bg-srs-again {
         background-color: var(--color-srs-again);
@@ -383,6 +495,28 @@
         line-height: 1.5;
         color: var(--color-content-secondary);
         word-break: break-word;
+    }
+
+    .popover-actions {
+        padding: 0 0.875rem 0.75rem;
+    }
+
+    .external-login-btn {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-accent);
+        background: var(--color-accent-soft);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .external-login-btn:hover {
+        background: var(--color-accent);
+        color: #fff;
     }
 
     /* Modal */
@@ -507,6 +641,63 @@
         font-size: 0.75rem;
         color: var(--color-content-tertiary);
         margin-top: 0.125rem;
+    }
+
+    .token-input-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .token-input {
+        width: 100%;
+        padding: 0.75rem;
+        font-family: monospace;
+        font-size: 0.75rem;
+        line-height: 1.4;
+        color: var(--color-content-primary);
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        resize: none;
+        transition: border-color 0.15s ease;
+    }
+
+    .token-input:focus {
+        outline: none;
+        border-color: var(--color-accent);
+    }
+
+    .token-input::placeholder {
+        color: var(--color-content-tertiary);
+    }
+
+    .token-error {
+        font-size: 0.75rem;
+        color: var(--color-srs-again);
+        margin: 0;
+    }
+
+    .submit-token-btn {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #fff;
+        background: var(--color-accent);
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .submit-token-btn:hover:not(:disabled) {
+        filter: brightness(1.1);
+    }
+
+    .submit-token-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     @keyframes fadeIn {
