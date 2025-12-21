@@ -24,13 +24,16 @@
             showErrorPopover = true;
             return;
         }
-                    await auth.login();
+
+        showErrorPopover = false;
         if (!auth.user) {
             try {
                 await auth.login();
             } catch (e) {
                 return;
             }
+
+            if (!auth.user) return;
         }
 
         try {
