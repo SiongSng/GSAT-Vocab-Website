@@ -167,8 +167,9 @@ export function getAuthStore() {
     },
 
     startExternalLogin() {
+      const base = import.meta.env.BASE_URL || "/";
       window.open(
-        `${window.location.origin}/auth-callback.html?start=1`,
+        `${window.location.origin}${base}auth-callback.html?start=1`,
         "_blank",
       );
     },

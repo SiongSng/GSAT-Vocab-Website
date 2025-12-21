@@ -1,6 +1,7 @@
 <script lang="ts">
     import { getAuthStore } from "$lib/stores/auth.svelte";
     import { getSyncStore } from "$lib/stores/sync.svelte";
+    import Portal from "$lib/components/Portal.svelte";
 
     const auth = getAuthStore();
     const sync = getSyncStore();
@@ -256,162 +257,171 @@
 </div>
 
 {#if showConflictDialog && conflictData}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-        class="modal-backdrop"
-        onclick={() => (showConflictDialog = false)}
-        role="presentation"
-    >
+    <Portal>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-            class="modal-container"
-            onclick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            tabindex="-1"
+            class="modal-backdrop"
+            onclick={() => (showConflictDialog = false)}
+            role="presentation"
         >
-            <div class="modal-header">
-                <button
-                    type="button"
-                    class="close-btn"
-                    onclick={() => (showConflictDialog = false)}
-                    aria-label="關閉"
-                >
-                    <svg
-                        class="w-5 h-5"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                        stroke="currentColor"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M6 18 18 6M6 6l12 12"
-                        />
-                    </svg>
-                </button>
-            </div>
-
-            <div class="modal-content">
-                <header class="mb-5">
-                    <h2
-                        class="text-xl font-semibold tracking-tight text-content-primary mb-2"
-                    >
-                        同步衝突
-                    </h2>
-                    <p class="text-sm text-content-secondary leading-relaxed">
-                        雲端與本機的資料不一致，請選擇要保留的版本。
-                    </p>
-                </header>
-
-                <div class="conflict-options">
+            <div
+                class="modal-container"
+                onclick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                tabindex="-1"
+            >
+                <div class="modal-header">
                     <button
                         type="button"
-                        onclick={() => resolveConflict(true)}
-                        class="conflict-option"
-                    >
-                        <div class="option-row">
-                            <span class="option-label">雲端版本</span>
-                            <span class="option-badge">較新</span>
-                        </div>
-                        <p class="option-time">
-                            {formatDate(conflictData.cloudTime)}
-                        </p>
-                        <p class="option-desc">覆蓋本機進度</p>
-                    </button>
-
-                    <button
-                        type="button"
+                        class="close-btn"
                         onclick={() => (showConflictDialog = false)}
-                        class="conflict-option conflict-option-alt"
+                        aria-label="關閉"
                     >
-                        <div class="option-row">
-                            <span class="option-label">本機版本</span>
-                        </div>
-                        <p class="option-time">
-                            {formatDate(conflictData.localTime)}
-                        </p>
-                        <p class="option-desc">保留目前進度，稍後同步</p>
+                        <svg
+                            class="w-5 h-5"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18 18 6M6 6l12 12"
+                            />
+                        </svg>
                     </button>
+                </div>
+
+                <div class="modal-content">
+                    <header class="mb-5">
+                        <h2
+                            class="text-xl font-semibold tracking-tight text-content-primary mb-2"
+                        >
+                            同步衝突
+                        </h2>
+                        <p
+                            class="text-sm text-content-secondary leading-relaxed"
+                        >
+                            雲端與本機的資料不一致，請選擇要保留的版本。
+                        </p>
+                    </header>
+
+                    <div class="conflict-options">
+                        <button
+                            type="button"
+                            onclick={() => resolveConflict(true)}
+                            class="conflict-option"
+                        >
+                            <div class="option-row">
+                                <span class="option-label">雲端版本</span>
+                                <span class="option-badge">較新</span>
+                            </div>
+                            <p class="option-time">
+                                {formatDate(conflictData.cloudTime)}
+                            </p>
+                            <p class="option-desc">覆蓋本機進度</p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onclick={() => (showConflictDialog = false)}
+                            class="conflict-option conflict-option-alt"
+                        >
+                            <div class="option-row">
+                                <span class="option-label">本機版本</span>
+                            </div>
+                            <p class="option-time">
+                                {formatDate(conflictData.localTime)}
+                            </p>
+                            <p class="option-desc">保留目前進度，稍後同步</p>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </Portal>
 {/if}
 
 {#if showTokenDialog}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div
-        class="modal-backdrop"
-        onclick={() => (showTokenDialog = false)}
-        role="presentation"
-    >
+    <Portal>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
-            class="modal-container"
-            onclick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            tabindex="-1"
+            class="modal-backdrop"
+            onclick={() => (showTokenDialog = false)}
+            role="presentation"
         >
-            <div class="modal-header">
-                <button
-                    type="button"
-                    class="close-btn"
-                    onclick={() => (showTokenDialog = false)}
-                    aria-label="關閉"
-                >
-                    <svg
-                        class="w-5 h-5"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                        stroke="currentColor"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M6 18 18 6M6 6l12 12"
-                        />
-                    </svg>
-                </button>
-            </div>
-
-            <div class="modal-content">
-                <header class="mb-4">
-                    <h2
-                        class="text-xl font-semibold tracking-tight text-content-primary mb-2"
-                    >
-                        貼上驗證碼
-                    </h2>
-                    <p class="text-sm text-content-secondary leading-relaxed">
-                        請在外部瀏覽器完成 Google 登入後，複製驗證碼並貼到下方。
-                    </p>
-                </header>
-
-                <div class="token-input-section">
-                    <textarea
-                        class="token-input"
-                        bind:value={tokenInput}
-                        placeholder="貼上驗證碼..."
-                        rows="3"
-                    ></textarea>
-                    {#if tokenError}
-                        <p class="token-error">{tokenError}</p>
-                    {/if}
+            <div
+                class="modal-container"
+                onclick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                tabindex="-1"
+            >
+                <div class="modal-header">
                     <button
                         type="button"
-                        class="submit-token-btn"
-                        onclick={submitToken}
-                        disabled={auth.loading}
+                        class="close-btn"
+                        onclick={() => (showTokenDialog = false)}
+                        aria-label="關閉"
                     >
-                        {auth.loading ? "驗證中..." : "完成登入"}
+                        <svg
+                            class="w-5 h-5"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18 18 6M6 6l12 12"
+                            />
+                        </svg>
                     </button>
+                </div>
+
+                <div class="modal-content">
+                    <header class="mb-4">
+                        <h2
+                            class="text-xl font-semibold tracking-tight text-content-primary mb-2"
+                        >
+                            貼上驗證碼
+                        </h2>
+                        <p
+                            class="text-sm text-content-secondary leading-relaxed"
+                        >
+                            請在外部瀏覽器完成 Google
+                            登入後，複製驗證碼並貼到下方。
+                        </p>
+                    </header>
+
+                    <div class="token-input-section">
+                        <textarea
+                            class="token-input"
+                            bind:value={tokenInput}
+                            placeholder="貼上驗證碼..."
+                            rows="3"
+                        ></textarea>
+                        {#if tokenError}
+                            <p class="token-error">{tokenError}</p>
+                        {/if}
+                        <button
+                            type="button"
+                            class="submit-token-btn"
+                            onclick={submitToken}
+                            disabled={auth.loading}
+                        >
+                            {auth.loading ? "驗證中..." : "完成登入"}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </Portal>
 {/if}
 
 <style>
