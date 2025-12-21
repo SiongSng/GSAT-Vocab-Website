@@ -1,4 +1,9 @@
 import { EdgeTTS } from "edge-tts-universal/browser";
+import {
+  getTTSSettingsStore,
+  isKokoroAvailable,
+} from "./stores/tts-settings.svelte";
+import { synthesizeWithKokoro } from "./kokoro-tts";
 
 const VOICE = "en-US-JennyNeural";
 const PARALLEL_ATTEMPTS = 3;
@@ -92,7 +97,7 @@ function withTimeout<T>(
   });
 }
 
-async function synthesizeOnce(text: string): Promise<Blob> {
+async function synthesizeWithEdgeTTS(text: string): Promise<Blob> {
   const timeout = getSynthesisTimeout();
 
   let result;
@@ -114,12 +119,29 @@ async function synthesizeOnce(text: string): Promise<Blob> {
   return result.audio;
 }
 
+function shouldUseKokoro(): boolean {
+  const settings = getTTSSettingsStore();
+  return settings.engine === "kokoro" && isKokoroAvailable();
+}
+
+async function synthesizeOnce(text: string): Promise<Blob> {
+  if (shouldUseKokoro()) {
+    return synthesizeWithKokoro(text);
+  }
+  return synthesizeWithEdgeTTS(text);
+}
+
 function jitteredDelay(baseMs: number, jitterRatio: number = 0.5): number {
   const jitter = baseMs * jitterRatio * (Math.random() * 2 - 1);
   return Math.max(0, baseMs + jitter);
 }
 
 async function synthesizeWithRace(text: string): Promise<string> {
+  if (shouldUseKokoro()) {
+    const audioBlob = await synthesizeOnce(text);
+    return URL.createObjectURL(audioBlob);
+  }
+
   const errors: Error[] = [];
   let resolved = false;
 

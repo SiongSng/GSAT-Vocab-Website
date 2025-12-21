@@ -1,6 +1,7 @@
 <script lang="ts">
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
+    import TTSSettings from "$lib/components/ui/TTSSettings.svelte";
     import {
         getFilters,
         setPosFilter,
@@ -172,6 +173,10 @@
                     </div>
                 </label>
             </div>
+        </div>
+
+        <div class="filter-section">
+            <TTSSettings />
         </div>
     </div>
 </BottomSheet>

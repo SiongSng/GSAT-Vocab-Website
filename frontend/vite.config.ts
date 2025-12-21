@@ -85,7 +85,7 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        globIgnores: ["data/**"],
+        globIgnores: ["data/**", "**/kokoro-*.js"],
       },
     }),
   ],

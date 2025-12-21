@@ -11,6 +11,7 @@
     import { getAppStore, toggleFilterCollapsed } from "$lib/stores/app.svelte";
     import type { PosFilter, VocabTypeFilter } from "$lib/types";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
+    import TTSSettings from "$lib/components/ui/TTSSettings.svelte";
 
     const filters = getFilters();
     const app = getAppStore();
@@ -179,6 +180,10 @@
                         </button>
                     {/each}
                 </div>
+            </div>
+
+            <div class="filter-section">
+                <TTSSettings />
             </div>
 
             <div class="filter-section">
