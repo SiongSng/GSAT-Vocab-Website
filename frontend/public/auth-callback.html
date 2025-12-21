@@ -90,7 +90,8 @@
                 margin-bottom: 1rem;
                 color: #333;
             }
-            .copy-btn {
+            .copy-btn,
+            .login-btn {
                 width: 100%;
                 background: #3b82f6;
                 color: #fff;
@@ -102,11 +103,16 @@
                 cursor: pointer;
                 transition: background 0.15s;
             }
-            .copy-btn:hover {
+            .copy-btn:hover,
+            .login-btn:hover {
                 background: #2563eb;
             }
             .copy-btn.copied {
                 background: #16a34a;
+            }
+            .login-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
             }
             .instructions {
                 margin-top: 1rem;
@@ -135,7 +141,15 @@
     </head>
     <body>
         <div class="card">
-            <div id="loading">
+            <div id="start">
+                <h1>登入 Google</h1>
+                <p class="subtitle">點擊下方按鈕開始登入</p>
+                <button class="login-btn" id="login-btn" onclick="startLogin()">
+                    使用 Google 登入
+                </button>
+            </div>
+
+            <div id="loading" style="display: none">
                 <div class="spinner"></div>
                 <p class="loading">正在處理登入...</p>
             </div>
@@ -144,6 +158,13 @@
                 <h1>登入失敗</h1>
                 <p class="subtitle">請關閉此頁面後重試</p>
                 <div class="error" id="error-message"></div>
+                <button
+                    class="login-btn"
+                    onclick="startLogin()"
+                    style="margin-top: 1rem"
+                >
+                    重試
+                </button>
             </div>
 
             <div id="success" style="display: none">
@@ -177,7 +198,7 @@
                 </div>
                 <div class="instructions">
                     複製後請回到 GSAT
-                    單字網站，點選「貼上驗證碼」完成登入。此頁面可以關閉。
+                    單字網站，貼上驗證碼完成登入。此頁面可以關閉。
                 </div>
             </div>
         </div>
@@ -186,14 +207,13 @@
             import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
             import {
                 getAuth,
-                getRedirectResult,
-                signInWithRedirect,
+                signInWithPopup,
                 GoogleAuthProvider,
             } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
             const firebaseConfig = {
                 apiKey: "AIzaSyA3vmSo8OGAQAWfyvgCLx811bJjq2PU89I",
-                authDomain: "gsat-vocab-website.firebaseapp.com",
+                authDomain: "siongsng.github.io",
                 projectId: "gsat-vocab-website",
                 storageBucket: "gsat-vocab-website.firebasestorage.app",
                 messagingSenderId: "752021009254",
@@ -205,6 +225,24 @@
             const googleProvider = new GoogleAuthProvider();
 
             let idToken = null;
+
+            function showView(id) {
+                ["start", "loading", "error", "success"].forEach((v) => {
+                    document.getElementById(v).style.display =
+                        v === id ? "block" : "none";
+                });
+            }
+
+            function showError(message) {
+                showView("error");
+                document.getElementById("error-message").textContent = message;
+            }
+
+            function showSuccess(token) {
+                idToken = token;
+                showView("success");
+                document.getElementById("token-display").textContent = token;
+            }
 
             window.copyToken = async function () {
                 if (!idToken) return;
@@ -228,54 +266,33 @@
                 }
             };
 
-            function showError(message) {
-                document.getElementById("loading").style.display = "none";
-                document.getElementById("error").style.display = "block";
-                document.getElementById("error-message").textContent = message;
-            }
-
-            function showSuccess(token) {
-                idToken = token;
-                document.getElementById("loading").style.display = "none";
-                document.getElementById("success").style.display = "block";
-                document.getElementById("token-display").textContent = token;
-            }
-
-            async function main() {
-                const params = new URLSearchParams(window.location.search);
-
-                if (params.get("start") === "1") {
-                    try {
-                        await signInWithRedirect(auth, googleProvider);
-                    } catch (error) {
-                        console.error("Redirect error:", error);
-                        showError(error.message || "無法啟動登入流程");
-                    }
-                    return;
-                }
-
+            window.startLogin = async function () {
+                showView("loading");
                 try {
-                    const result = await getRedirectResult(auth);
-                    if (result && result.user) {
-                        const cred =
-                            GoogleAuthProvider.credentialFromResult(result);
-                        if (cred && cred.idToken) {
-                            showSuccess(cred.idToken);
-                        } else {
-                            showError("無法取得 Google 驗證碼，請重試。");
-                        }
-                    } else if (auth.currentUser) {
-                        showError("已登入但無法取得驗證碼。請先登出後重試。");
+                    const result = await signInWithPopup(auth, googleProvider);
+                    const cred =
+                        GoogleAuthProvider.credentialFromResult(result);
+                    if (cred && cred.idToken) {
+                        showSuccess(cred.idToken);
                     } else {
-                        showError("未收到登入資訊。請從應用程式重新啟動登入。");
+                        showError("無法取得 Google 驗證碼，請重試。");
                     }
                 } catch (error) {
                     console.error("Auth error:", error);
+                    if (error.code === "auth/popup-closed-by-user") {
+                        showView("start");
+                        return;
+                    }
                     showError(error.message || "登入過程發生錯誤");
                 }
-            }
+            };
 
-            main();
+            // Auto-start if ?start=1
+            if (
+                new URLSearchParams(window.location.search).get("start") === "1"
+            ) {
+                window.startLogin();
+            }
         </script>
     </body>
 </html>
