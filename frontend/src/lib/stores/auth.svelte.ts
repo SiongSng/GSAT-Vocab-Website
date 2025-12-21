@@ -34,6 +34,9 @@ export async function initAuth(): Promise<void> {
       if (result?.user) {
         state.user = result.user;
       }
+      if (!state.user && auth.currentUser) {
+        state.user = auth.currentUser;
+      }
     } catch (error: any) {
       console.error("Redirect sign-in error:", error);
       state.loginError = error?.message || "登入失敗";
@@ -43,12 +46,15 @@ export async function initAuth(): Promise<void> {
   return initPromise;
 }
 
-// Initialize auth listener
-onAuthStateChanged(auth, (user) => {
-  state.user = user;
-  state.loading = false;
-  state.initialized = true;
-});
+void authReady
+  .catch(() => undefined)
+  .finally(() => {
+    onAuthStateChanged(auth, (user) => {
+      state.user = user;
+      state.loading = false;
+      state.initialized = true;
+    });
+  });
 
 void initAuth();
 
@@ -76,7 +82,7 @@ export function getAuthStore() {
       state.loginError = null;
       try {
         await authReady;
-        const method = options?.method ?? "popup";
+        const method = options?.method ?? "redirect";
         if (method === "redirect") {
           await signInWithRedirect(auth, googleProvider);
         } else {

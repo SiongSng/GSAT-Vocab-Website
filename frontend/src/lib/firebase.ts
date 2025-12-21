@@ -2,7 +2,6 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  indexedDBLocalPersistence,
   browserLocalPersistence,
   setPersistence,
 } from "firebase/auth";
@@ -23,6 +22,6 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
-export const authReady = setPersistence(auth, indexedDBLocalPersistence).catch(
-  () => setPersistence(auth, browserLocalPersistence),
+export const authReady = setPersistence(auth, browserLocalPersistence).catch(
+  () => undefined,
 );

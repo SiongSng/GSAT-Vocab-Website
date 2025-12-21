@@ -28,7 +28,7 @@
         showErrorPopover = false;
         if (!auth.user) {
             try {
-                await auth.login();
+                await auth.login({ method: "redirect" });
             } catch (e) {
                 return;
             }
