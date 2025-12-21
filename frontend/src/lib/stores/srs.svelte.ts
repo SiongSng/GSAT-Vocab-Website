@@ -329,12 +329,25 @@ export function startStudySession(options?: {
 }
 
 const PRELOAD_AHEAD = 3;
+let preloadTimer: ReturnType<typeof setTimeout> | undefined;
 
 function preloadUpcomingAudio(): void {
-  const startIdx = store.currentCardIndex;
-  const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
-  const lemmas = store.studyQueue.slice(startIdx, endIdx).map((c) => c.lemma);
-  preloadAudio(lemmas);
+  clearTimeout(preloadTimer);
+
+  // Delay preloading to specific prioritize current card playback.
+  // This avoids network contention and ensures the current card's auto-play
+  // gets the first slot in the request queue.
+  preloadTimer = setTimeout(() => {
+    if (!store.isStudying) return;
+
+    const startIdx = store.currentCardIndex + 1;
+    const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
+
+    if (startIdx < endIdx) {
+      const lemmas = store.studyQueue.slice(startIdx, endIdx).map((c) => c.lemma);
+      preloadAudio(lemmas);
+    }
+  }, 1200);
 }
 
 function setCurrentCard(card: SRSCard): void {
@@ -441,6 +454,7 @@ function moveToNextCard(): void {
 }
 
 export async function endStudySession(): Promise<void> {
+  clearTimeout(preloadTimer);
   if (store.sessionId && store.sessionStats.cardsStudied > 0) {
     const startTime = store.sessionStats.startTime.getTime();
     const endTime = Date.now();
