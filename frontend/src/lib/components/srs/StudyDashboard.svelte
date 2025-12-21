@@ -6,6 +6,7 @@
         getNewCards,
         getAllCards,
         getLearningCards,
+        getTodayStats,
     } from "$lib/stores/srs-storage";
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
@@ -13,7 +14,11 @@
     import DeckEditor from "./DeckEditor.svelte";
 
     interface Props {
-        onStart: (newCardPool: string[], excludeLemmas: Set<string>) => void;
+        onStart: (
+            newCardPool: string[],
+            excludeLemmas: Set<string>,
+            priority: StudyPriority,
+        ) => void;
     }
 
     let { onStart }: Props = $props();
@@ -25,6 +30,9 @@
     const STORAGE_KEY = "gsat_srs_study_settings";
     const CUSTOM_DECK_KEY = "gsat_srs_custom_decks";
     const LEGACY_DECK_KEY = "gsat_srs_custom_deck";
+    const LEVEL_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
+
+    export type StudyPriority = "mixed" | "new_first" | "review_first";
 
     type CustomDeck = {
         id: string;
@@ -37,19 +45,26 @@
         newCardLimit: number;
         autoSpeak: boolean;
         smartMode: boolean;
+        levelFilter: number[];
+        studyPriority: StudyPriority;
     }
 
     const defaultSettings: StudySettings = {
         newCardLimit: 20,
         autoSpeak: true,
         smartMode: true,
+        levelFilter: [],
+        studyPriority: "mixed",
     };
 
     let newCardLimit = $state(defaultSettings.newCardLimit);
     let autoSpeak = $state(defaultSettings.autoSpeak);
     let smartMode = $state(defaultSettings.smartMode);
+    let levelFilter: number[] = $state(defaultSettings.levelFilter);
+    let studyPriority: StudyPriority = $state(defaultSettings.studyPriority);
     let showSettings = $state(false);
     let isCustomDeckLoaded = $state(false);
+    let todayNewCardsStudied = $state(0);
 
     let customDecks: CustomDeck[] = $state([]);
     let selectedDeckId: string | null = $state(null);
@@ -65,6 +80,10 @@
                     settings.newCardLimit ?? defaultSettings.newCardLimit;
                 autoSpeak = settings.autoSpeak ?? defaultSettings.autoSpeak;
                 smartMode = settings.smartMode ?? defaultSettings.smartMode;
+                levelFilter =
+                    settings.levelFilter ?? defaultSettings.levelFilter;
+                studyPriority =
+                    settings.studyPriority ?? defaultSettings.studyPriority;
             }
         } catch {
             // ignore
@@ -77,6 +96,8 @@
                 newCardLimit,
                 autoSpeak,
                 smartMode,
+                levelFilter,
+                studyPriority,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
         } catch {
@@ -84,12 +105,32 @@
         }
     }
 
+    async function loadTodayStats(): Promise<void> {
+        try {
+            const stats = await getTodayStats();
+            todayNewCardsStudied = stats.new_cards;
+        } catch {
+            todayNewCardsStudied = 0;
+        }
+    }
+
+    function toggleLevelFilter(level: number): void {
+        if (levelFilter.includes(level)) {
+            levelFilter = levelFilter.filter((l) => l !== level);
+        } else {
+            levelFilter = [...levelFilter, level];
+        }
+    }
+
     loadSettings();
+    loadTodayStats();
 
     $effect(() => {
         newCardLimit;
         autoSpeak;
         smartMode;
+        levelFilter;
+        studyPriority;
         saveSettings();
     });
 
@@ -337,6 +378,12 @@
         pool = pool.filter((w) => newCardLemmas.has(w.lemma));
         pool = pool.filter((w) => w.primary_pos !== "PROPN");
 
+        if (levelFilter.length > 0) {
+            pool = pool.filter(
+                (w) => w.level !== null && levelFilter.includes(w.level),
+            );
+        }
+
         if (smartMode) {
             pool = pool.sort((a, b) => b.importance_score - a.importance_score);
         }
@@ -344,8 +391,12 @@
         return pool.map((w) => w.lemma);
     });
 
+    const remainingDailyNewCards = $derived(
+        Math.max(0, newCardLimit - todayNewCardsStudied),
+    );
+
     const actualNewCardCount = $derived(
-        Math.min(newCardLimit, filteredNewCardPool.length),
+        Math.min(remainingDailyNewCards, filteredNewCardPool.length),
     );
 
     const todayTotal = $derived(
@@ -377,12 +428,12 @@
     });
 
     function handleStart() {
-        onStart(filteredNewCardPool, excludedLemmas);
+        onStart(filteredNewCardPool, excludedLemmas, studyPriority);
     }
 
     function handleStartCustomDeck() {
         if (!selectedDeck) return;
-        onStart(customNewCardPool, customExcludedLemmas);
+        onStart(customNewCardPool, customExcludedLemmas, studyPriority);
     }
 </script>
 
@@ -653,74 +704,146 @@
 {/if}
 
 {#snippet settingsContent()}
-    <div class="space-y-5">
-        <div
-            class="flex items-center justify-between p-3 bg-surface-page/60 rounded-lg"
-        >
-            <div>
-                <span class="text-sm font-medium text-content-primary"
-                    >智慧排序</span
-                >
-                <p class="text-xs text-content-tertiary mt-0.5">
-                    {smartMode ? "依重要程度排序新卡片" : "隨機順序呈現新卡片"}
+    <div class="settings-grid">
+        <div class="setting-group">
+            <h4 class="setting-group-title">新卡片設定</h4>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>每日上限</span>
+                    <HelpTooltip text="每天最多學習的新卡片數量" />
+                </div>
+                <div class="setting-row-control">
+                    <input
+                        id="new-card-limit"
+                        type="range"
+                        bind:value={newCardLimit}
+                        min="0"
+                        max="50"
+                        step="5"
+                        class="slider-input"
+                    />
+                    <span class="slider-value">{newCardLimit}</span>
+                </div>
+                {#if todayNewCardsStudied > 0}
+                    <p class="setting-row-hint full-width">
+                        今日已學習 {todayNewCardsStudied} 張，剩餘 {remainingDailyNewCards}
+                        張
+                    </p>
+                {/if}
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>詞彙等級</span>
+                    <HelpTooltip text="限制新卡片範圍為特定等級" />
+                </div>
+                <div class="setting-row-control">
+                    <div class="chip-group">
+                        {#each LEVEL_OPTIONS as level}
+                            <button
+                                type="button"
+                                class="chip"
+                                class:chip-active={levelFilter.includes(level)}
+                                onclick={() => toggleLevelFilter(level)}
+                            >
+                                {level}
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+                <p class="setting-row-hint full-width">
+                    {#if levelFilter.length === 0}
+                        不限制等級
+                    {:else}
+                        僅學習等級 {[...levelFilter]
+                            .sort((a, b) => a - b)
+                            .join("、")} 的單字
+                    {/if}
                 </p>
             </div>
-            <button
-                type="button"
-                onclick={() => (smartMode = !smartMode)}
-                class="relative w-10 h-6 rounded-full transition-colors {smartMode
-                    ? 'bg-accent'
-                    : 'bg-border'}"
-                role="switch"
-                aria-checked={smartMode}
-                aria-label="智慧排序"
-            >
-                <span
-                    class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform {smartMode
-                        ? 'translate-x-4'
-                        : 'translate-x-0'}"
-                ></span>
-            </button>
-        </div>
 
-        <div class="slider-field">
-            <div class="slider-header">
-                <label
-                    for="new-card-limit"
-                    class="text-sm font-medium text-content-secondary"
-                >
-                    每日新卡片
-                </label>
-                <span class="slider-value">{newCardLimit}</span>
-            </div>
-            <input
-                id="new-card-limit"
-                type="range"
-                bind:value={newCardLimit}
-                min="0"
-                max="50"
-                step="5"
-                class="slider-input"
-            />
-            <div class="slider-labels">
-                <span>0</span>
-                <span>50</span>
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>智慧排序</span>
+                    <HelpTooltip
+                        text="依重要程度排序新卡片，優先學習高頻詞彙"
+                    />
+                </div>
+                <div class="setting-row-control">
+                    <button
+                        type="button"
+                        onclick={() => (smartMode = !smartMode)}
+                        class="toggle"
+                        class:toggle-active={smartMode}
+                        role="switch"
+                        aria-checked={smartMode}
+                        aria-label="智慧排序"
+                    >
+                        <span class="toggle-thumb"></span>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div class="space-y-2.5">
-            <label class="flex items-center gap-3 cursor-pointer group">
-                <input
-                    type="checkbox"
-                    bind:checked={autoSpeak}
-                    class="w-4 h-4 rounded border-border-hover text-accent focus:ring-0 focus:ring-offset-0"
-                />
-                <span
-                    class="text-sm text-content-secondary group-hover:text-content-primary transition-colors"
-                >
-                    自動朗讀單字
-                </span>
-            </label>
+        <div class="setting-group">
+            <h4 class="setting-group-title">學習偏好</h4>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>學習順序</span>
+                    <HelpTooltip text="決定練習時優先出現的卡片類型" />
+                </div>
+                <div class="setting-row-control full-width">
+                    <div class="segmented-control">
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={studyPriority ===
+                                "review_first"}
+                            onclick={() => (studyPriority = "review_first")}
+                        >
+                            複習優先
+                        </button>
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={studyPriority === "mixed"}
+                            onclick={() => (studyPriority = "mixed")}
+                        >
+                            混合
+                        </button>
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={studyPriority === "new_first"}
+                            onclick={() => (studyPriority = "new_first")}
+                        >
+                            新卡優先
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>自動朗讀</span>
+                    <HelpTooltip text="顯示卡片時自動播放單字發音" />
+                </div>
+                <div class="setting-row-control">
+                    <button
+                        type="button"
+                        onclick={() => (autoSpeak = !autoSpeak)}
+                        class="toggle"
+                        class:toggle-active={autoSpeak}
+                        role="switch"
+                        aria-checked={autoSpeak}
+                        aria-label="自動朗讀"
+                    >
+                        <span class="toggle-thumb"></span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 {/snippet}
@@ -1079,88 +1202,6 @@
         background-color: var(--color-srs-again-soft);
     }
 
-    /* Slider */
-    .slider-field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .slider-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .slider-value {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: var(--color-content-primary);
-        min-width: 1.5rem;
-        text-align: right;
-    }
-
-    .slider-input {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 100%;
-        height: 6px;
-        background: var(--color-border);
-        border-radius: 3px;
-        cursor: pointer;
-        transition: background 0.15s ease;
-    }
-
-    .slider-input:hover {
-        background: var(--color-border-hover);
-    }
-
-    .slider-input::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 18px;
-        height: 18px;
-        background: var(--color-content-primary);
-        border-radius: 50%;
-        cursor: pointer;
-        transition:
-            transform 0.15s ease,
-            box-shadow 0.15s ease;
-    }
-
-    .slider-input::-webkit-slider-thumb:hover {
-        transform: scale(1.15);
-        box-shadow: 0 0 0 4px var(--color-surface-hover);
-    }
-
-    .slider-input::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
-        background: var(--color-content-primary);
-        border: none;
-        border-radius: 50%;
-        cursor: pointer;
-        transition:
-            transform 0.15s ease,
-            box-shadow 0.15s ease;
-    }
-
-    .slider-input::-moz-range-thumb:hover {
-        transform: scale(1.15);
-        box-shadow: 0 0 0 4px var(--color-surface-hover);
-    }
-
-    .slider-input::-moz-range-track {
-        background: transparent;
-    }
-
-    .slider-labels {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.6875rem;
-        color: var(--color-content-tertiary);
-    }
-
     /* Modal */
     .modal-backdrop {
         position: fixed;
@@ -1180,5 +1221,219 @@
         border-radius: 0.75rem;
         box-shadow: var(--shadow-float);
         overflow: hidden;
+    }
+
+    /* Settings Grid */
+    .settings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .setting-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .setting-group:not(:first-child) {
+        padding-top: 1rem;
+        border-top: 1px solid var(--color-border);
+    }
+
+    .setting-group-title {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-section-header);
+        margin: 0;
+    }
+
+    .setting-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        padding: 0.5rem 0;
+    }
+
+    .setting-row-label {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.875rem;
+        color: var(--color-content-primary);
+    }
+
+    .setting-row-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }
+
+    .setting-row-control.full-width {
+        grid-column: 1 / -1;
+        justify-content: stretch;
+    }
+
+    .setting-row-hint {
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        margin: 0;
+    }
+
+    .setting-row-hint.full-width {
+        grid-column: 1 / -1;
+    }
+
+    /* Toggle Switch */
+    .toggle {
+        position: relative;
+        width: 2rem;
+        height: 1.125rem;
+        background-color: var(--color-border-hover);
+        border-radius: 0.5625rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .toggle-active {
+        background-color: var(--color-content-primary);
+    }
+
+    .toggle-thumb {
+        position: absolute;
+        top: 0.1875rem;
+        left: 0.1875rem;
+        width: 0.75rem;
+        height: 0.75rem;
+        background-color: white;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        transition: transform 0.15s ease;
+    }
+
+    .toggle-active .toggle-thumb {
+        transform: translateX(0.875rem);
+    }
+
+    /* Chip Group */
+    .chip-group {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .chip {
+        min-width: 1.75rem;
+        height: 1.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--color-surface-page);
+        border-radius: 4px;
+        font-weight: 500;
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        transition: all 0.15s ease;
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+
+    .chip:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-content-secondary);
+    }
+
+    .chip-active {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .chip-active:hover {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    /* Segmented Control */
+    .segmented-control {
+        display: flex;
+        background-color: var(--color-surface-page);
+        border-radius: 6px;
+        padding: 0.25rem;
+        gap: 0.25rem;
+        width: 100%;
+    }
+
+    .segment {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        background-color: transparent;
+        border-radius: 4px;
+        font-weight: 500;
+        font-size: 0.8125rem;
+        color: var(--color-content-tertiary);
+        transition: all 0.15s ease;
+        cursor: pointer;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .segment:hover:not(.segment-active) {
+        color: var(--color-content-secondary);
+    }
+
+    .segment-active {
+        background-color: var(--color-surface-primary);
+        color: var(--color-content-primary);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Slider */
+    .slider-input {
+        -webkit-appearance: none;
+        appearance: none;
+        flex: 1;
+        height: 4px;
+        background: var(--color-border);
+        border-radius: 2px;
+        cursor: pointer;
+        min-width: 80px;
+    }
+
+    .slider-input::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        background: var(--color-content-primary);
+        border-radius: 50%;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+    }
+
+    .slider-input::-webkit-slider-thumb:hover {
+        transform: scale(1.15);
+    }
+
+    .slider-input::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        background: var(--color-content-primary);
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .slider-input::-moz-range-track {
+        background: transparent;
+    }
+
+    .slider-value {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-content-primary);
+        min-width: 1.5rem;
+        text-align: right;
     }
 </style>

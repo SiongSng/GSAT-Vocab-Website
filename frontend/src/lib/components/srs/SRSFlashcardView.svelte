@@ -8,7 +8,9 @@
         endStudySession,
     } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
-    import StudyDashboard from "./StudyDashboard.svelte";
+    import StudyDashboard, {
+        type StudyPriority,
+    } from "./StudyDashboard.svelte";
     import StudySession from "./StudySession.svelte";
     import SessionComplete from "./SessionComplete.svelte";
 
@@ -51,11 +53,16 @@
         }
     }
 
-    function handleStart(newCardPool: string[], excludeLemmas: Set<string>) {
+    function handleStart(
+        newCardPool: string[],
+        excludeLemmas: Set<string>,
+        priority: StudyPriority,
+    ) {
         startStudySession({
             newLimit: getNewCardLimit(),
             newCardPool,
             excludeLemmas,
+            priority,
         });
         if (srs.studyQueue.length === 0) {
             endStudySession();

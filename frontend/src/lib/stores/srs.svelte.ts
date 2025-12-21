@@ -261,15 +261,18 @@ function getEligibleNewCards(
   return Array.from(cardMap.values()).flat();
 }
 
+export type StudyPriority = "mixed" | "new_first" | "review_first";
+
 export function startStudySession(options?: {
   newLimit?: number;
   reviewLimit?: number;
   newCardPool?: string[];
   excludeLemmas?: Set<string>;
+  priority?: StudyPriority;
 }): void {
   const now = new Date();
-  const queue: SRSCard[] = [];
   const excludeSet = options?.excludeLemmas ?? new Set();
+  const priority = options?.priority ?? "mixed";
 
   const newLimit =
     options?.newLimit ??
@@ -291,11 +294,22 @@ export function startStudySession(options?: {
   );
   const newCards = eligibleNewCards.slice(0, newLimit);
 
-  queue.push(...learningCards);
-  queue.push(...reviewCards);
-  queue.push(...newCards);
+  let queue: SRSCard[];
 
-  shuffleArray(queue);
+  if (priority === "mixed") {
+    queue = [...learningCards, ...reviewCards, ...newCards];
+    shuffleArray(queue);
+  } else if (priority === "review_first") {
+    shuffleArray(learningCards);
+    shuffleArray(reviewCards);
+    shuffleArray(newCards);
+    queue = [...learningCards, ...reviewCards, ...newCards];
+  } else {
+    shuffleArray(learningCards);
+    shuffleArray(reviewCards);
+    shuffleArray(newCards);
+    queue = [...newCards, ...learningCards, ...reviewCards];
+  }
 
   store.studyQueue = queue;
   store.currentCardIndex = 0;
