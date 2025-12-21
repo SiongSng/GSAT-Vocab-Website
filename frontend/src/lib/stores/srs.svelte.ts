@@ -48,6 +48,7 @@ interface SRSStore {
   reviewsToday: number;
   statsVersion: number;
   sessionId: string | null;
+  cramMode: boolean;
 }
 
 const store: SRSStore = $state({
@@ -65,6 +66,7 @@ const store: SRSStore = $state({
   reviewsToday: 0,
   statsVersion: 0,
   sessionId: null,
+  cramMode: false,
 });
 
 function createEmptySessionStats(): StudySessionStats {
@@ -142,6 +144,9 @@ export function getSRSStore() {
         store.currentCardIndex >= store.studyQueue.length &&
         store.studyQueue.length > 0
       );
+    },
+    get cramMode() {
+      return store.cramMode;
     },
   };
 }
@@ -271,6 +276,7 @@ export interface SessionOptions {
   excludeLemmas?: Set<string>;
   priority?: StudyPriority;
   isCustomDeck?: boolean;
+  cramMode?: boolean;
 }
 
 export interface SessionCardCounts {
@@ -322,25 +328,40 @@ export function getSessionCardCounts(
 }
 
 export function startStudySession(options: SessionOptions): void {
-  const { newCards, learningCards, reviewCards } =
-    getSessionCardsInternal(options);
-  const priority = options.priority ?? "mixed";
-
+  const cramMode = options.cramMode ?? false;
   let queue: SRSCard[];
 
-  if (priority === "mixed") {
-    queue = [...learningCards, ...reviewCards, ...newCards];
+  if (cramMode) {
+    const excludeSet = options.excludeLemmas ?? new Set();
+    const allCards = getAllCards().filter((c) => !excludeSet.has(c.lemma));
+
+    const seen = new Map<string, SRSCard>();
+    for (const card of allCards) {
+      if (!seen.has(card.lemma)) {
+        seen.set(card.lemma, card);
+      }
+    }
+    queue = Array.from(seen.values());
     shuffleArray(queue);
-  } else if (priority === "review_first") {
-    shuffleArray(learningCards);
-    shuffleArray(reviewCards);
-    shuffleArray(newCards);
-    queue = [...learningCards, ...reviewCards, ...newCards];
   } else {
-    shuffleArray(learningCards);
-    shuffleArray(reviewCards);
-    shuffleArray(newCards);
-    queue = [...newCards, ...learningCards, ...reviewCards];
+    const { newCards, learningCards, reviewCards } =
+      getSessionCardsInternal(options);
+    const priority = options.priority ?? "mixed";
+
+    if (priority === "mixed") {
+      queue = [...learningCards, ...reviewCards, ...newCards];
+      shuffleArray(queue);
+    } else if (priority === "review_first") {
+      shuffleArray(learningCards);
+      shuffleArray(reviewCards);
+      shuffleArray(newCards);
+      queue = [...learningCards, ...reviewCards, ...newCards];
+    } else {
+      shuffleArray(learningCards);
+      shuffleArray(reviewCards);
+      shuffleArray(newCards);
+      queue = [...newCards, ...learningCards, ...reviewCards];
+    }
   }
 
   store.studyQueue = queue;
@@ -349,6 +370,7 @@ export function startStudySession(options: SessionOptions): void {
   store.isFlipped = false;
   store.sessionStats = createEmptySessionStats();
   store.sessionId = crypto.randomUUID?.() ?? `session-${Date.now()}`;
+  store.cramMode = cramMode;
 
   if (queue.length > 0) {
     setCurrentCard(queue[0]);
@@ -415,6 +437,12 @@ export function rateCard(rating: Rating): void {
 
   const recordLog = store.schedulingInfo[rating];
   if (!recordLog) return;
+
+  if (store.cramMode) {
+    store.sessionStats.cardsStudied++;
+    moveToNextCard();
+    return;
+  }
 
   const { card: newCard, log } = recordLog;
 
@@ -488,7 +516,11 @@ function moveToNextCard(): void {
 
 export async function endStudySession(): Promise<void> {
   clearTimeout(preloadTimer);
-  if (store.sessionId && store.sessionStats.cardsStudied > 0) {
+  if (
+    store.sessionId &&
+    store.sessionStats.cardsStudied > 0 &&
+    !store.cramMode
+  ) {
     const startTime = store.sessionStats.startTime.getTime();
     const endTime = Date.now();
     await addSessionLog(
@@ -507,6 +539,7 @@ export async function endStudySession(): Promise<void> {
   store.isFlipped = false;
   store.schedulingInfo = null;
   store.sessionId = null;
+  store.cramMode = false;
   store.statsVersion++;
   forceSave();
 }

@@ -424,6 +424,15 @@
         if (!customDeckSessionOptions) return;
         onStart(customDeckSessionOptions);
     }
+
+    function handleCramDeck() {
+        if (!selectedDeck) return;
+        onStart({
+            newLimit: 0,
+            excludeLemmas: customExcludedLemmas,
+            cramMode: true,
+        });
+    }
 </script>
 
 <div class="dashboard-layout">
@@ -638,24 +647,36 @@
 
                 {#if selectedDeck}
                     <div class="deck-footer">
-                        <button
-                            type="button"
-                            onclick={handleStartCustomDeck}
-                            disabled={!customDeckSessionCounts ||
-                                customDeckSessionCounts.total === 0 ||
-                                !vocab.index ||
-                                vocab.index.length === 0}
-                            class="btn-start-secondary"
-                        >
-                            {#if customDeckSessionCounts && customDeckSessionCounts.total > 0}
-                                開始練習
-                                <span class="btn-start-count"
-                                    >{customDeckSessionCounts.total} 張</span
-                                >
-                            {:else}
-                                今日完成
-                            {/if}
-                        </button>
+                        <div class="deck-footer-buttons">
+                            <button
+                                type="button"
+                                onclick={handleStartCustomDeck}
+                                disabled={!customDeckSessionCounts ||
+                                    customDeckSessionCounts.total === 0 ||
+                                    !vocab.index ||
+                                    vocab.index.length === 0}
+                                class="btn-start-secondary"
+                            >
+                                {#if customDeckSessionCounts && customDeckSessionCounts.total > 0}
+                                    開始練習
+                                    <span class="btn-start-count"
+                                        >{customDeckSessionCounts.total} 張</span
+                                    >
+                                {:else}
+                                    今日完成
+                                {/if}
+                            </button>
+                            <button
+                                type="button"
+                                onclick={handleCramDeck}
+                                disabled={!vocab.index ||
+                                    vocab.index.length === 0 ||
+                                    selectedDeck.lemmas.length === 0}
+                                class="btn-cram"
+                            >
+                                抱佛腳
+                            </button>
+                        </div>
                     </div>
                 {/if}
             {/if}
@@ -1040,6 +1061,35 @@
         padding: 1rem;
         margin-top: 0.5rem;
         border-top: 1px solid var(--color-border);
+    }
+
+    .deck-footer-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-cram {
+        padding: 0.625rem 1rem;
+        background-color: transparent;
+        color: var(--color-content-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+    }
+
+    .btn-cram:hover:not(:disabled) {
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-border-hover);
+        color: var(--color-content-primary);
+    }
+
+    .btn-cram:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .empty-state {

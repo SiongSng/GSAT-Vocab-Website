@@ -127,6 +127,12 @@
             </div>
         {/if}
 
-        <ProgressBar />
+        {#if srs.cramMode}
+            <div class="mt-5 text-center text-sm text-content-tertiary">
+                {srs.progress.current} / {srs.progress.total}
+            </div>
+        {:else}
+            <ProgressBar />
+        {/if}
     {/if}
 </div>
