@@ -6,6 +6,7 @@
         addWordsToSRS,
         startStudySession,
         endStudySession,
+        setDailyLimits,
     } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import StudyDashboard, {
@@ -59,8 +60,9 @@
         excludeLemmas: Set<string>,
         priority: StudyPriority,
     ) {
+        const newCardLimit = getNewCardLimit();
+        setDailyLimits({ newCards: newCardLimit });
         startStudySession({
-            newLimit: getNewCardLimit(),
             newCardPool,
             excludeLemmas,
             priority,
