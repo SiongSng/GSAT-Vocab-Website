@@ -31,8 +31,17 @@
 
         showErrorPopover = false;
         if (!auth.user) {
-            openExternalLogin();
-            return;
+            try {
+                await auth.login();
+            } catch (e) {
+                showErrorPopover = true;
+                return;
+            }
+
+            if (!auth.user) {
+                if (auth.loginError) showErrorPopover = true;
+                return;
+            }
         }
 
         try {
@@ -70,11 +79,23 @@
     }
 
     function openExternalLogin() {
-        auth.startExternalLogin();
         showErrorPopover = false;
         showTokenDialog = true;
         tokenInput = "";
         tokenError = "";
+    }
+
+    function getAuthUrl() {
+        const base = import.meta.env.BASE_URL || "/";
+        return `${window.location.origin}${base}auth-callback.html`;
+    }
+
+    async function copyAuthUrl() {
+        try {
+            await navigator.clipboard.writeText(getAuthUrl());
+        } catch {
+            // fallback: select text
+        }
     }
 
     async function submitToken() {
@@ -389,17 +410,33 @@
                         <h2
                             class="text-xl font-semibold tracking-tight text-content-primary mb-2"
                         >
-                            貼上驗證碼
+                            手動登入
                         </h2>
                         <p
                             class="text-sm text-content-secondary leading-relaxed"
                         >
-                            請在外部瀏覽器完成 Google
-                            登入後，複製驗證碼並貼到下方。
+                            1. 複製下方網址，在外部瀏覽器開啟<br />
+                            2. 完成 Google 登入後複製驗證碼<br />
+                            3. 回到這裡貼上驗證碼
                         </p>
                     </header>
 
                     <div class="token-input-section">
+                        <div class="url-section">
+                            <div class="token-label">登入網址</div>
+                            <div class="url-box">{getAuthUrl()}</div>
+                            <button
+                                type="button"
+                                class="copy-url-btn"
+                                onclick={copyAuthUrl}
+                            >
+                                複製網址
+                            </button>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="token-label">驗證碼</div>
                         <textarea
                             class="token-input"
                             bind:value={tokenInput}
@@ -648,6 +685,54 @@
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
+    }
+
+    .url-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .url-box {
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-family: monospace;
+        font-size: 0.7rem;
+        color: var(--color-content-secondary);
+        word-break: break-all;
+        user-select: all;
+    }
+
+    .copy-url-btn {
+        align-self: flex-start;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-accent);
+        background: var(--color-accent-soft);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .copy-url-btn:hover {
+        background: var(--color-accent);
+        color: #fff;
+    }
+
+    .divider {
+        height: 1px;
+        background: var(--color-border);
+        margin: 0.5rem 0;
+    }
+
+    .token-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-content-tertiary);
     }
 
     .token-input {

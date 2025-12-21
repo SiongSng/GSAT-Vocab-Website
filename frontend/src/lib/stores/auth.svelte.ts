@@ -2,8 +2,6 @@ import { auth, googleProvider, authReady } from "$lib/firebase";
 import {
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signInWithCredential,
   GoogleAuthProvider,
   signOut,
@@ -26,30 +24,6 @@ const state = $state<AuthState>({
   loginErrorCode: null,
 });
 
-let initPromise: Promise<void> | null = null;
-
-export async function initAuth(): Promise<void> {
-  if (initPromise) return initPromise;
-
-  initPromise = (async () => {
-    await authReady;
-    try {
-      const result = await getRedirectResult(auth);
-      if (result?.user) {
-        state.user = result.user;
-      }
-      if (!state.user && auth.currentUser) {
-        state.user = auth.currentUser;
-      }
-    } catch (error: any) {
-      console.error("Redirect sign-in error:", error);
-      state.loginError = error?.message || "登入失敗";
-    }
-  })();
-
-  return initPromise;
-}
-
 void authReady
   .catch(() => undefined)
   .finally(() => {
@@ -59,8 +33,6 @@ void authReady
       state.initialized = true;
     });
   });
-
-void initAuth();
 
 export function getAuthStore() {
   return {
@@ -85,24 +57,18 @@ export function getAuthStore() {
       state.loginErrorCode = null;
     },
 
-    async login(options?: { method?: "popup" | "redirect" }) {
+    async login() {
       state.loading = true;
       state.loginError = null;
       state.loginErrorCode = null;
       try {
         await authReady;
-        const method = options?.method ?? "redirect";
-        if (method === "redirect") {
-          await signInWithRedirect(auth, googleProvider);
-        } else {
-          await signInWithPopup(auth, googleProvider);
-        }
+        await signInWithPopup(auth, googleProvider);
       } catch (error: any) {
         const code = error?.code || "";
         state.loginErrorCode = code || null;
         if (code === "auth/popup-blocked") {
-          state.loginError =
-            "登入視窗被阻擋（請允許彈出視窗，或改用導向登入）。";
+          state.loginError = "登入視窗被阻擋，請點擊「手動登入」。";
           state.loading = false;
           return;
         }
@@ -117,12 +83,11 @@ export function getAuthStore() {
           code === "auth/operation-not-supported-in-this-environment" ||
           code === "auth/web-storage-unsupported"
         ) {
-          state.loginError =
-            "此環境無法完成 Google 登入（可能是 WebView 限制了必要的儲存/導向流程）。";
+          state.loginError = "此環境無法完成登入，請點擊「手動登入」。";
           state.loading = false;
           return;
         }
-        state.loginError = error?.message || "登入失敗";
+        state.loginError = error?.message || "登入失敗，請點擊「手動登入」。";
         state.loading = false;
         throw error;
       }
@@ -164,14 +129,6 @@ export function getAuthStore() {
         throw error;
       }
       state.loading = false;
-    },
-
-    startExternalLogin() {
-      const base = import.meta.env.BASE_URL || "/";
-      window.open(
-        `${window.location.origin}${base}auth-callback.html?start=1`,
-        "_blank",
-      );
     },
   };
 }
