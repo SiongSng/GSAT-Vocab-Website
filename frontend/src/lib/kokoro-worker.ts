@@ -25,20 +25,41 @@ async function detectWebGPU(): Promise<boolean> {
     const adapter = await gpu.requestAdapter();
     if (!adapter) return false;
     const device = await adapter.requestDevice();
-    return Boolean(device);
+    if (!device) return false;
+
+    // Additional check: verify WebGPU can actually create a basic buffer
+    // Some devices report WebGPU support but fail during actual inference
+    try {
+      const testBuffer = device.createBuffer({
+        size: 16,
+        usage: 0x80 | 0x08, // GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+      });
+      testBuffer.destroy();
+    } catch {
+      console.warn(
+        "[Kokoro] WebGPU device exists but buffer creation failed, falling back to WASM",
+      );
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }
 }
 
 async function init() {
+  console.log("[Kokoro Worker] Starting initialization...");
   const device = (await detectWebGPU()) ? "webgpu" : "wasm";
+  console.log("[Kokoro Worker] Selected device:", device);
   self.postMessage({ type: "device", device } satisfies WorkerResponse);
 
   const dtype = device === "wasm" ? "q8" : "fp32";
+  console.log("[Kokoro Worker] Using dtype:", dtype);
 
   let tts: KokoroTTS;
   try {
+    console.log("[Kokoro Worker] Loading model...");
     tts = await KokoroTTS.from_pretrained(MODEL_ID, {
       dtype,
       device,
@@ -51,8 +72,10 @@ async function init() {
         }
       },
     });
+    console.log("[Kokoro Worker] Model loaded successfully");
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("[Kokoro Worker] Model loading failed:", message, e);
     self.postMessage({
       type: "error",
       error: message,
@@ -66,12 +89,21 @@ async function init() {
     const { type, id, text } = e.data;
 
     if (type === "synthesize") {
+      console.log("[Kokoro Worker] Synthesize request:", id, text);
       try {
+        const startTime = performance.now();
         const audio = await tts.generate(text, { voice: VOICE });
+        const elapsed = performance.now() - startTime;
+        console.log(
+          "[Kokoro Worker] Synthesis completed in",
+          elapsed.toFixed(0),
+          "ms",
+        );
         const blob = audio.toBlob();
         self.postMessage({ type: "result", id, blob } satisfies WorkerResponse);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Synthesis failed";
+        console.error("[Kokoro Worker] Synthesis error:", message, err);
         self.postMessage({
           type: "synthesize-error",
           id,

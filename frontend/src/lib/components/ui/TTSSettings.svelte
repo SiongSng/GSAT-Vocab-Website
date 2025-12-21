@@ -97,7 +97,9 @@
                         <span class="badge badge-size">~87MB</span>
                     {/if}
                 </span>
-                <span class="option-desc">更自然，需 2020 年後的裝置</span>
+                <span class="option-desc"
+                    >更自然，需較高效能裝置（如 M 系列 Mac）</span
+                >
             </div>
             {#if ttsSettings.engine === "kokoro"}
                 <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">

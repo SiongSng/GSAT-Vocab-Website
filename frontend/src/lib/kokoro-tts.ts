@@ -91,12 +91,35 @@ export function loadKokoroModel(): Promise<Worker> {
   return loadingPromise;
 }
 
+const SYNTHESIZE_TIMEOUT_MS = 30000;
+
 export async function synthesizeWithKokoro(text: string): Promise<Blob> {
   const w = await loadKokoroModel();
   const id = ++requestId;
 
   return new Promise((resolve, reject) => {
-    pendingRequests.set(id, { resolve, reject });
+    const timeoutId = setTimeout(() => {
+      const pending = pendingRequests.get(id);
+      if (pending) {
+        pendingRequests.delete(id);
+        reject(
+          new Error(
+            `Kokoro synthesis timeout after ${SYNTHESIZE_TIMEOUT_MS}ms`,
+          ),
+        );
+      }
+    }, SYNTHESIZE_TIMEOUT_MS);
+
+    pendingRequests.set(id, {
+      resolve: (blob) => {
+        clearTimeout(timeoutId);
+        resolve(blob);
+      },
+      reject: (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      },
+    });
     w.postMessage({ type: "synthesize", id, text } satisfies WorkerRequest);
   });
 }
