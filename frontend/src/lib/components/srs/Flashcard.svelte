@@ -19,6 +19,24 @@
     let { card, vocabEntry, isFlipped, isLoading, onFlip }: Props = $props();
 
     let isModalOpen = $state(false);
+    let isTransitioning = $state(false);
+    let prevCardKey = $state<string | null>(null);
+
+    const currentCardKey = $derived(`${card.lemma}:${card.sense_id}`);
+
+    $effect(() => {
+        const key = currentCardKey;
+        if (prevCardKey !== null && prevCardKey !== key) {
+            isTransitioning = true;
+        }
+        prevCardKey = key;
+    });
+
+    $effect(() => {
+        if (isTransitioning && !isFlipped) {
+            isTransitioning = false;
+        }
+    });
 
     const currentSense = $derived.by(() => {
         return findSenseForCard(card, vocabEntry);
@@ -103,7 +121,11 @@
     role="button"
     tabindex="0"
 >
-    <div class="flashcard-inner" class:flipped={isFlipped}>
+    <div
+        class="flashcard-inner"
+        class:flipped={isFlipped}
+        class:transitioning={isTransitioning}
+    >
         <!-- Front -->
         <div class="flashcard-face flashcard-front">
             <div class="flex items-center justify-between">
@@ -356,6 +378,13 @@
         opacity: 1;
         transform: scale(1);
         pointer-events: auto;
+    }
+
+    .flashcard-inner.transitioning .flashcard-back {
+        opacity: 0;
+        transform: scale(0.98);
+        pointer-events: none;
+        transition: none;
     }
 
     .definition-block {
