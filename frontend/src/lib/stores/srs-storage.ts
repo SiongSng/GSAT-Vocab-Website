@@ -363,6 +363,22 @@ export async function getDailyStats(
   });
 }
 
+export async function getAllDailyStats(): Promise<DailyStats[]> {
+  const database = await getDB();
+  return database.getAll(DAILY_STATS_STORE);
+}
+
+export async function setAllDailyStats(stats: DailyStats[]): Promise<void> {
+  const database = await getDB();
+  const tx = database.transaction(DAILY_STATS_STORE, "readwrite");
+  const store = tx.objectStore(DAILY_STATS_STORE);
+  await store.clear();
+  for (const stat of stats) {
+    await store.put(stat);
+  }
+  await tx.done;
+}
+
 export async function getTodayStats(): Promise<DailyStats> {
   const today = getTodayDateKey();
   const database = await getDB();
@@ -471,4 +487,69 @@ export async function getSessions(
     if (rangeEnd && session.end > rangeEnd.getTime()) return false;
     return true;
   });
+}
+
+export interface DatabaseSnapshot {
+  cards: SRSCard[];
+  logs: SRSReviewLog[];
+  stats: DailyStats[];
+  sessions: SessionLog[];
+  meta: { key: string; value: unknown }[];
+}
+
+export async function exportDatabase(): Promise<DatabaseSnapshot> {
+  const database = await getDB();
+  return {
+    cards: await database.getAll(CARDS_STORE),
+    logs: await database.getAll(LOGS_STORE),
+    stats: await database.getAll(DAILY_STATS_STORE),
+    sessions: await database.getAll(SESSION_LOGS_STORE),
+    meta: await database.getAll(META_STORE),
+  };
+}
+
+export async function importDatabase(
+  snapshot: DatabaseSnapshot,
+): Promise<void> {
+  const database = await getDB();
+
+  const tx = database.transaction(
+    [
+      CARDS_STORE,
+      LOGS_STORE,
+      DAILY_STATS_STORE,
+      SESSION_LOGS_STORE,
+      META_STORE,
+    ],
+    "readwrite",
+  );
+
+  await tx.objectStore(CARDS_STORE).clear();
+  await tx.objectStore(LOGS_STORE).clear();
+  await tx.objectStore(DAILY_STATS_STORE).clear();
+  await tx.objectStore(SESSION_LOGS_STORE).clear();
+  await tx.objectStore(META_STORE).clear();
+
+  for (const card of snapshot.cards) {
+    await tx.objectStore(CARDS_STORE).put(card);
+  }
+  for (const log of snapshot.logs) {
+    await tx.objectStore(LOGS_STORE).put(log);
+  }
+  for (const stat of snapshot.stats) {
+    await tx.objectStore(DAILY_STATS_STORE).put(stat);
+  }
+  for (const session of snapshot.sessions) {
+    await tx.objectStore(SESSION_LOGS_STORE).put(session);
+  }
+  for (const meta of snapshot.meta) {
+    await tx.objectStore(META_STORE).put(meta);
+  }
+
+  await tx.done;
+
+  cardsCache.clear();
+  for (const card of snapshot.cards) {
+    cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
+  }
 }

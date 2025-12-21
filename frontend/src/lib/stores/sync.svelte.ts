@@ -2,12 +2,16 @@ import { db } from "$lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuthStore } from "./auth.svelte";
 import {
-  getAllCards,
-  setAllCards,
+  exportDatabase,
+  importDatabase,
   getLastUpdated,
   setLastUpdated,
+  type DatabaseSnapshot,
 } from "./srs-storage";
-import type { SRSCard } from "$lib/types/srs";
+import { Packr } from "msgpackr";
+import { zlibSync, unzlibSync } from "fflate";
+
+const packr = new Packr({ structuredClone: true });
 
 interface SyncState {
   status: "idle" | "syncing" | "success" | "error" | "conflict";
@@ -16,6 +20,7 @@ interface SyncState {
 }
 
 const STORAGE_KEY = "gsat_last_sync_time";
+const DECKS_KEY = "gsat_srs_custom_decks";
 
 const state = $state<SyncState>({
   status: "idle",
@@ -24,54 +29,50 @@ const state = $state<SyncState>({
 });
 
 const auth = getAuthStore();
-const SYNC_COOLDOWN_MS = 30000; // 30 seconds cooldown
+const SYNC_COOLDOWN_MS = 30000;
 
 function updateLastSyncTime(ts: number) {
   state.lastSyncTime = ts;
   localStorage.setItem(STORAGE_KEY, String(ts));
 }
 
-function compressCard(card: SRSCard) {
-  // NOTE: `elapsed_days` is deprecated in ts-fsrs v6 and will be removed in the future.
-  // To minimize payload and avoid future incompatibilities we do NOT include it in the cloud payload.
-  return {
-    lm: card.lemma,
-    sid: card.sense_id,
-    du:
-      card.due instanceof Date
-        ? card.due.getTime()
-        : new Date(card.due).getTime(),
-    s: card.stability,
-    d: card.difficulty,
-    sc: card.scheduled_days,
-    r: card.reps,
-    l: card.lapses,
-    st: card.state,
-    ls: card.learning_steps,
-    lr: card.last_review
-      ? card.last_review instanceof Date
-        ? card.last_review.getTime()
-        : new Date(card.last_review).getTime()
-      : null,
-  };
+interface SyncPayload {
+  db: DatabaseSnapshot;
+  decks: unknown[];
+  ts: number;
 }
 
-function decompressCard(c: any): SRSCard {
-  return {
-    lemma: c.lm,
-    sense_id: c.sid,
-    due: new Date(c.du),
-    stability: c.s,
-    difficulty: c.d,
-    // `elapsed_days` is deprecated; do NOT use cloud value. Default to 0.
-    elapsed_days: 0,
-    scheduled_days: c.sc,
-    reps: c.r,
-    lapses: c.l,
-    state: c.st,
-    learning_steps: c.ls || [],
-    last_review: c.lr ? new Date(c.lr) : undefined,
-  };
+function compress(data: SyncPayload): string {
+  const packed = packr.pack(data);
+  const compressed = zlibSync(packed, { level: 9 });
+  let binary = "";
+  for (let i = 0; i < compressed.length; i++) {
+    binary += String.fromCharCode(compressed[i]);
+  }
+  return btoa(binary);
+}
+
+function decompress(base64: string): SyncPayload {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const decompressed = unzlibSync(bytes);
+  return packr.unpack(decompressed);
+}
+
+function getLocalDecks(): unknown[] {
+  try {
+    const saved = localStorage.getItem(DECKS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setLocalDecks(decks: unknown[]): void {
+  localStorage.setItem(DECKS_KEY, JSON.stringify(decks));
 }
 
 export function getSyncStore() {
@@ -93,7 +94,6 @@ export function getSyncStore() {
         return;
       }
 
-      // Rate limiting: prevent sync if last sync was too recent
       const now = Date.now();
       if (state.status === "syncing") return;
       if (!forceOverwriteLocal && now - state.lastSyncTime < SYNC_COOLDOWN_MS) {
@@ -113,11 +113,10 @@ export function getSyncStore() {
         const docSnap = await getDoc(userDocRef);
 
         const localLastUpdated = await getLastUpdated();
-        const localCards = getAllCards();
 
         if (docSnap.exists()) {
           const cloudData = docSnap.data();
-          const cloudLastUpdated = cloudData.last_updated || 0;
+          const cloudLastUpdated = cloudData.ts || 0;
 
           if (cloudLastUpdated > localLastUpdated && !forceOverwriteLocal) {
             state.status = "conflict";
@@ -129,33 +128,39 @@ export function getSyncStore() {
           }
 
           if (cloudLastUpdated > localLastUpdated && forceOverwriteLocal) {
-            // Overwrite local with cloud
-            const cloudCards = (cloudData.cards || []).map(decompressCard);
-            await setAllCards(cloudCards);
-            await setLastUpdated(cloudLastUpdated);
+            const payload = decompress(cloudData.d);
+            await importDatabase(payload.db);
+            if (payload.decks) {
+              setLocalDecks(payload.decks);
+            }
+            await setLastUpdated(payload.ts);
             updateLastSyncTime(Date.now());
             state.status = "success";
             return { success: true };
           }
         }
 
-        // Local is newer or cloud doesn't exist: Upload local to cloud
-        const compressedCards = localCards.map(compressCard);
+        const snapshot = await exportDatabase();
         const newTimestamp = Date.now();
+        const payload: SyncPayload = {
+          db: snapshot,
+          decks: getLocalDecks(),
+          ts: newTimestamp,
+        };
+        const compressed = compress(payload);
 
         await setDoc(userDocRef, {
-          cards: compressedCards,
-          last_updated: newTimestamp,
+          d: compressed,
+          ts: newTimestamp,
         });
 
         await setLastUpdated(newTimestamp);
         updateLastSyncTime(Date.now());
         state.status = "success";
         return { success: true };
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Sync failed:", error);
-        // Friendly messages for common blocking issues
-        const msg = String(error?.message || "");
+        const msg = String((error as Error)?.message || "");
         if (
           /Cross-Origin-Opener-Policy|window\.close|window\.closed/i.test(
             msg,
