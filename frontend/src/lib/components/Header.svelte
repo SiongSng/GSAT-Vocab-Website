@@ -2,6 +2,7 @@
     import { getAppStore, setMode } from "$lib/stores/app.svelte";
     import type { ViewMode } from "$lib/types";
     import SyncButton from "$lib/components/srs/SyncButton.svelte";
+    import StreakBadge from "$lib/components/stats/StreakBadge.svelte";
 
     const app = getAppStore();
 
@@ -10,103 +11,194 @@
     }
 </script>
 
-<header
-    class="flex-shrink-0 bg-surface-primary/80 backdrop-blur-sm border-b border-border p-3 px-4 sm:px-6 flex items-center justify-between z-20"
->
-    <div class="flex items-center gap-3">
+<header class="header">
+    <div class="header-left">
         <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 32 32"
-            class="w-7 h-7"
+            class="logo-icon"
         >
-            <rect x="4" y="6" width="18" height="14" rx="2" fill="currentColor" class="text-accent/25" />
-            <rect x="7" y="9" width="18" height="14" rx="2" fill="currentColor" class="text-accent/50" />
-            <rect x="10" y="12" width="18" height="14" rx="2" fill="currentColor" class="text-accent" />
+            <rect
+                x="4"
+                y="6"
+                width="18"
+                height="14"
+                rx="2"
+                fill="currentColor"
+                class="text-accent/25"
+            />
+            <rect
+                x="7"
+                y="9"
+                width="18"
+                height="14"
+                rx="2"
+                fill="currentColor"
+                class="text-accent/50"
+            />
+            <rect
+                x="10"
+                y="12"
+                width="18"
+                height="14"
+                rx="2"
+                fill="currentColor"
+                class="text-accent"
+            />
         </svg>
-        <button
-            class="text-xl font-semibold tracking-tight text-content-primary cursor-pointer hover:text-accent transition-colors"
-            onclick={() => handleModeChange("browse")}
-        >
+        <button class="logo-text" onclick={() => handleModeChange("browse")}>
             學測高頻單字
         </button>
     </div>
 
-    <div class="flex items-center gap-1 sm:gap-2">
+    <div class="header-right">
         <SyncButton />
-        
-        <div class="w-px h-4 bg-border mx-1 hidden sm:block"></div>
+        <StreakBadge />
 
-        <button
-            class="mode-btn p-2 rounded-md transition-all"
-            class:active={app.mode === "browse"}
-            onclick={() => handleModeChange("browse")}
-            title="瀏覽模式"
-        >
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="w-5 h-5"
-            >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25A2.25 2.25 0 0 1 13.5 8.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
-                />
-            </svg>
-        </button>
+        {#if !app.isMobile}
+            <div class="nav-divider"></div>
 
-        <button
-            class="mode-btn p-2 rounded-md transition-all"
-            class:active={app.mode === "flashcard"}
-            onclick={() => handleModeChange("flashcard")}
-            title="字卡模式"
-        >
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="w-5 h-5"
+            <button
+                class="mode-btn"
+                class:active={app.mode === "browse"}
+                onclick={() => handleModeChange("browse")}
+                title="瀏覽模式"
             >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 0 1-1.125-1.125v-3.75ZM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-8.25ZM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 0 1-1.125-1.125v-2.25Z"
-                />
-            </svg>
-        </button>
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-5 h-5"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+                    />
+                </svg>
+            </button>
 
-        <button
-            class="mode-btn p-2 rounded-md transition-all"
-            class:active={app.mode === "quiz"}
-            onclick={() => handleModeChange("quiz")}
-            title="測驗模式"
-        >
-            <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="1.5"
-                stroke="currentColor"
-                class="w-5 h-5"
+            <button
+                class="mode-btn"
+                class:active={app.mode === "flashcard"}
+                onclick={() => handleModeChange("flashcard")}
+                title="字卡模式"
             >
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z"
-                />
-            </svg>
-        </button>
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-5 h-5"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-1.007.661-1.859 1.572-2.145"
+                    />
+                </svg>
+            </button>
+
+            <button
+                class="mode-btn"
+                class:active={app.mode === "quiz"}
+                onclick={() => handleModeChange("quiz")}
+                title="測驗模式"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-5 h-5"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
+                    />
+                </svg>
+            </button>
+        {/if}
     </div>
 </header>
 
 <style>
+    .header {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 1rem;
+        background-color: var(--color-surface-primary);
+        border-bottom: 1px solid var(--color-border);
+        z-index: 20;
+    }
+
+    @media (min-width: 640px) {
+        .header {
+            padding: 0.625rem 1.5rem;
+        }
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+    }
+
+    .logo-icon {
+        width: 1.625rem;
+        height: 1.625rem;
+    }
+
+    .logo-text {
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--color-content-primary);
+        cursor: pointer;
+        background: none;
+        border: none;
+        padding: 0;
+        transition: color 0.15s ease;
+    }
+
+    .logo-text:hover {
+        color: var(--color-accent);
+    }
+
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    @media (min-width: 640px) {
+        .header-right {
+            gap: 0.5rem;
+        }
+    }
+
+    .nav-divider {
+        width: 1px;
+        height: 1rem;
+        background-color: var(--color-border);
+        margin: 0 0.25rem;
+    }
+
     .mode-btn {
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        transition: all 0.15s ease;
         color: var(--color-content-tertiary);
+        background: none;
+        border: none;
+        cursor: pointer;
     }
 
     .mode-btn:hover {
@@ -116,7 +208,9 @@
 
     .mode-btn:focus-visible {
         outline: none;
-        box-shadow: 0 0 0 2px var(--color-surface-primary), 0 0 0 4px var(--color-accent);
+        box-shadow:
+            0 0 0 2px var(--color-surface-primary),
+            0 0 0 4px var(--color-accent);
     }
 
     .mode-btn.active {

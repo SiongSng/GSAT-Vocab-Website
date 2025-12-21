@@ -1,9 +1,11 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Header from "$lib/components/Header.svelte";
+    import BottomNav from "$lib/components/BottomNav.svelte";
     import BrowseView from "$lib/components/BrowseView.svelte";
     import SRSFlashcardView from "$lib/components/srs/SRSFlashcardView.svelte";
     import QuizView from "$lib/components/QuizView.svelte";
+    import StatsView from "$lib/components/stats/StatsView.svelte";
     import LoadingOverlay from "$lib/components/LoadingOverlay.svelte";
     import QuickLookupSidebar from "$lib/components/lookup/QuickLookupSidebar.svelte";
     import QuickLookupSheet from "$lib/components/lookup/QuickLookupSheet.svelte";
@@ -73,9 +75,15 @@
 >
     <Header />
 
-    <main class="flex-1 overflow-hidden">
+    <main
+        class="flex-1"
+        class:overflow-hidden={app.mode !== "stats"}
+        class:overflow-y-auto={app.mode === "stats"}
+    >
         {#if app.isMobile === null}
             <!-- Wait for mobile detection -->
+        {:else if app.mode === "stats"}
+            <StatsView />
         {:else if app.mode === "browse"}
             <BrowseView />
         {:else if app.mode === "flashcard"}
@@ -89,6 +97,7 @@
 <QuickLookupSidebar />
 <QuickLookupSheet />
 <PWAInstallPrompt />
+<BottomNav />
 
 <style>
     .app {

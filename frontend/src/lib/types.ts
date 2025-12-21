@@ -35,24 +35,30 @@ export interface SearchIndex {
   by_pos: Record<string, string[]>;
 }
 
-export type ViewMode = 'browse' | 'flashcard' | 'quiz';
+export type ViewMode = "browse" | "flashcard" | "quiz" | "stats";
 
-export type PosFilter = 'all' | 'NOUN' | 'VERB' | 'ADJ' | 'ADV' | 'PROPN';
+export type PosFilter = "all" | "NOUN" | "VERB" | "ADJ" | "ADV" | "PROPN";
 
-export type VocabTypeFilter = 'all' | 'word' | 'phrase' | 'pattern';
+export type VocabTypeFilter = "all" | "word" | "phrase" | "pattern";
 
-export type TierFilter = 'all' | 'tested' | 'translation' | 'phrase' | 'pattern' | 'basic';
+export type TierFilter =
+  | "all"
+  | "tested"
+  | "translation"
+  | "phrase"
+  | "pattern"
+  | "basic";
 
 export type SortOption =
-  | 'importance_desc'
-  | 'importance_asc'
-  | 'count_desc'
-  | 'count_asc'
-  | 'year_spread_desc'
-  | 'alphabetical_asc'
-  | 'alphabetical_desc'
-  | 'level_asc'
-  | 'level_desc';
+  | "importance_desc"
+  | "importance_asc"
+  | "count_desc"
+  | "count_asc"
+  | "year_spread_desc"
+  | "alphabetical_asc"
+  | "alphabetical_desc"
+  | "level_asc"
+  | "level_desc";
 
 export interface Filters {
   searchTerm: string;
@@ -76,9 +82,9 @@ export interface FlashcardState {
   isSetupOpen: boolean;
 }
 
-export type QuizType = 'choice' | 'spelling' | 'fill' | null;
+export type QuizType = "choice" | "spelling" | "fill" | null;
 
-export type ChoiceDirection = 'word_to_def' | 'def_to_word';
+export type ChoiceDirection = "word_to_def" | "def_to_word";
 
 export interface QuizQuestion {
   type: QuizType;

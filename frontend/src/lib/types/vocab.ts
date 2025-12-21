@@ -147,7 +147,7 @@ export interface VersionInfo {
 }
 
 export function computeImportanceScore(frequency: FrequencyData): number {
-  return frequency.ml_score ?? frequency.weighted_score / 30;
+  return frequency.ml_score ?? frequency.weighted_score / 50;
 }
 
 export function createIndexItem(entry: VocabEntry): VocabIndexItem {

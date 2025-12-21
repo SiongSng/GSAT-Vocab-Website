@@ -30,6 +30,9 @@ function deriveMode(): ViewMode {
   if (routeName === "quiz" || routeName === "quiz-session") {
     return "quiz";
   }
+  if (routeName === "stats") {
+    return "stats";
+  }
   return "browse";
 }
 
