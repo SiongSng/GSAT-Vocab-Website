@@ -7,7 +7,7 @@
         showAnswer,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { getEntry } from "$lib/stores/vocab-db";
+    import { getEntry, getEntryCached } from "$lib/stores/vocab-db";
     import { createAudioController } from "$lib/tts";
     import type { VocabEntry } from "$lib/types/vocab";
     import Flashcard from "./Flashcard.svelte";
@@ -52,7 +52,14 @@
 
         if (cardKey && cardKey !== lastCardKey) {
             lastCardKey = cardKey;
-            loadWordDetail(card!.lemma);
+
+            const cached = getEntryCached(card!.lemma);
+            if (cached) {
+                vocabEntry = cached;
+                isLoadingDetail = false;
+            } else {
+                loadWordDetail(card!.lemma);
+            }
 
             if (getAutoSpeak()) {
                 audioController.stop();
