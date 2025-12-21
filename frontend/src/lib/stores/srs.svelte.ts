@@ -264,36 +264,67 @@ function getEligibleNewCards(
 
 export type StudyPriority = "mixed" | "new_first" | "review_first";
 
-export function startStudySession(options?: {
-  newLimit?: number;
+export interface SessionOptions {
+  newLimit: number;
   reviewLimit?: number;
   newCardPool?: string[];
   excludeLemmas?: Set<string>;
   priority?: StudyPriority;
-}): void {
-  const now = new Date();
-  const excludeSet = options?.excludeLemmas ?? new Set();
-  const priority = options?.priority ?? "mixed";
+  isCustomDeck?: boolean;
+}
 
-  const newLimit =
-    options?.newLimit ??
-    Math.max(0, store.dailyLimits.newCards - store.newCardsStudiedToday);
-  const reviewLimit =
-    options?.reviewLimit ??
-    Math.max(0, store.dailyLimits.reviews - store.reviewsToday);
+export interface SessionCardCounts {
+  newCount: number;
+  learningCount: number;
+  reviewCount: number;
+  total: number;
+}
+
+interface SessionCards {
+  newCards: SRSCard[];
+  learningCards: SRSCard[];
+  reviewCards: SRSCard[];
+}
+
+function getSessionCardsInternal(options: SessionOptions): SessionCards {
+  const now = new Date();
+  const excludeSet = options.excludeLemmas ?? new Set();
+  const isCustomDeck = options.isCustomDeck ?? false;
+
+  const reviewLimit = isCustomDeck
+    ? Infinity
+    : (options.reviewLimit ?? Infinity);
 
   const learningCards = getLearningCards().filter(
     (c) => new Date(c.due) <= now && !excludeSet.has(c.lemma),
   );
   const reviewCards = getReviewCards(now)
     .filter((c) => !excludeSet.has(c.lemma))
-    .slice(0, reviewLimit);
+    .slice(0, reviewLimit === Infinity ? undefined : reviewLimit);
 
-  const eligibleNewCards = getEligibleNewCards(
-    excludeSet,
-    options?.newCardPool,
-  );
-  const newCards = eligibleNewCards.slice(0, newLimit);
+  const eligibleNewCards = getEligibleNewCards(excludeSet, options.newCardPool);
+  const newCards = eligibleNewCards.slice(0, options.newLimit);
+
+  return { newCards, learningCards, reviewCards };
+}
+
+export function getSessionCardCounts(
+  options: SessionOptions,
+): SessionCardCounts {
+  const { newCards, learningCards, reviewCards } =
+    getSessionCardsInternal(options);
+  return {
+    newCount: newCards.length,
+    learningCount: learningCards.length,
+    reviewCount: reviewCards.length,
+    total: newCards.length + learningCards.length + reviewCards.length,
+  };
+}
+
+export function startStudySession(options: SessionOptions): void {
+  const { newCards, learningCards, reviewCards } =
+    getSessionCardsInternal(options);
+  const priority = options.priority ?? "mixed";
 
   let queue: SRSCard[];
 
@@ -344,7 +375,9 @@ function preloadUpcomingAudio(): void {
     const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
 
     if (startIdx < endIdx) {
-      const lemmas = store.studyQueue.slice(startIdx, endIdx).map((c) => c.lemma);
+      const lemmas = store.studyQueue
+        .slice(startIdx, endIdx)
+        .map((c) => c.lemma);
       preloadAudio(lemmas);
     }
   }, 1200);

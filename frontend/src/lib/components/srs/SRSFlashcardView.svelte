@@ -6,15 +6,12 @@
         addWordsToSRS,
         startStudySession,
         endStudySession,
-        setDailyLimits,
+        type SessionOptions,
     } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
-    import StudyDashboard, {
-        type StudyPriority,
-    } from "./StudyDashboard.svelte";
+    import StudyDashboard from "./StudyDashboard.svelte";
     import StudySession from "./StudySession.svelte";
     import SessionComplete from "./SessionComplete.svelte";
-    import { STORAGE_KEYS } from "$lib/storage-keys";
 
     type ViewState = "dashboard" | "studying" | "complete";
 
@@ -42,31 +39,8 @@
         }
     });
 
-    function getNewCardLimit(): number {
-        try {
-            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
-            if (saved) {
-                const settings = JSON.parse(saved);
-                return settings.newCardLimit ?? 20;
-            }
-            return 20;
-        } catch {
-            return 20;
-        }
-    }
-
-    function handleStart(
-        newCardPool: string[],
-        excludeLemmas: Set<string>,
-        priority: StudyPriority,
-    ) {
-        const newCardLimit = getNewCardLimit();
-        setDailyLimits({ newCards: newCardLimit });
-        startStudySession({
-            newCardPool,
-            excludeLemmas,
-            priority,
-        });
+    function handleStart(options: SessionOptions) {
+        startStudySession(options);
         if (srs.studyQueue.length === 0) {
             endStudySession();
             return;

@@ -1,11 +1,14 @@
 <script lang="ts">
-    import { addWordsToSRS, getSRSStore } from "$lib/stores/srs.svelte";
+    import {
+        addWordsToSRS,
+        getSessionCardCounts,
+        type SessionOptions,
+    } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import {
         getNewCards,
         getAllCards,
-        getLearningCards,
         getTodayStats,
         onDataChange,
     } from "$lib/stores/srs-storage";
@@ -17,16 +20,11 @@
     import { STORAGE_KEYS } from "$lib/storage-keys";
 
     interface Props {
-        onStart: (
-            newCardPool: string[],
-            excludeLemmas: Set<string>,
-            priority: StudyPriority,
-        ) => void;
+        onStart: (options: SessionOptions) => void;
     }
 
     let { onStart }: Props = $props();
 
-    const srs = getSRSStore();
     const vocab = getVocabStore();
     const app = getAppStore();
 
@@ -279,12 +277,6 @@
         return new Set(getNewCards().map((c) => c.lemma));
     });
 
-    const dueLearningCount = $derived.by(() => {
-        dataVersion;
-        const now = new Date();
-        return getLearningCards().filter((c) => new Date(c.due) <= now).length;
-    });
-
     const existingLemmaSet = $derived.by(() => {
         dataVersion;
         return new Set(getAllCards().map((c) => c.lemma));
@@ -312,24 +304,6 @@
         if (!selectedDeck) return [];
         const newSet = new Set(getNewCards().map((c) => c.lemma));
         return selectedDeck.lemmas.filter((lemma) => newSet.has(lemma));
-    });
-
-    const customDueCount = $derived.by(() => {
-        dataVersion;
-        if (!selectedDeck) return 0;
-        const now = new Date();
-        const cards = getAllCards();
-        const deckSet = new Set(selectedDeck.lemmas);
-        let count = 0;
-        for (const card of cards) {
-            if (!deckSet.has(card.lemma)) continue;
-            if (card.state === State.New) {
-                count++;
-            } else if (new Date(card.due) <= now) {
-                count++;
-            }
-        }
-        return count;
     });
 
     const deckLearnedCountMap = $derived.by(() => {
@@ -385,28 +359,6 @@
 
     const isUnlimited = $derived(newCardLimit >= 55);
 
-    const remainingDailyNewCards = $derived(
-        isUnlimited
-            ? Infinity
-            : Math.max(0, newCardLimit - todayNewCardsStudied),
-    );
-
-    const actualNewCardCount = $derived(
-        isUnlimited
-            ? Math.min(20, filteredNewCardPool.length)
-            : Math.min(remainingDailyNewCards, filteredNewCardPool.length),
-    );
-
-    const todayTotal = $derived(
-        srs.deckStats.reviewCount + dueLearningCount + actualNewCardCount,
-    );
-
-    const hasCardsToStudy = $derived(
-        srs.deckStats.reviewCount > 0 ||
-            dueLearningCount > 0 ||
-            actualNewCardCount > 0,
-    );
-
     const excludedLemmas = $derived.by(() => {
         const propnLemmas = (vocab.index || [])
             .filter((w) => w.primary_pos === "PROPN")
@@ -425,13 +377,52 @@
         return exclude;
     });
 
+    const actualNewCardLimit = $derived.by(() => {
+        if (isUnlimited) {
+            return Math.min(20, filteredNewCardPool.length);
+        }
+        return Math.max(0, newCardLimit - todayNewCardsStudied);
+    });
+
+    const sessionOptions = $derived.by<SessionOptions>(() => ({
+        newLimit: actualNewCardLimit,
+        newCardPool: filteredNewCardPool,
+        excludeLemmas: excludedLemmas,
+        priority: studyPriority,
+        isCustomDeck: false,
+    }));
+
+    const sessionCounts = $derived.by(() => {
+        dataVersion;
+        return getSessionCardCounts(sessionOptions);
+    });
+
+    const customDeckSessionOptions = $derived.by<SessionOptions | null>(() => {
+        if (!selectedDeck) return null;
+        return {
+            newLimit: customNewCardPool.length,
+            newCardPool: customNewCardPool,
+            excludeLemmas: customExcludedLemmas,
+            priority: studyPriority,
+            isCustomDeck: true,
+        };
+    });
+
+    const customDeckSessionCounts = $derived.by(() => {
+        dataVersion;
+        if (!customDeckSessionOptions) return null;
+        return getSessionCardCounts(customDeckSessionOptions);
+    });
+
+    const hasCardsToStudy = $derived(sessionCounts.total > 0);
+
     function handleStart() {
-        onStart(filteredNewCardPool, excludedLemmas, studyPriority);
+        onStart(sessionOptions);
     }
 
     function handleStartCustomDeck() {
-        if (!selectedDeck) return;
-        onStart(customNewCardPool, customExcludedLemmas, studyPriority);
+        if (!customDeckSessionOptions) return;
+        onStart(customDeckSessionOptions);
     }
 </script>
 
@@ -447,20 +438,22 @@
 
         <div class="stats-section">
             <div class="stats-hero">
-                <div class="stats-hero-number">{todayTotal}</div>
+                <div class="stats-hero-number">{sessionCounts.total}</div>
                 <div class="stats-hero-label">張卡片</div>
             </div>
 
             <div class="stats-row">
                 <div class="stats-item">
                     <span class="stats-dot stats-dot-review"></span>
-                    <span class="stats-value">{srs.deckStats.reviewCount}</span>
+                    <span class="stats-value">{sessionCounts.reviewCount}</span>
                     <span class="stats-label">複習</span>
                     <HelpTooltip text="已記住的卡片，到了預定的複習時間" />
                 </div>
                 <div class="stats-item">
                     <span class="stats-dot stats-dot-learning"></span>
-                    <span class="stats-value">{dueLearningCount}</span>
+                    <span class="stats-value"
+                        >{sessionCounts.learningCount}</span
+                    >
                     <span class="stats-label">熟悉中</span>
                     <HelpTooltip
                         text="正在學習的卡片，需要多次練習來鞏固記憶"
@@ -468,7 +461,7 @@
                 </div>
                 <div class="stats-item">
                     <span class="stats-dot stats-dot-new"></span>
-                    <span class="stats-value">{actualNewCardCount}</span>
+                    <span class="stats-value">{sessionCounts.newCount}</span>
                     <span class="stats-label">新單字</span>
                     <HelpTooltip text="尚未開始學習的新卡片" />
                 </div>
@@ -648,15 +641,16 @@
                         <button
                             type="button"
                             onclick={handleStartCustomDeck}
-                            disabled={customDueCount === 0 ||
+                            disabled={!customDeckSessionCounts ||
+                                customDeckSessionCounts.total === 0 ||
                                 !vocab.index ||
                                 vocab.index.length === 0}
                             class="btn-start-secondary"
                         >
-                            {#if customDueCount > 0}
+                            {#if customDeckSessionCounts && customDeckSessionCounts.total > 0}
                                 開始練習
                                 <span class="btn-start-count"
-                                    >{customDueCount} 張</span
+                                    >{customDeckSessionCounts.total} 張</span
                                 >
                             {:else}
                                 今日完成
@@ -727,7 +721,7 @@
                 </div>
                 {#if todayNewCardsStudied > 0 && !isUnlimited}
                     <p class="setting-row-hint full-width">
-                        今日已學習 {todayNewCardsStudied} 張，剩餘 {remainingDailyNewCards}
+                        今日已學習 {todayNewCardsStudied} 張，剩餘 {actualNewCardLimit}
                         張
                     </p>
                 {/if}
