@@ -92,7 +92,20 @@ async function init() {
       console.log("[Kokoro Worker] Synthesize request:", id, text);
       try {
         const startTime = performance.now();
-        const audio = await tts.generate(text, { voice: VOICE });
+
+        // Kokoro uses different style vectors based on token sequence length.
+        // Short texts (single words) map to style vectors with fewer training
+        // samples, causing unstable prosody. Adding punctuation produces more
+        // phoneme tokens, and slowing speed compensates for duration prediction.
+        const isShortText = text.trim().split(/\s+/).length <= 2;
+        const processedText =
+          isShortText && !/[.!?]$/.test(text.trim()) ? `${text.trim()}.` : text;
+        const speed = isShortText ? 0.85 : 1.0;
+
+        const audio = await tts.generate(processedText, {
+          voice: VOICE,
+          speed,
+        });
         const elapsed = performance.now() - startTime;
         console.log(
           "[Kokoro Worker] Synthesis completed in",
