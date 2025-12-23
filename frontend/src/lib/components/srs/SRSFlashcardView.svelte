@@ -55,7 +55,7 @@
 </script>
 
 <div class="h-full overflow-auto bg-surface-page">
-    <div class="max-w-4xl mx-auto px-4 py-8 sm:px-6 sm:py-12">
+    <div class="view-container">
         {#if isInitializing}
             <div class="flex items-center justify-center min-h-[400px]">
                 <div class="text-[14px] text-content-tertiary">載入中...</div>
@@ -69,3 +69,17 @@
         {/if}
     </div>
 </div>
+
+<style>
+    .view-container {
+        max-width: 56rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem calc(env(safe-area-inset-bottom, 0px) + 5rem);
+    }
+
+    @media (min-width: 640px) {
+        .view-container {
+            padding: 3rem 1.5rem;
+        }
+    }
+</style>

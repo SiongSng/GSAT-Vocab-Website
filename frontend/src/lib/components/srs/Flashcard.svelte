@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { cubicOut } from "svelte/easing";
     import type { SRSCard } from "$lib/types/srs";
     import { getPrioritizedSenses } from "$lib/types/srs";
     import type { VocabEntry } from "$lib/types/vocab";
@@ -19,24 +20,8 @@
     let { card, vocabEntry, isFlipped, isLoading, onFlip }: Props = $props();
 
     let isModalOpen = $state(false);
-    let isTransitioning = $state(false);
-    let prevCardKey = $state<string | null>(null);
 
-    const currentCardKey = $derived(`${card.lemma}:${card.sense_id}`);
-
-    $effect(() => {
-        const key = currentCardKey;
-        if (prevCardKey !== null && prevCardKey !== key) {
-            isTransitioning = true;
-        }
-        prevCardKey = key;
-    });
-
-    $effect(() => {
-        if (isTransitioning && !isFlipped) {
-            isTransitioning = false;
-        }
-    });
+    const cardKey = $derived(`${card.lemma}:${card.sense_id}`);
 
     const currentSense = $derived.by(() => {
         return findSenseForCard(card, vocabEntry);
@@ -112,215 +97,241 @@
     function handleCloseModal() {
         isModalOpen = false;
     }
+
+    function handleCardClick() {
+        onFlip();
+    }
+
+    function handleKeydown(e: KeyboardEvent) {
+        if (e.key === "Enter") {
+            onFlip();
+        }
+    }
+
+    function fadeScale(_node: Element, { duration = 200, out = false }) {
+        return {
+            duration,
+            easing: cubicOut,
+            css: (t: number) => {
+                const scale = out ? 1 - 0.02 * (1 - t) : 0.98 + 0.02 * t;
+                return `
+                    opacity: ${t};
+                    transform: scale(${scale});
+                `;
+            },
+        };
+    }
 </script>
 
-<div
-    class="flashcard-container"
-    onclick={onFlip}
-    onkeydown={(e) => e.key === "Enter" && onFlip()}
-    role="button"
-    tabindex="0"
->
-    <div
-        class="flashcard-inner"
-        class:flipped={isFlipped}
-        class:transitioning={isTransitioning}
-    >
-        <!-- Front -->
-        <div class="flashcard-face flashcard-front">
-            <div class="flex items-center justify-between">
-                <StateBadge state={card.state} />
-                <AudioButton text={card.lemma} size="lg" />
-            </div>
-
-            <div
-                class="flex-1 flex flex-col items-center justify-center text-center py-12"
-            >
-                <h2
-                    class="text-3xl lg:text-4xl font-semibold tracking-tight text-content-primary mb-2"
-                >
-                    {card.lemma}
-                </h2>
-                {#if currentSense}
-                    <p class="text-base text-content-tertiary lowercase">
-                        {currentSense.pos}
-                    </p>
-                {/if}
-            </div>
-
-            <div class="text-center">
-                <p class="text-sm text-content-tertiary/60">點擊翻牌</p>
-            </div>
-        </div>
-
-        <!-- Back -->
-        <div class="flashcard-face flashcard-back">
-            <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2">
-                    <StateBadge state={card.state} />
-                    {#if totalSenses > 1}
-                        <span
-                            class="text-xs text-content-tertiary bg-surface-page px-2 py-0.5 rounded"
-                        >
-                            涵義 {senseIndex + 1}/{totalSenses}
-                        </span>
-                    {/if}
-                </div>
-                <div class="flex items-center gap-1">
-                    <AudioButton text={card.lemma} size="md" />
-                    <button
-                        type="button"
-                        class="nav-detail-btn"
-                        onclick={handleOpenModal}
-                        title="查看完整詞條"
-                    >
-                        <svg
-                            class="w-4 h-4"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                            />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <div class="text-center mb-3">
-                <h2
-                    class="text-xl font-semibold tracking-tight text-content-primary"
-                >
-                    {card.lemma}
-                </h2>
-                {#if currentSense}
-                    <span
-                        class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mt-1 lowercase"
-                    >
-                        {currentSense.pos}
-                    </span>
-                {/if}
-            </div>
-
-            <div class="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
-                {#if isLoading}
-                    <div class="flex items-center justify-center py-8">
-                        <div class="text-base text-content-tertiary">
-                            載入中...
-                        </div>
+<div class="flashcard-wrapper">
+    {#key cardKey}
+        <div
+            class="flashcard-container"
+            in:fadeScale={{ duration: 200 }}
+            out:fadeScale={{ duration: 150, out: true }}
+            onclick={handleCardClick}
+            onkeydown={handleKeydown}
+            role="button"
+            tabindex="0"
+        >
+            <div class="flashcard-inner" class:flipped={isFlipped}>
+                <!-- Front -->
+                <div class="flashcard-face flashcard-front">
+                    <div class="flex items-center justify-between">
+                        <StateBadge state={card.state} />
+                        <AudioButton text={card.lemma} size="lg" />
                     </div>
-                {:else if currentSense}
-                    <div class="space-y-3">
-                        <!-- Definition -->
-                        <div class="definition-block">
-                            <p
-                                class="text-base text-content-primary leading-relaxed"
-                            >
-                                {currentSense.zh_def}
+
+                    <div
+                        class="flex-1 flex flex-col items-center justify-center text-center py-12"
+                    >
+                        <h2
+                            class="text-3xl lg:text-4xl font-semibold tracking-tight text-content-primary mb-2"
+                        >
+                            {card.lemma}
+                        </h2>
+                        {#if currentSense}
+                            <p class="text-base text-content-tertiary lowercase">
+                                {currentSense.pos}
                             </p>
-                            {#if currentSense.en_def}
-                                <p
-                                    class="text-sm text-content-tertiary mt-1 leading-relaxed"
+                        {/if}
+                    </div>
+
+                    <div class="text-center">
+                        <p class="text-sm text-content-tertiary/60">點擊翻牌</p>
+                    </div>
+                </div>
+
+                <!-- Back -->
+                <div class="flashcard-face flashcard-back">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <StateBadge state={card.state} />
+                            {#if totalSenses > 1}
+                                <span
+                                    class="text-xs text-content-tertiary bg-surface-page px-2 py-0.5 rounded"
                                 >
-                                    {currentSense.en_def}
-                                </p>
+                                    涵義 {senseIndex + 1}/{totalSenses}
+                                </span>
                             {/if}
                         </div>
+                        <div class="flex items-center gap-1">
+                            <AudioButton text={card.lemma} size="md" />
+                            <button
+                                type="button"
+                                class="nav-detail-btn"
+                                onclick={handleOpenModal}
+                                title="查看完整詞條"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="1.5"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
 
-                        <!-- Memory Tip -->
-                        {#if memoryTip}
-                            <div class="memory-tip-block">
-                                <div class="flex items-start gap-2">
-                                    <svg
-                                        class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke-width="1.5"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"
-                                        />
-                                    </svg>
-                                    <p
-                                        class="text-sm text-content-secondary leading-relaxed"
-                                    >
-                                        {memoryTip}
-                                    </p>
+                    <div class="text-center mb-3">
+                        <h2
+                            class="text-xl font-semibold tracking-tight text-content-primary"
+                        >
+                            {card.lemma}
+                        </h2>
+                        {#if currentSense}
+                            <span
+                                class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-surface-page text-content-tertiary mt-1 lowercase"
+                            >
+                                {currentSense.pos}
+                            </span>
+                        {/if}
+                    </div>
+
+                    <div class="content-area">
+                        {#if isLoading}
+                            <div class="flex items-center justify-center py-8">
+                                <div class="text-base text-content-tertiary">
+                                    載入中...
                                 </div>
                             </div>
-                        {/if}
-
-                        <!-- Example -->
-                        {#if currentExample}
-                            <div class="example-block">
-                                <div
-                                    class="flex items-center justify-between mb-2"
-                                >
-                                    <span
-                                        class="text-xs font-medium text-content-tertiary"
+                        {:else if currentSense}
+                            <div class="space-y-3">
+                                <!-- Definition -->
+                                <div class="definition-block">
+                                    <p
+                                        class="text-base text-content-primary leading-relaxed"
                                     >
-                                        {currentExample.source
-                                            ? "真實考題"
-                                            : "學習例句"}
-                                    </span>
-                                    <AudioButton
-                                        text={currentExample.text}
-                                        size="sm"
-                                    />
-                                </div>
-                                <!-- svelte-ignore a11y_click_events_have_key_events -->
-                                <span
-                                    class="example-text"
-                                    onclick={(e) => e.stopPropagation()}
-                                    role="presentation"
-                                >
-                                    <ClickableWord
-                                        text={currentExample.text}
-                                        highlightWord={card.lemma}
-                                    />
-                                </span>
-                                {#if currentExample.source}
-                                    <div
-                                        class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary mt-2"
-                                    >
-                                        <svg
-                                            class="w-3 h-3"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                            stroke-width="1.5"
+                                        {currentSense.zh_def}
+                                    </p>
+                                    {#if currentSense.en_def}
+                                        <p
+                                            class="text-sm text-content-tertiary mt-1 leading-relaxed"
                                         >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+                                            {currentSense.en_def}
+                                        </p>
+                                    {/if}
+                                </div>
+
+                                <!-- Memory Tip -->
+                                {#if memoryTip}
+                                    <div class="memory-tip-block">
+                                        <div class="flex items-start gap-2">
+                                            <svg
+                                                class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke-width="1.5"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"
+                                                />
+                                            </svg>
+                                            <p
+                                                class="text-sm text-content-secondary leading-relaxed"
+                                            >
+                                                {memoryTip}
+                                            </p>
+                                        </div>
+                                    </div>
+                                {/if}
+
+                                <!-- Example -->
+                                {#if currentExample}
+                                    <div class="example-block">
+                                        <div
+                                            class="flex items-center justify-between mb-2"
+                                        >
+                                            <span
+                                                class="text-xs font-medium text-content-tertiary"
+                                            >
+                                                {currentExample.source
+                                                    ? "真實考題"
+                                                    : "學習例句"}
+                                            </span>
+                                            <AudioButton
+                                                text={currentExample.text}
+                                                size="sm"
                                             />
-                                        </svg>
-                                        {formatSource(currentExample.source)}
+                                        </div>
+                                        <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                        <span
+                                            class="example-text"
+                                            onclick={(e) => e.stopPropagation()}
+                                            role="presentation"
+                                        >
+                                            <ClickableWord
+                                                text={currentExample.text}
+                                                highlightWord={card.lemma}
+                                            />
+                                        </span>
+                                        {#if currentExample.source}
+                                            <div
+                                                class="inline-flex items-center gap-1.5 px-2 py-1 bg-surface-page rounded text-xs text-content-tertiary mt-2"
+                                            >
+                                                <svg
+                                                    class="w-3 h-3"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                    stroke-width="1.5"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+                                                    />
+                                                </svg>
+                                                {formatSource(currentExample.source)}
+                                            </div>
+                                        {/if}
                                     </div>
                                 {/if}
                             </div>
+                        {:else}
+                            <div class="flex items-center justify-center py-8">
+                                <div class="text-base text-content-tertiary">
+                                    暫無釋義
+                                </div>
+                            </div>
                         {/if}
                     </div>
-                {:else}
-                    <div class="flex items-center justify-center py-8">
-                        <div class="text-base text-content-tertiary">
-                            暫無釋義
-                        </div>
-                    </div>
-                {/if}
+                </div>
             </div>
         </div>
-    </div>
+    {/key}
 </div>
 
 {#if vocabEntry}
@@ -332,20 +343,24 @@
 {/if}
 
 <style>
+    .flashcard-wrapper {
+        display: grid;
+    }
+
     .flashcard-container {
+        grid-area: 1 / 1;
         cursor: pointer;
     }
 
     .flashcard-inner {
         display: grid;
-        transition: opacity 0.2s ease-out;
     }
 
     .flashcard-face {
         grid-area: 1 / 1;
-        min-height: 360px;
-        max-height: 520px;
-        padding: 1.5rem;
+        min-height: 280px;
+        max-height: calc(100vh - 16rem);
+        padding: 1.25rem;
         display: flex;
         flex-direction: column;
         background: var(--color-surface-primary);
@@ -355,6 +370,16 @@
         transition:
             opacity 0.2s ease-out,
             transform 0.2s ease-out;
+        overflow-y: auto;
+    }
+
+    @media (min-width: 640px) {
+        .flashcard-face {
+            min-height: 360px;
+            max-height: none;
+            padding: 1.5rem;
+            overflow-y: visible;
+        }
     }
 
     .flashcard-front {
@@ -378,13 +403,6 @@
         opacity: 1;
         transform: scale(1);
         pointer-events: auto;
-    }
-
-    .flashcard-inner.transitioning .flashcard-back {
-        opacity: 0;
-        transform: scale(0.98);
-        pointer-events: none;
-        transition: none;
     }
 
     .definition-block {
@@ -419,24 +437,6 @@
     .nav-detail-btn:hover {
         background: var(--color-surface-hover);
         color: var(--color-accent);
-    }
-
-    .custom-scrollbar {
-        scrollbar-width: thin;
-        scrollbar-color: var(--color-border-hover) transparent;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 4px;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: var(--color-border-hover);
-        border-radius: 2px;
     }
 
     .example-text {
