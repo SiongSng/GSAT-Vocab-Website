@@ -13,7 +13,11 @@ import {
   forceSave,
   hasCardForLemma,
   getCardsByLemma,
+  shouldUnlockSecondarySenses,
+  updateDailyStats,
+  addSessionLog,
 } from "./srs-storage";
+import { STORAGE_KEYS } from "$lib/storage-keys";
 import type {
   SRSCard,
   SRSReviewLog,
@@ -21,8 +25,8 @@ import type {
   StudySessionStats,
   DailyLimits,
 } from "$lib/types/srs";
-import { DEFAULT_DAILY_LIMITS } from "$lib/types/srs";
-import { speakText, preloadAudio } from "$lib/tts";
+import { DEFAULT_DAILY_LIMITS, getPrioritizedSenses } from "$lib/types/srs";
+import { preloadAudio } from "$lib/tts";
 import type { VocabEntry, VocabSense } from "$lib/types/vocab";
 
 export { Rating, State };
@@ -43,6 +47,8 @@ interface SRSStore {
   newCardsStudiedToday: number;
   reviewsToday: number;
   statsVersion: number;
+  sessionId: string | null;
+  cramMode: boolean;
 }
 
 const store: SRSStore = $state({
@@ -59,6 +65,8 @@ const store: SRSStore = $state({
   newCardsStudiedToday: 0,
   reviewsToday: 0,
   statsVersion: 0,
+  sessionId: null,
+  cramMode: false,
 });
 
 function createEmptySessionStats(): StudySessionStats {
@@ -137,6 +145,9 @@ export function getSRSStore() {
         store.studyQueue.length > 0
       );
     },
+    get cramMode() {
+      return store.cramMode;
+    },
   };
 }
 
@@ -150,7 +161,7 @@ export async function initSRS(): Promise<void> {
 function loadDailyProgress(): void {
   const today = getTodayKey();
   try {
-    const saved = localStorage.getItem(`gsat_srs_daily_${today}`);
+    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_STUDIED(today));
     if (saved) {
       const data = JSON.parse(saved);
       store.newCardsStudiedToday = data.newCards || 0;
@@ -169,7 +180,7 @@ function saveDailyProgress(): void {
   const today = getTodayKey();
   try {
     localStorage.setItem(
-      `gsat_srs_daily_${today}`,
+      STORAGE_KEYS.DAILY_STUDIED(today),
       JSON.stringify({
         newCards: store.newCardsStudiedToday,
         reviews: store.reviewsToday,
@@ -195,57 +206,171 @@ export function addWordsToSRS(lemmas: string[]): void {
   }
 }
 
+export function addWordWithAllSenses(entry: VocabEntry): void {
+  const prioritizedSenses = getPrioritizedSenses(entry);
+  if (prioritizedSenses.length === 0) {
+    ensureCard(entry.lemma, "primary");
+    return;
+  }
+  for (const { sense } of prioritizedSenses) {
+    ensureCard(entry.lemma, sense.sense_id);
+  }
+}
+
+export function addWordsWithAllSenses(entries: VocabEntry[]): void {
+  for (const entry of entries) {
+    addWordWithAllSenses(entry);
+  }
+}
+
 export function addSenseToSRS(lemma: string, senseId: string): void {
   ensureCard(lemma, senseId);
 }
 
-export function startStudySession(options?: {
-  newLimit?: number;
+function getEligibleNewCards(
+  excludeSet: Set<string>,
+  orderedPool?: string[],
+): SRSCard[] {
+  const allNewCards = getNewCards();
+  const cardMap = new Map<string, SRSCard[]>();
+
+  for (const card of allNewCards) {
+    if (excludeSet.has(card.lemma)) continue;
+
+    const isPrimarySense =
+      card.sense_id === "primary" ||
+      !getCardsByLemma(card.lemma).some(
+        (c) => c.sense_id === "primary" && c !== card,
+      );
+
+    const isEligible =
+      isPrimarySense || shouldUnlockSecondarySenses(card.lemma);
+
+    if (isEligible) {
+      const existing = cardMap.get(card.lemma) || [];
+      existing.push(card);
+      cardMap.set(card.lemma, existing);
+    }
+  }
+
+  if (orderedPool && orderedPool.length > 0) {
+    const result: SRSCard[] = [];
+    for (const lemma of orderedPool) {
+      const cards = cardMap.get(lemma);
+      if (cards) {
+        result.push(...cards);
+      }
+    }
+    return result;
+  }
+
+  return Array.from(cardMap.values()).flat();
+}
+
+export type StudyPriority = "mixed" | "new_first" | "review_first";
+
+export interface SessionOptions {
+  newLimit: number;
   reviewLimit?: number;
   newCardPool?: string[];
   excludeLemmas?: Set<string>;
-}): void {
-  const now = new Date();
-  const queue: SRSCard[] = [];
-  const excludeSet = options?.excludeLemmas ?? new Set();
+  priority?: StudyPriority;
+  isCustomDeck?: boolean;
+  cramMode?: boolean;
+}
 
-  const newLimit =
-    options?.newLimit ??
-    Math.max(0, store.dailyLimits.newCards - store.newCardsStudiedToday);
-  const reviewLimit =
-    options?.reviewLimit ??
-    Math.max(0, store.dailyLimits.reviews - store.reviewsToday);
+export interface SessionCardCounts {
+  newCount: number;
+  learningCount: number;
+  reviewCount: number;
+  total: number;
+}
+
+interface SessionCards {
+  newCards: SRSCard[];
+  learningCards: SRSCard[];
+  reviewCards: SRSCard[];
+}
+
+function getSessionCardsInternal(options: SessionOptions): SessionCards {
+  const now = new Date();
+  const excludeSet = options.excludeLemmas ?? new Set();
+  const isCustomDeck = options.isCustomDeck ?? false;
+
+  const reviewLimit = isCustomDeck
+    ? Infinity
+    : (options.reviewLimit ?? Infinity);
 
   const learningCards = getLearningCards().filter(
     (c) => new Date(c.due) <= now && !excludeSet.has(c.lemma),
   );
   const reviewCards = getReviewCards(now)
     .filter((c) => !excludeSet.has(c.lemma))
-    .slice(0, reviewLimit);
+    .slice(0, reviewLimit === Infinity ? undefined : reviewLimit);
 
-  let newCards: SRSCard[];
-  if (options?.newCardPool && options.newCardPool.length > 0) {
-    const poolSet = new Set(options.newCardPool);
-    const candidates = getNewCards().filter((c) => poolSet.has(c.lemma));
-    shuffleArray(candidates);
-    newCards = candidates.slice(0, newLimit);
+  const eligibleNewCards = getEligibleNewCards(excludeSet, options.newCardPool);
+  const newCards = eligibleNewCards.slice(0, options.newLimit);
+
+  return { newCards, learningCards, reviewCards };
+}
+
+export function getSessionCardCounts(
+  options: SessionOptions,
+): SessionCardCounts {
+  const { newCards, learningCards, reviewCards } =
+    getSessionCardsInternal(options);
+  return {
+    newCount: newCards.length,
+    learningCount: learningCards.length,
+    reviewCount: reviewCards.length,
+    total: newCards.length + learningCards.length + reviewCards.length,
+  };
+}
+
+export function startStudySession(options: SessionOptions): void {
+  const cramMode = options.cramMode ?? false;
+  let queue: SRSCard[];
+
+  if (cramMode) {
+    const excludeSet = options.excludeLemmas ?? new Set();
+    const allCards = getAllCards().filter((c) => !excludeSet.has(c.lemma));
+
+    const seen = new Map<string, SRSCard>();
+    for (const card of allCards) {
+      if (!seen.has(card.lemma)) {
+        seen.set(card.lemma, card);
+      }
+    }
+    queue = Array.from(seen.values());
+    shuffleArray(queue);
   } else {
-    const candidates = getNewCards().filter((c) => !excludeSet.has(c.lemma));
-    shuffleArray(candidates);
-    newCards = candidates.slice(0, newLimit);
+    const { newCards, learningCards, reviewCards } =
+      getSessionCardsInternal(options);
+    const priority = options.priority ?? "mixed";
+
+    if (priority === "mixed") {
+      queue = [...learningCards, ...reviewCards, ...newCards];
+      shuffleArray(queue);
+    } else if (priority === "review_first") {
+      shuffleArray(learningCards);
+      shuffleArray(reviewCards);
+      shuffleArray(newCards);
+      queue = [...learningCards, ...reviewCards, ...newCards];
+    } else {
+      shuffleArray(learningCards);
+      shuffleArray(reviewCards);
+      shuffleArray(newCards);
+      queue = [...newCards, ...learningCards, ...reviewCards];
+    }
   }
-
-  queue.push(...learningCards);
-  queue.push(...reviewCards);
-  queue.push(...newCards);
-
-  shuffleArray(queue);
 
   store.studyQueue = queue;
   store.currentCardIndex = 0;
   store.isStudying = true;
   store.isFlipped = false;
   store.sessionStats = createEmptySessionStats();
+  store.sessionId = crypto.randomUUID?.() ?? `session-${Date.now()}`;
+  store.cramMode = cramMode;
 
   if (queue.length > 0) {
     setCurrentCard(queue[0]);
@@ -257,12 +382,27 @@ export function startStudySession(options?: {
 }
 
 const PRELOAD_AHEAD = 3;
+let preloadTimer: ReturnType<typeof setTimeout> | undefined;
 
 function preloadUpcomingAudio(): void {
-  const startIdx = store.currentCardIndex;
-  const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
-  const lemmas = store.studyQueue.slice(startIdx, endIdx).map((c) => c.lemma);
-  preloadAudio(lemmas);
+  clearTimeout(preloadTimer);
+
+  // Delay preloading to specific prioritize current card playback.
+  // This avoids network contention and ensures the current card's auto-play
+  // gets the first slot in the request queue.
+  preloadTimer = setTimeout(() => {
+    if (!store.isStudying) return;
+
+    const startIdx = store.currentCardIndex + 1;
+    const endIdx = Math.min(startIdx + PRELOAD_AHEAD, store.studyQueue.length);
+
+    if (startIdx < endIdx) {
+      const lemmas = store.studyQueue
+        .slice(startIdx, endIdx)
+        .map((c) => c.lemma);
+      preloadAudio(lemmas);
+    }
+  }, 1200);
 }
 
 function setCurrentCard(card: SRSCard): void {
@@ -291,12 +431,18 @@ export function showAnswer(): void {
   store.isFlipped = true;
 }
 
-export async function rateCard(rating: Rating): Promise<void> {
+export function rateCard(rating: Rating): void {
   if (!store.currentCard || !store.schedulingInfo) return;
   if (rating === Rating.Manual) return;
 
   const recordLog = store.schedulingInfo[rating];
   if (!recordLog) return;
+
+  if (store.cramMode) {
+    store.sessionStats.cardsStudied++;
+    moveToNextCard();
+    return;
+  }
 
   const { card: newCard, log } = recordLog;
 
@@ -310,13 +456,6 @@ export async function rateCard(rating: Rating): Promise<void> {
   };
 
   updateCard(updatedCard);
-
-  const reviewLog: SRSReviewLog = {
-    ...log,
-    lemma: store.currentCard.lemma,
-    sense_id: store.currentCard.sense_id,
-  };
-  await addReviewLog(reviewLog);
 
   store.sessionStats.cardsStudied++;
   switch (rating) {
@@ -346,8 +485,18 @@ export async function rateCard(rating: Rating): Promise<void> {
     store.studyQueue.push(updatedCard);
   }
 
-  store.statsVersion++;
   moveToNextCard();
+
+  const reviewLog: SRSReviewLog = {
+    ...log,
+    lemma: updatedCard.lemma,
+    sense_id: updatedCard.sense_id,
+  };
+  queueMicrotask(() => {
+    addReviewLog(reviewLog);
+    updateDailyStats(rating, wasNew);
+    store.statsVersion++;
+  });
 }
 
 function moveToNextCard(): void {
@@ -365,7 +514,23 @@ function moveToNextCard(): void {
   }
 }
 
-export function endStudySession(): void {
+export async function endStudySession(): Promise<void> {
+  clearTimeout(preloadTimer);
+  if (
+    store.sessionId &&
+    store.sessionStats.cardsStudied > 0 &&
+    !store.cramMode
+  ) {
+    const startTime = store.sessionStats.startTime.getTime();
+    const endTime = Date.now();
+    await addSessionLog(
+      store.sessionId,
+      startTime,
+      endTime,
+      store.sessionStats.cardsStudied,
+    );
+  }
+
   store.isStudying = false;
   store.currentCard = null;
   store.currentSense = null;
@@ -373,6 +538,8 @@ export function endStudySession(): void {
   store.currentCardIndex = 0;
   store.isFlipped = false;
   store.schedulingInfo = null;
+  store.sessionId = null;
+  store.cramMode = false;
   store.statsVersion++;
   forceSave();
 }
@@ -404,7 +571,10 @@ export function getIntervalText(rating: Rating): string {
 export function setDailyLimits(limits: Partial<DailyLimits>): void {
   store.dailyLimits = { ...store.dailyLimits, ...limits };
   try {
-    localStorage.setItem("gsat_srs_limits", JSON.stringify(store.dailyLimits));
+    localStorage.setItem(
+      STORAGE_KEYS.DAILY_LIMITS,
+      JSON.stringify(store.dailyLimits),
+    );
   } catch {
     // ignore
   }
@@ -412,7 +582,7 @@ export function setDailyLimits(limits: Partial<DailyLimits>): void {
 
 export function loadDailyLimits(): void {
   try {
-    const saved = localStorage.getItem("gsat_srs_limits");
+    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_LIMITS);
     if (saved) {
       store.dailyLimits = { ...DEFAULT_DAILY_LIMITS, ...JSON.parse(saved) };
     }
@@ -425,22 +595,6 @@ function shuffleArray<T>(array: T[]): void {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
-  }
-}
-
-let audioPlayer: HTMLAudioElement | null = null;
-
-export async function playCurrentCardAudio(): Promise<void> {
-  if (!store.currentCard) return;
-  try {
-    const url = await speakText(store.currentCard.lemma);
-    if (!audioPlayer) {
-      audioPlayer = new Audio();
-    }
-    audioPlayer.src = url;
-    await audioPlayer.play();
-  } catch {
-    // ignore audio playback errors
   }
 }
 
@@ -468,20 +622,34 @@ export function getLemmaHasCard(lemma: string): boolean {
   return hasCardForLemma(lemma);
 }
 
-export function findSenseForCard(card: SRSCard, entry: VocabEntry | null): VocabSense | null {
+export function findSenseForCard(
+  card: SRSCard,
+  entry: VocabEntry | null,
+): VocabSense | null {
   if (!entry || !entry.senses || entry.senses.length === 0) return null;
 
+  const prioritized = getPrioritizedSenses(entry);
+  if (prioritized.length === 0) return entry.senses[0];
+
   if (card.sense_id === "primary") {
-    return entry.senses[0];
+    return prioritized[0].sense;
   }
 
-  const sense = entry.senses.find(s => s.sense_id === card.sense_id);
-  return sense || entry.senses[0];
+  const found = prioritized.find((p) => p.sense.sense_id === card.sense_id);
+  return found?.sense || prioritized[0].sense;
 }
 
-export function getSenseIndex(entry: VocabEntry | null, senseId: string): number {
+export function getSenseIndex(
+  entry: VocabEntry | null,
+  senseId: string,
+): number {
   if (!entry || !entry.senses) return 0;
+
+  const prioritized = getPrioritizedSenses(entry);
+  if (prioritized.length === 0) return 0;
+
   if (senseId === "primary") return 0;
-  const idx = entry.senses.findIndex(s => s.sense_id === senseId);
+
+  const idx = prioritized.findIndex((p) => p.sense.sense_id === senseId);
   return idx >= 0 ? idx : 0;
 }

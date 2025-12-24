@@ -14,21 +14,24 @@
     let currentY = 0;
     let isDragging = false;
 
-    function handleTouchStart(e: TouchEvent) {
-        startY = e.touches[0].clientY;
+    function handleDragStart(e: TouchEvent | PointerEvent) {
+        const y = "touches" in e ? e.touches[0].clientY : e.clientY;
+        startY = y;
         isDragging = true;
     }
 
-    function handleTouchMove(e: TouchEvent) {
+    function handleDragMove(e: TouchEvent | PointerEvent) {
         if (!isDragging) return;
-        currentY = e.touches[0].clientY - startY;
+        const y = "touches" in e ? e.touches[0].clientY : e.clientY;
+        currentY = y - startY;
         if (currentY < 0) currentY = 0;
         if (sheetElement) {
             sheetElement.style.transform = `translateY(${currentY}px)`;
         }
     }
 
-    function handleTouchEnd() {
+    function handleDragEnd() {
+        if (!isDragging) return;
         isDragging = false;
         if (currentY > 100) {
             onClose();
@@ -63,13 +66,20 @@
         <div
             class="sheet"
             bind:this={sheetElement}
-            ontouchstart={handleTouchStart}
-            ontouchmove={handleTouchMove}
-            ontouchend={handleTouchEnd}
             role="dialog"
             aria-modal="true"
         >
-            <div class="drag-handle-container">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+                class="drag-handle-container"
+                ontouchstart={handleDragStart}
+                ontouchmove={handleDragMove}
+                ontouchend={handleDragEnd}
+                onpointerdown={handleDragStart}
+                onpointermove={handleDragMove}
+                onpointerup={handleDragEnd}
+                onpointercancel={handleDragEnd}
+            >
                 <div class="drag-handle"></div>
             </div>
             <div class="sheet-content">
@@ -112,8 +122,9 @@
     .drag-handle-container {
         display: flex;
         justify-content: center;
-        padding: 12px 0 8px;
+        padding: 16px 0 12px;
         cursor: grab;
+        touch-action: none;
     }
 
     .drag-handle {

@@ -10,7 +10,13 @@
     const percentage = $derived(
         progress.total > 0
             ? Math.round((progress.current / progress.total) * 100)
-            : 0
+            : 0,
+    );
+
+    const isIndeterminate = $derived(
+        progress.phase === "checking" ||
+            progress.phase === "downloading" ||
+            progress.phase === "decompressing",
     );
 </script>
 
@@ -62,11 +68,32 @@
             <div
                 class="w-full h-2 bg-surface-secondary rounded-full overflow-hidden"
             >
-                <div
-                    class="h-full bg-accent rounded-full transition-all duration-300 ease-out"
-                    style="width: {percentage}%"
-                ></div>
+                {#if isIndeterminate}
+                    <div
+                        class="h-full w-[30%] bg-accent rounded-full animate-indeterminate"
+                    ></div>
+                {:else}
+                    <div
+                        class="h-full bg-accent rounded-full transition-all duration-300 ease-out"
+                        style="width: {percentage}%"
+                    ></div>
+                {/if}
             </div>
+
+            <style>
+                @keyframes indeterminate {
+                    0% {
+                        transform: translateX(-100%);
+                    }
+                    100% {
+                        transform: translateX(433%);
+                    }
+                }
+
+                .animate-indeterminate {
+                    animation: indeterminate 1.5s ease-in-out infinite;
+                }
+            </style>
 
             {#if progress.phase === "storing" && progress.total > 0}
                 <p class="text-sm text-content-secondary text-center mt-3">

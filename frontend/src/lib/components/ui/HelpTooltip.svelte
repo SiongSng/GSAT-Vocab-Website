@@ -1,43 +1,25 @@
 <script lang="ts">
+    import { onMount } from "svelte";
+
     interface Props {
         text: string;
     }
 
     let { text }: Props = $props();
 
-    let isOpen = $state(false);
-    let btnRef: HTMLButtonElement | null = $state(null);
-    let tooltipStyle = $state("");
-
-    function open(e: Event) {
-        e.stopPropagation();
-        if (isOpen) {
-            isOpen = false;
-            return;
-        }
-        document.dispatchEvent(new CustomEvent("help-tooltip-close"));
-        isOpen = true;
-    }
-
-    function close() {
-        isOpen = false;
-    }
-
-    function handleClickOutside(e: MouseEvent) {
-        if (btnRef && !btnRef.contains(e.target as Node)) {
-            isOpen = false;
-        }
-    }
+    let containerRef: HTMLSpanElement | null = $state(null);
+    let tooltipEl: HTMLSpanElement | null = $state(null);
+    let isVisible = $state(false);
 
     function updatePosition() {
-        if (!btnRef) return;
+        if (!containerRef || !tooltipEl) return;
 
-        const rect = btnRef.getBoundingClientRect();
+        const rect = containerRef.getBoundingClientRect();
         const contentWidth = 200;
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const padding = 12;
-        const tooltipHeight = 60;
+        const tooltipHeight = tooltipEl.offsetHeight || 60;
 
         let top = rect.bottom + 8;
         let left = rect.left + rect.width / 2 - contentWidth / 2;
@@ -52,22 +34,35 @@
             left = viewportWidth - padding - contentWidth;
         }
 
-        tooltipStyle = `top: ${top}px; left: ${left}px;`;
+        tooltipEl.style.top = `${top}px`;
+        tooltipEl.style.left = `${left}px`;
+    }
+
+    onMount(() => {
+        if (tooltipEl) {
+            document.body.appendChild(tooltipEl);
+        }
+        return () => {
+            if (tooltipEl && tooltipEl.parentNode === document.body) {
+                document.body.removeChild(tooltipEl);
+            }
+        };
+    });
+
+    function handleMouseEnter() {
+        isVisible = true;
+        updatePosition();
+    }
+
+    function handleMouseLeave() {
+        isVisible = false;
     }
 
     $effect(() => {
-        document.addEventListener("help-tooltip-close", close);
-        return () => document.removeEventListener("help-tooltip-close", close);
-    });
-
-    $effect(() => {
-        if (isOpen) {
-            updatePosition();
-            document.addEventListener("click", handleClickOutside);
+        if (isVisible) {
             window.addEventListener("scroll", updatePosition, true);
             window.addEventListener("resize", updatePosition);
             return () => {
-                document.removeEventListener("click", handleClickOutside);
                 window.removeEventListener("scroll", updatePosition, true);
                 window.removeEventListener("resize", updatePosition);
             };
@@ -75,15 +70,18 @@
     });
 </script>
 
-<button
-    type="button"
-    class="help-btn"
-    onclick={open}
-    aria-label="說明"
-    bind:this={btnRef}
+<span
+    class="help-container"
+    bind:this={containerRef}
+    onmouseenter={handleMouseEnter}
+    onmouseleave={handleMouseLeave}
+    onfocus={handleMouseEnter}
+    onblur={handleMouseLeave}
+    role="button"
+    tabindex="0"
 >
     <svg
-        class="w-3.5 h-3.5"
+        class="help-icon"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -96,29 +94,31 @@
             d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z"
         />
     </svg>
-</button>
+</span>
 
-{#if isOpen}
-    <span class="tooltip-content" style={tooltipStyle}>
-        {text}
-    </span>
-{/if}
+<span class="tooltip-content" class:visible={isVisible} bind:this={tooltipEl}>
+    {text}
+</span>
 
 <style>
-    .help-btn {
+    .help-container {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        color: var(--color-content-tertiary);
-        transition: all 0.15s ease;
+        width: 14px;
+        height: 14px;
+        cursor: help;
         flex-shrink: 0;
-        vertical-align: middle;
     }
 
-    .help-btn:hover {
+    .help-icon {
+        width: 14px;
+        height: 14px;
+        color: var(--color-content-tertiary);
+        transition: color 0.15s ease;
+    }
+
+    .help-container:hover .help-icon {
         color: var(--color-content-secondary);
     }
 
@@ -135,5 +135,12 @@
         text-align: center;
         white-space: normal;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+    }
+
+    .tooltip-content:global(.visible) {
+        opacity: 1;
     }
 </style>

@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "bun run generate-sitemap && vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "generate-sitemap": "bun scripts/generate-sitemap.js"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
@@ -17,11 +18,16 @@
     "svelte-check": "^4.1.4",
     "tailwindcss": "^4.1.17",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vite-plugin-pwa": "^1.2.0"
   },
   "dependencies": {
     "edge-tts-universal": "^1.3.3",
+    "fflate": "^0.8.2",
+    "firebase": "^12.7.0",
     "idb": "^8.0.3",
+    "kokoro-js": "^1.2.1",
+    "msgpackr": "^1.11.8",
     "ts-fsrs": "^5.2.3"
   }
 }

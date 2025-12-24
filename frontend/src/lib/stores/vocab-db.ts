@@ -59,7 +59,7 @@ async function getDB(): Promise<IDBPDatabase<VocabDBSchema>> {
         if (!database.objectStoreNames.contains("distractor_groups")) {
           const distractorStore = database.createObjectStore(
             "distractor_groups",
-            { keyPath: "id", autoIncrement: true }
+            { keyPath: "id", autoIncrement: true },
           );
           distractorStore.createIndex("by_correct_answer", "correct_answer");
           distractorStore.createIndex("by_year", "source.year");
@@ -92,7 +92,9 @@ export async function getStoredMetadata(): Promise<VocabMetadata | null> {
   return result?.value as VocabMetadata | null;
 }
 
-export async function setStoredMetadata(metadata: VocabMetadata): Promise<void> {
+export async function setStoredMetadata(
+  metadata: VocabMetadata,
+): Promise<void> {
   const database = await getDB();
   await database.put("metadata", { key: "vocab_metadata", value: metadata });
 }
@@ -108,7 +110,7 @@ export async function clearAllStores(): Promise<void> {
 
 export async function bulkInsertEntries(
   entries: VocabEntry[],
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
 ): Promise<void> {
   const database = await getDB();
   const batchSize = 100;
@@ -132,7 +134,7 @@ export async function bulkInsertEntries(
 }
 
 export async function bulkInsertDistractorGroups(
-  groups: DistractorGroup[]
+  groups: DistractorGroup[],
 ): Promise<void> {
   const database = await getDB();
   const tx = database.transaction("distractor_groups", "readwrite");
@@ -146,9 +148,14 @@ export async function bulkInsertDistractorGroups(
   distractorGroupsCache = null;
 }
 
+export function getEntryCached(lemma: string): VocabEntry | undefined {
+  return entriesCache.get(lemma);
+}
+
 export async function getEntry(lemma: string): Promise<VocabEntry | undefined> {
-  if (entriesCache.has(lemma)) {
-    return entriesCache.get(lemma);
+  const cached = entriesCache.get(lemma);
+  if (cached) {
+    return cached;
   }
 
   const database = await getDB();
@@ -170,7 +177,7 @@ export async function getEntriesCount(): Promise<number> {
 }
 
 export async function buildIndex(
-  createIndexItemFn: typeof createIndexItem
+  createIndexItemFn: typeof createIndexItem,
 ): Promise<VocabIndexItem[]> {
   if (indexCache) {
     return indexCache;
@@ -212,13 +219,13 @@ export async function getAllDistractorGroups(): Promise<DistractorGroup[]> {
 }
 
 export async function getDistractorGroupsByWord(
-  lemma: string
+  lemma: string,
 ): Promise<DistractorGroup[]> {
   const database = await getDB();
   const asCorrect = await database.getAllFromIndex(
     "distractor_groups",
     "by_correct_answer",
-    lemma
+    lemma,
   );
 
   const allGroups = await getAllDistractorGroups();

@@ -5,41 +5,69 @@
         flipCard,
         rateCard,
         showAnswer,
-        playCurrentCardAudio,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { getEntry } from "$lib/stores/vocab-db";
+    import { getEntry, getEntryCached } from "$lib/stores/vocab-db";
+    import { createAudioController } from "$lib/tts";
     import type { VocabEntry } from "$lib/types/vocab";
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
     import ProgressBar from "./ProgressBar.svelte";
+    import { STORAGE_KEYS } from "$lib/storage-keys";
 
     const srs = getSRSStore();
     const app = getAppStore();
 
     let vocabEntry: VocabEntry | null = $state(null);
     let isLoadingDetail = $state(false);
-    let autoSpeak = $state(true);
+    let lastCardKey = $state<string | null>(null);
+
+    function getCardKey(
+        card: { lemma: string; sense_id: string } | null,
+    ): string | null {
+        return card ? `${card.lemma}:${card.sense_id}` : null;
+    }
+
+    const audioController = createAudioController(
+        () => srs.currentCard?.lemma ?? "",
+    );
 
     const ratingMap = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
-    $effect(() => {
+    function getAutoSpeak(): boolean {
         try {
-            const saved = localStorage.getItem("gsat_srs_auto_speak");
-            autoSpeak = saved !== "false";
+            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+            if (saved) {
+                const settings = JSON.parse(saved);
+                return settings.autoSpeak ?? true;
+            }
         } catch {
-            autoSpeak = true;
+            // ignore
         }
-    });
+        return true;
+    }
 
     $effect(() => {
         const card = srs.currentCard;
-        if (card) {
-            loadWordDetail(card.lemma);
-            if (autoSpeak) {
-                setTimeout(() => playCurrentCardAudio(), 100);
+        const cardKey = getCardKey(card);
+
+        if (cardKey && cardKey !== lastCardKey) {
+            lastCardKey = cardKey;
+
+            const cached = getEntryCached(card!.lemma);
+            if (cached) {
+                vocabEntry = cached;
+                isLoadingDetail = false;
+            } else {
+                loadWordDetail(card!.lemma);
             }
-        } else {
+
+            if (getAutoSpeak()) {
+                audioController.stop();
+                setTimeout(() => audioController.play(), 50);
+            }
+        } else if (!card) {
+            lastCardKey = null;
             vocabEntry = null;
         }
     });
@@ -47,7 +75,7 @@
     async function loadWordDetail(lemma: string) {
         isLoadingDetail = true;
         try {
-            vocabEntry = await getEntry(lemma) ?? null;
+            vocabEntry = (await getEntry(lemma)) ?? null;
         } catch {
             vocabEntry = null;
         } finally {
@@ -63,8 +91,8 @@
         }
     }
 
-    async function handleRate(rating: Rating) {
-        await rateCard(rating);
+    function handleRate(rating: Rating) {
+        rateCard(rating);
     }
 
     function handleKeydown(event: KeyboardEvent) {
@@ -99,6 +127,12 @@
             </div>
         {/if}
 
-        <ProgressBar />
+        {#if srs.cramMode}
+            <div class="mt-5 text-center text-sm text-content-tertiary">
+                {srs.progress.current} / {srs.progress.total}
+            </div>
+        {:else}
+            <ProgressBar />
+        {/if}
     {/if}
 </div>

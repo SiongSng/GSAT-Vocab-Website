@@ -1,4 +1,10 @@
-import { type Card as FSRSCard, type ReviewLog as FSRSReviewLog, State, Rating } from "ts-fsrs";
+import {
+  type Card as FSRSCard,
+  type ReviewLog as FSRSReviewLog,
+  State,
+  Rating,
+} from "ts-fsrs";
+import type { VocabEntry, VocabSense } from "./vocab";
 
 export { State, Rating };
 
@@ -39,6 +45,26 @@ export interface StudySessionStats {
   endTime?: Date;
 }
 
+export interface DailyStats {
+  date: string;
+  new_cards: number;
+  reviews: number;
+  again: number;
+  hard: number;
+  good: number;
+  easy: number;
+  study_time_ms: number;
+  updated_at: number;
+}
+
+export interface SessionLog {
+  id?: number;
+  session_id: string;
+  start: number;
+  end: number;
+  studied: number;
+}
+
 export interface DailyLimits {
   newCards: number;
   reviews: number;
@@ -77,4 +103,60 @@ export function ratingToLabel(rating: Rating): string {
     default:
       return "Unknown";
   }
+}
+
+export interface PrioritizedSense {
+  sense: VocabSense;
+  priority: number;
+  isPrimary: boolean;
+}
+
+export function getPrioritizedSenses(entry: VocabEntry): PrioritizedSense[] {
+  if (!entry.senses || entry.senses.length === 0) return [];
+
+  const sensesWithPriority = entry.senses.map((sense, originalIndex) => {
+    const exampleCount = sense.examples?.length ?? 0;
+    const testedBonus = sense.tested_in_exam ? 1 : 0;
+    const priority =
+      exampleCount * 1000 + testedBonus * 100 + (1000 - originalIndex);
+    return { sense, priority, originalIndex };
+  });
+
+  sensesWithPriority.sort((a, b) => b.priority - a.priority);
+
+  return sensesWithPriority.map((item, idx) => ({
+    sense: item.sense,
+    priority: idx,
+    isPrimary: idx === 0,
+  }));
+}
+
+export function getPrimarySenseId(entry: VocabEntry): string {
+  const prioritized = getPrioritizedSenses(entry);
+  return prioritized.length > 0 ? prioritized[0].sense.sense_id : "primary";
+}
+
+export function getSensePriorityIndex(
+  entry: VocabEntry,
+  senseId: string,
+): number {
+  const prioritized = getPrioritizedSenses(entry);
+  const idx = prioritized.findIndex((p) => p.sense.sense_id === senseId);
+  return idx >= 0 ? idx : 0;
+}
+
+export function resolveSenseId(
+  entry: VocabEntry | null,
+  senseId: string,
+): string {
+  if (!entry || !entry.senses || entry.senses.length === 0) return senseId;
+
+  if (senseId === "primary") {
+    return getPrimarySenseId(entry);
+  }
+
+  const exists = entry.senses.some((s) => s.sense_id === senseId);
+  if (exists) return senseId;
+
+  return getPrimarySenseId(entry);
 }

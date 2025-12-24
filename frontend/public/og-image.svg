@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f7f7f7"/>
+      <stop offset="100%" stop-color="#ebebeb"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg-gradient)"/>
+
+  <g transform="translate(80, 180)">
+    <rect x="0" y="0" width="160" height="124" rx="14" fill="#207dff" opacity="0.25"/>
+    <rect x="28" y="28" width="160" height="124" rx="14" fill="#207dff" opacity="0.5"/>
+    <rect x="56" y="56" width="160" height="124" rx="14" fill="#207dff"/>
+  </g>
+
+  <text x="340" y="260" font-family="system-ui, -apple-system, 'Noto Sans TC', sans-serif" font-size="72" font-weight="700" fill="#1a1a1a">學測高頻單字</text>
+
+  <text x="340" y="330" font-family="system-ui, -apple-system, 'Noto Sans TC', sans-serif" font-size="32" font-weight="500" fill="#666666">數據分析 · 科學備考</text>
+
+  <g transform="translate(80, 450)">
+    <rect x="0" y="0" width="180" height="48" rx="24" fill="#207dff" opacity="0.1"/>
+    <text x="90" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="#207dff" text-anchor="middle">5000+ 單字</text>
+
+    <rect x="200" y="0" width="180" height="48" rx="24" fill="#207dff" opacity="0.1"/>
+    <text x="290" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="#207dff" text-anchor="middle">詞頻統計</text>
+
+    <rect x="400" y="0" width="180" height="48" rx="24" fill="#207dff" opacity="0.1"/>
+    <text x="490" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="#207dff" text-anchor="middle">字根拆解</text>
+
+    <rect x="600" y="0" width="180" height="48" rx="24" fill="#207dff" opacity="0.1"/>
+    <text x="690" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="600" fill="#207dff" text-anchor="middle">間隔複習</text>
+  </g>
+
+  <rect x="0" y="610" width="1200" height="20" fill="#207dff"/>
+</svg>
