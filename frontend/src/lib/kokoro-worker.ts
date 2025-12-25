@@ -93,18 +93,14 @@ async function init() {
       try {
         const startTime = performance.now();
 
-        // Kokoro uses different style vectors based on token sequence length.
-        // Short texts (single words) map to style vectors with fewer training
-        // samples, causing unstable prosody. Adding punctuation produces more
-        // phoneme tokens, and slowing speed compensates for duration prediction.
+        // Adding punctuation to short texts improves pronunciation stability
+        // by generating more phoneme tokens for Kokoro's style vectors
         const isShortText = text.trim().split(/\s+/).length <= 2;
         const processedText =
           isShortText && !/[.!?]$/.test(text.trim()) ? `${text.trim()}.` : text;
-        const speed = isShortText ? 0.85 : 1.0;
 
         const audio = await tts.generate(processedText, {
           voice: VOICE,
-          speed,
         });
         const elapsed = performance.now() - startTime;
         console.log(
