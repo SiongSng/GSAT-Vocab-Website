@@ -379,14 +379,13 @@ input[type="number"] {
     border-color: transparent;
 }
 
-/* Scrollbar styles */
+/* Scrollbar styles - overlay style (sits on top of content) */
 .custom-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-border-hover) transparent;
+    overflow-y: scroll;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -394,12 +393,19 @@ input[type="number"] {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: var(--color-border-hover);
-    border-radius: 3px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-content-tertiary);
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+@supports (scrollbar-width: thin) {
+    .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+    }
 }
 
 /* Focus ring utility */

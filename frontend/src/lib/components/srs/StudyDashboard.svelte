@@ -1264,7 +1264,7 @@
         background-color: var(--color-surface-primary);
         border-radius: 0.75rem;
         box-shadow: var(--shadow-float);
-        overflow: hidden;
+        overflow: visible;
     }
 
     /* Settings Grid */
