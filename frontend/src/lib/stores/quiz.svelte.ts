@@ -1,50 +1,72 @@
-import { generateQuiz, type QuizQuestion } from "$lib/api";
+import {
+  generateQuizLocally,
+  type QuizQuestion,
+  type QuizConfig as GeneratorConfig,
+  type QuizQuestionType,
+} from "./quiz-generator";
+import {
+  applyQuizSessionResults,
+  type QuizResult,
+  computeSessionSummary,
+  type QuizSessionSummary,
+} from "./quiz-srs-bridge";
+
+export type { QuizQuestion, QuizQuestionType };
 
 interface QuizStore {
-  type: "choice" | "spelling" | "fill" | null;
+  type: QuizQuestionType | "adaptive" | null;
+  source: GeneratorConfig["source"];
   questions: QuizQuestion[];
   currentIndex: number;
-  answers: (string | null)[];
+  results: QuizResult[];
   isLoading: boolean;
   isActive: boolean;
   isComplete: boolean;
   error: string | null;
+
+  sessionStartTime: Date | null;
+  questionStartTime: Date | null;
+  usedHintForCurrent: boolean;
 }
 
 const store: QuizStore = $state({
   type: null,
+  source: "srs_due",
   questions: [],
   currentIndex: 0,
-  answers: [],
+  results: [],
   isLoading: false,
   isActive: false,
   isComplete: false,
   error: null,
+  sessionStartTime: null,
+  questionStartTime: null,
+  usedHintForCurrent: false,
 });
 
 const currentQuestion = $derived(
-  store.questions.length > 0 ? store.questions[store.currentIndex] : null,
+  store.questions.length > 0 ? store.questions[store.currentIndex] : null
 );
 
 const score = $derived(
-  store.answers.reduce((acc, answer, idx) => {
-    if (answer === null) return acc;
-    const q = store.questions[idx];
-    return acc + (answer.toLowerCase() === q.correct.toLowerCase() ? 1 : 0);
-  }, 0),
+  store.results.filter((r) => r.correct).length
 );
 
 const progress = $derived({
   current: store.currentIndex + 1,
   total: store.questions.length,
-  answered: store.answers.filter((a) => a !== null).length,
+  answered: store.results.length,
 });
 
 const incorrectQuestions = $derived(
-  store.questions.filter((q, idx) => {
-    const answer = store.answers[idx];
-    return answer !== null && answer.toLowerCase() !== q.correct.toLowerCase();
-  }),
+  store.questions.filter((_, idx) => {
+    const result = store.results[idx];
+    return result && !result.correct;
+  })
+);
+
+const sessionSummary = $derived<QuizSessionSummary | null>(
+  store.isComplete ? computeSessionSummary(store.results) : null
 );
 
 export function getQuizStore() {
@@ -52,14 +74,17 @@ export function getQuizStore() {
     get type() {
       return store.type;
     },
+    get source() {
+      return store.source;
+    },
     get questions() {
       return store.questions;
     },
     get currentIndex() {
       return store.currentIndex;
     },
-    get answers() {
-      return store.answers;
+    get results() {
+      return store.results;
     },
     get isLoading() {
       return store.isLoading;
@@ -85,17 +110,22 @@ export function getQuizStore() {
     get incorrectQuestions() {
       return incorrectQuestions;
     },
+    get sessionSummary() {
+      return sessionSummary;
+    },
+    get usedHintForCurrent() {
+      return store.usedHintForCurrent;
+    },
   };
 }
 
 export interface QuizConfig {
-  type: "choice" | "spelling" | "fill";
+  source?: GeneratorConfig["source"];
   count: number;
-  freqMin?: number;
-  freqMax?: number;
-  pos?: string[];
-  excludePropn?: boolean;
-  choiceDirection?: "word_to_def" | "def_to_word";
+  lemmas?: string[];
+  entry_type?: "word" | "phrase" | "all";
+  pos_filter?: string[];
+  force_type?: QuizQuestionType;
 }
 
 export async function startQuiz(config: QuizConfig): Promise<void> {
@@ -103,69 +133,115 @@ export async function startQuiz(config: QuizConfig): Promise<void> {
   store.error = null;
 
   try {
-    const questions = await generateQuiz({
-      type: config.type,
+    const generatorConfig: GeneratorConfig = {
+      source: config.source ?? "srs_due",
       count: config.count,
-      freqMin: config.freqMin,
-      freqMax: config.freqMax,
-      pos: config.pos,
-      excludePropn: config.excludePropn,
-      choiceDirection: config.choiceDirection,
-    });
+      lemmas: config.lemmas,
+      entry_type: config.entry_type,
+      pos_filter: config.pos_filter,
+      force_type: config.force_type,
+    };
 
-    store.type = config.type;
+    const questions = await generateQuizLocally(generatorConfig);
+
+    if (questions.length === 0) {
+      store.error = "沒有可用的題目。請先加入一些單字到學習清單。";
+      store.isLoading = false;
+      return;
+    }
+
+    store.type = config.force_type ?? "adaptive";
+    store.source = config.source ?? "srs_due";
     store.questions = questions;
     store.currentIndex = 0;
-    store.answers = new Array(questions.length).fill(null);
+    store.results = [];
     store.isActive = true;
     store.isComplete = false;
+    store.sessionStartTime = new Date();
+    store.questionStartTime = new Date();
+    store.usedHintForCurrent = false;
   } catch (e) {
-    store.error = e instanceof Error ? e.message : "Failed to generate quiz";
+    store.error = e instanceof Error ? e.message : "生成測驗失敗";
     console.error("Failed to generate quiz:", e);
   } finally {
     store.isLoading = false;
   }
 }
 
+export function markHintUsed(): void {
+  store.usedHintForCurrent = true;
+}
+
 export function submitAnswer(answer: string): void {
   if (!store.isActive || store.currentIndex >= store.questions.length) return;
 
-  store.answers[store.currentIndex] = answer;
+  const question = store.questions[store.currentIndex];
+  const responseTime = store.questionStartTime
+    ? Date.now() - store.questionStartTime.getTime()
+    : 0;
+
+  const isCorrect = answer.toLowerCase() === question.correct.toLowerCase();
+
+  const result: QuizResult = {
+    lemma: question.lemma,
+    sense_id: question.sense_id,
+    entry_type: question.entry_type,
+    question_type: question.type,
+    correct: isCorrect,
+    response_time_ms: responseTime,
+    used_hint: store.usedHintForCurrent,
+  };
+
+  store.results[store.currentIndex] = result;
 }
 
 export function nextQuestion(): void {
   if (store.currentIndex < store.questions.length - 1) {
     store.currentIndex++;
+    store.questionStartTime = new Date();
+    store.usedHintForCurrent = false;
   } else {
     store.isComplete = true;
     store.isActive = false;
+    applyQuizSessionResults(store.results);
   }
 }
 
 export function previousQuestion(): void {
   if (store.currentIndex > 0) {
     store.currentIndex--;
+    store.questionStartTime = new Date();
+    store.usedHintForCurrent = false;
   }
 }
 
 export function goToQuestion(index: number): void {
   if (index >= 0 && index < store.questions.length) {
     store.currentIndex = index;
+    store.questionStartTime = new Date();
+    store.usedHintForCurrent = false;
   }
 }
 
 export function resetQuiz(): void {
   store.type = null;
+  store.source = "srs_due";
   store.questions = [];
   store.currentIndex = 0;
-  store.answers = [];
+  store.results = [];
   store.isLoading = false;
   store.isActive = false;
   store.isComplete = false;
   store.error = null;
+  store.sessionStartTime = null;
+  store.questionStartTime = null;
+  store.usedHintForCurrent = false;
 }
 
 export function exitQuiz(): void {
+  if (store.results.length > 0) {
+    applyQuizSessionResults(store.results);
+  }
   store.isActive = false;
   store.isComplete = false;
 }
@@ -181,19 +257,23 @@ export async function retryIncorrect(): Promise<void> {
   store.error = null;
 
   try {
-    const questions = await generateQuiz({
-      type: store.type!,
+    const questions = await generateQuizLocally({
+      source: "custom",
       count: lemmas.length,
       lemmas,
+      force_type: store.type === "adaptive" ? undefined : (store.type as QuizQuestionType),
     });
 
     store.questions = questions;
     store.currentIndex = 0;
-    store.answers = new Array(questions.length).fill(null);
+    store.results = [];
     store.isActive = true;
     store.isComplete = false;
+    store.sessionStartTime = new Date();
+    store.questionStartTime = new Date();
+    store.usedHintForCurrent = false;
   } catch (e) {
-    store.error = e instanceof Error ? e.message : "Failed to retry quiz";
+    store.error = e instanceof Error ? e.message : "重試失敗";
     console.error("Failed to retry quiz:", e);
   } finally {
     store.isLoading = false;
@@ -201,13 +281,13 @@ export async function retryIncorrect(): Promise<void> {
 }
 
 export function isAnswerCorrect(index: number): boolean | null {
-  const answer = store.answers[index];
-  if (answer === null) return null;
-
-  const q = store.questions[index];
-  return answer.toLowerCase() === q.correct.toLowerCase();
+  const result = store.results[index];
+  if (!result) return null;
+  return result.correct;
 }
 
 export function getCurrentAnswer(): string | null {
-  return store.answers[store.currentIndex];
+  const result = store.results[store.currentIndex];
+  if (!result) return null;
+  return result.correct ? store.questions[store.currentIndex].correct : null;
 }

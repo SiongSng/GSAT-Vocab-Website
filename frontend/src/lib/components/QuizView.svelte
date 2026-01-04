@@ -7,115 +7,213 @@
         resetQuiz,
         retryIncorrect,
         isAnswerCorrect,
-        getCurrentAnswer,
+        markHintUsed,
         type QuizConfig,
+        type QuizQuestionType,
     } from "$lib/stores/quiz.svelte";
+    import {
+        getDueCount,
+        getWeakCount,
+        getAvailableCount,
+    } from "$lib/stores/quiz-generator";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
 
     const quiz = getQuizStore();
 
-    let quizCount = $state(10);
-    let selectedPos = $state<Set<string>>(new Set());
-    let excludePropn = $state(true);
-    let freqMin = $state(1);
-    let freqMax = $state(20);
-    let choiceDirection = $state<"word_to_def" | "def_to_word">("word_to_def");
-    let spellingInput = $state("");
+    let questionCount = $state(10);
+    let entryType = $state<"word" | "phrase" | "all">("all");
+    let showSettings = $state(false);
     let showFeedback = $state(false);
+    let selectedAnswer = $state<string | null>(null);
+    let showHint = $state(false);
 
-    const posOptions = ["NOUN", "VERB", "ADJ", "ADV"];
-    const posLabels: Record<string, string> = {
-        NOUN: "名詞",
-        VERB: "動詞",
-        ADJ: "形容詞",
-        ADV: "副詞",
-    };
+    let spellingInput = $state("");
+    let shuffledLetters = $state<string[]>([]);
+    let answerSlots = $state<string[]>([]);
+    let usedIndices = $state<Set<number>>(new Set());
 
-    function togglePos(pos: string) {
-        const newSet = new Set(selectedPos);
-        if (newSet.has(pos)) {
-            newSet.delete(pos);
-        } else {
-            newSet.add(pos);
-        }
-        selectedPos = newSet;
+    let dueCount = $state(0);
+    let weakCount = $state(0);
+    let availableCount = $state(0);
+
+    $effect(() => {
+        loadCounts();
+    });
+
+    async function loadCounts() {
+        dueCount = await getDueCount();
+        weakCount = await getWeakCount();
+        availableCount = await getAvailableCount();
     }
 
-    async function handleStartQuiz(type: "choice" | "spelling" | "fill") {
+    function getProgressPercent(): number {
+        if (quiz.questions.length === 0) return 0;
+        return (quiz.currentIndex / quiz.questions.length) * 100;
+    }
+
+    async function handleStartQuiz() {
         const config: QuizConfig = {
-            type,
-            count: quizCount,
-            freqMin,
-            freqMax,
-            excludePropn,
+            source: "srs_due",
+            count: questionCount,
+            entry_type: entryType === "all" ? undefined : entryType,
         };
 
-        if (selectedPos.size > 0) {
-            config.pos = Array.from(selectedPos);
-        }
-
-        if (type === "choice") {
-            config.choiceDirection = choiceDirection;
-        }
-
         await startQuiz(config);
-        spellingInput = "";
+        resetQuestionState();
+    }
+
+    function resetQuestionState() {
         showFeedback = false;
+        selectedAnswer = null;
+        showHint = false;
+        spellingInput = "";
+        shuffledLetters = [];
+        answerSlots = [];
+        usedIndices = new Set();
+    }
+
+    $effect(() => {
+        if (quiz.currentQuestion?.type === "spelling" && quiz.isActive) {
+            initSpellingQuestion();
+        }
+    });
+
+    function initSpellingQuestion() {
+        if (!quiz.currentQuestion) return;
+        const word = quiz.currentQuestion.correct;
+        const letters = word.split("");
+        shuffledLetters = [...letters].sort(() => Math.random() - 0.5);
+        answerSlots = new Array(word.length).fill("");
+        usedIndices = new Set();
+    }
+
+    function selectLetter(idx: number) {
+        if (usedIndices.has(idx)) return;
+
+        const emptySlotIdx = answerSlots.findIndex((s) => s === "");
+        if (emptySlotIdx === -1) return;
+
+        answerSlots[emptySlotIdx] = shuffledLetters[idx];
+        usedIndices = new Set([...usedIndices, idx]);
+    }
+
+    function removeLetterAt(slotIdx: number) {
+        if (!answerSlots[slotIdx]) return;
+
+        const letter = answerSlots[slotIdx];
+        const letterIdx = shuffledLetters.findIndex(
+            (l, i) => l === letter && usedIndices.has(i),
+        );
+
+        if (letterIdx !== -1) {
+            const newUsed = new Set(usedIndices);
+            newUsed.delete(letterIdx);
+            usedIndices = newUsed;
+        }
+
+        answerSlots[slotIdx] = "";
+    }
+
+    function isSpellingComplete(): boolean {
+        return answerSlots.every((s) => s !== "");
+    }
+
+    function getSpellingAnswer(): string {
+        return answerSlots.join("");
     }
 
     function handleChoiceSelect(value: string) {
         if (showFeedback) return;
+        selectedAnswer = value;
         submitAnswer(value);
         showFeedback = true;
     }
 
     function handleSpellingSubmit() {
-        if (showFeedback || !spellingInput.trim()) return;
-        submitAnswer(spellingInput.trim());
+        if (showFeedback) return;
+
+        const answer =
+            quiz.currentQuestion?.type === "spelling"
+                ? getSpellingAnswer()
+                : spellingInput.trim();
+
+        if (!answer) return;
+        selectedAnswer = answer;
+        submitAnswer(answer);
         showFeedback = true;
+    }
+
+    function handleShowHint() {
+        showHint = true;
+        markHintUsed();
     }
 
     function handleNextQuestion() {
         nextQuestion();
-        spellingInput = "";
-        showFeedback = false;
+        resetQuestionState();
+        if (quiz.currentQuestion?.type === "spelling") {
+            initSpellingQuestion();
+        }
     }
 
     function handleRestart() {
         resetQuiz();
-        showFeedback = false;
-        spellingInput = "";
+        resetQuestionState();
     }
 
     async function handleRetryIncorrect() {
         await retryIncorrect();
-        showFeedback = false;
-        spellingInput = "";
+        resetQuestionState();
     }
 
-    function getOptionClass(
-        option: { value: string },
-        currentAnswer: string | null,
-    ): string {
-        if (!showFeedback) return "";
+    function getScorePercent(): number {
+        if (quiz.questions.length === 0) return 0;
+        return Math.round((quiz.score / quiz.questions.length) * 100);
+    }
 
-        const q = quiz.currentQuestion;
-        if (!q) return "";
+    function getWrongWords() {
+        return quiz.incorrectQuestions.map((q) => ({
+            lemma: q.lemma,
+            definition: q.explanation?.correct_usage || q.correct,
+        }));
+    }
 
-        if (option.value.toLowerCase() === q.correct.toLowerCase()) {
-            return "correct";
+    function isChoiceQuestion(type: QuizQuestionType | "adaptive" | null): boolean {
+        return (
+            type === "recognition" ||
+            type === "reverse" ||
+            type === "fill_blank" ||
+            type === "distinction"
+        );
+    }
+
+    function isTypingQuestion(type: QuizQuestionType | "adaptive" | null): boolean {
+        return type === "spelling";
+    }
+
+    function handleKeydown(e: KeyboardEvent) {
+        if (!quiz.isActive || !quiz.currentQuestion) return;
+
+        if (e.key === "Enter" && showFeedback) {
+            e.preventDefault();
+            handleNextQuestion();
+            return;
         }
-        if (
-            currentAnswer &&
-            option.value.toLowerCase() === currentAnswer.toLowerCase()
-        ) {
-            return "incorrect";
+
+        if (showFeedback) return;
+
+        if (quiz.currentQuestion.options && e.key >= "1" && e.key <= "4") {
+            const idx = parseInt(e.key) - 1;
+            if (idx < quiz.currentQuestion.options.length) {
+                handleChoiceSelect(quiz.currentQuestion.options[idx].value);
+            }
         }
-        return "";
     }
 </script>
 
-<div class="quiz-view h-full overflow-y-auto bg-surface-page p-5 sm:p-8">
+<svelte:window onkeydown={handleKeydown} />
+
+<div class="quiz-view h-full overflow-y-auto bg-surface-page">
     {#if quiz.isLoading}
         <div class="flex items-center justify-center h-full">
             <div class="text-center">
@@ -142,499 +240,586 @@
             </div>
         </div>
     {:else if quiz.error}
-        <div
-            class="max-w-2xl mx-auto bg-surface-primary border border-srs-again/30 rounded-lg p-6 text-center"
-        >
-            <p class="text-srs-again mb-4">{quiz.error}</p>
-            <button
-                type="button"
-                class="px-4 py-2 bg-srs-again text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
-                onclick={handleRestart}
+        <div class="flex items-center justify-center h-full p-5">
+            <div
+                class="max-w-md w-full bg-surface-primary border border-srs-again/30 rounded-lg p-6 text-center"
             >
-                返回
-            </button>
-        </div>
-    {:else if quiz.isComplete}
-        <div
-            class="max-w-2xl mx-auto bg-surface-primary rounded-lg border border-border p-6 lg:p-8"
-        >
-            <h2
-                class="text-xl lg:text-2xl font-semibold tracking-tight text-content-primary mb-6 text-center"
-            >
-                測驗結果
-            </h2>
-
-            <div class="text-center mb-8">
-                <div
-                    class="text-5xl lg:text-6xl font-semibold text-accent mb-2 tracking-tight"
-                >
-                    {Math.round((quiz.score / quiz.questions.length) * 100)}%
-                </div>
-                <p class="text-content-secondary text-sm">
-                    {quiz.score} / {quiz.questions.length} 題正確
-                </p>
-            </div>
-
-            {#if quiz.incorrectQuestions.length > 0}
-                <div class="mb-8">
-                    <h3 class="text-base font-medium text-content-primary mb-3">
-                        需要複習的單字
-                    </h3>
-                    <div class="space-y-2">
-                        {#each quiz.incorrectQuestions as q}
-                            <div
-                                class="flex items-center justify-between p-3 bg-srs-again/10 rounded-md border border-srs-again/20"
-                            >
-                                <span class="font-medium text-content-primary"
-                                    >{q.lemma || q.correct}</span
-                                >
-                                <span class="text-sm text-content-secondary"
-                                    >{q.correct}</span
-                                >
-                            </div>
-                        {/each}
-                    </div>
-                </div>
-            {/if}
-
-            <div class="flex flex-wrap gap-3 justify-center">
+                <p class="text-srs-again mb-4">{quiz.error}</p>
                 <button
                     type="button"
-                    class="px-5 py-2.5 bg-content-primary text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
+                    class="px-4 py-2 bg-srs-again text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
                     onclick={handleRestart}
                 >
-                    重新測驗
+                    返回
                 </button>
-                {#if quiz.incorrectQuestions.length > 0}
+            </div>
+        </div>
+    {:else if quiz.isComplete}
+        <div class="results-page flex flex-col items-center justify-center min-h-full p-5">
+            <div class="max-w-md w-full">
+                <div class="results-hero text-center mb-8">
+                    {#if getScorePercent() >= 80}
+                        <span class="results-emoji text-6xl mb-4 block">🎉</span>
+                        <h1 class="text-2xl font-semibold text-content-primary">
+                            太棒了！
+                        </h1>
+                    {:else if getScorePercent() >= 60}
+                        <span class="results-emoji text-6xl mb-4 block">👍</span>
+                        <h1 class="text-2xl font-semibold text-content-primary">
+                            不錯喔！
+                        </h1>
+                    {:else}
+                        <span class="results-emoji text-6xl mb-4 block">💪</span>
+                        <h1 class="text-2xl font-semibold text-content-primary">
+                            繼續加油！
+                        </h1>
+                    {/if}
+                </div>
+
+                <div class="results-score text-center mb-8">
+                    <span class="text-5xl font-semibold text-accent"
+                        >{quiz.score}</span
+                    >
+                    <span class="text-3xl font-light text-content-tertiary mx-2"
+                        >/</span
+                    >
+                    <span class="text-3xl font-light text-content-tertiary"
+                        >{quiz.questions.length}</span
+                    >
+                </div>
+
+                {#if getWrongWords().length > 0}
+                    <div class="wrong-words-section mb-8">
+                        <h2
+                            class="text-base font-medium text-content-primary mb-3"
+                        >
+                            這些要多練習
+                        </h2>
+                        <div class="space-y-2">
+                            {#each getWrongWords() as word}
+                                <div
+                                    class="wrong-word-item flex items-center justify-between p-3 bg-srs-again/10 rounded-md border border-srs-again/20"
+                                >
+                                    <span
+                                        class="font-medium text-content-primary"
+                                        >{word.lemma}</span
+                                    >
+                                    <span
+                                        class="text-sm text-content-secondary truncate ml-3 max-w-[60%]"
+                                        >{word.definition}</span
+                                    >
+                                </div>
+                            {/each}
+                        </div>
+                    </div>
+                {/if}
+
+                <div class="results-actions flex flex-col gap-3">
+                    {#if getWrongWords().length > 0}
+                        <button
+                            type="button"
+                            class="action-btn px-5 py-3 border border-srs-hard text-srs-hard font-medium rounded-md hover:bg-srs-hard/10 transition-colors"
+                            onclick={handleRetryIncorrect}
+                        >
+                            再練一次答錯的
+                        </button>
+                    {/if}
                     <button
                         type="button"
-                        class="px-5 py-2.5 bg-srs-hard text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
-                        onclick={handleRetryIncorrect}
+                        class="action-btn px-5 py-3 bg-accent text-white font-medium rounded-md hover:opacity-90 transition-opacity"
+                        onclick={handleRestart}
                     >
-                        只測錯誤題
+                        繼續練習
                     </button>
-                {/if}
+                </div>
             </div>
         </div>
     {:else if quiz.isActive && quiz.currentQuestion}
-        <div class="max-w-2xl mx-auto">
-            <div class="flex items-center justify-between mb-5">
-                <span class="text-sm text-content-tertiary">
-                    題目 {quiz.progress.current} / {quiz.progress.total}
-                </span>
-                <button
-                    type="button"
-                    class="text-sm text-content-tertiary hover:text-content-secondary transition-colors"
-                    onclick={handleRestart}
-                >
-                    退出測驗
-                </button>
+        <div class="quiz-session flex flex-col h-full">
+            <div class="progress-bar h-1 bg-surface-secondary">
+                <div
+                    class="progress-fill h-full bg-accent transition-all duration-300"
+                    style="width: {getProgressPercent()}%"
+                ></div>
             </div>
 
-            <div class="bg-surface-primary rounded-lg border border-border p-6">
-                <div class="mb-6">
-                    {#if quiz.currentQuestion.lemma && (quiz.type === "spelling" || quiz.type === "fill")}
-                        <div class="mb-4">
+            <div class="flex-1 flex flex-col max-w-2xl mx-auto w-full p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm text-content-tertiary hidden sm:block">
+                        {quiz.progress.current} / {quiz.progress.total}
+                    </span>
+                    <button
+                        type="button"
+                        class="text-sm text-content-tertiary hover:text-content-secondary transition-colors"
+                        onclick={handleRestart}
+                    >
+                        退出
+                    </button>
+                </div>
+
+                <div class="question-card flex-1 flex flex-col">
+                    {#if isChoiceQuestion(quiz.currentQuestion.type)}
+                        {#if quiz.currentQuestion.type === "fill_blank" || quiz.currentQuestion.type === "distinction"}
+                            <div
+                                class="sentence-box bg-surface-secondary rounded-lg p-4 mb-4"
+                            >
+                                <p
+                                    class="text-base text-content-primary leading-relaxed"
+                                >
+                                    {quiz.currentQuestion.sentence_context ||
+                                        quiz.currentQuestion.prompt}
+                                </p>
+                                {#if quiz.currentQuestion.exam_source}
+                                    <p
+                                        class="text-xs text-content-tertiary mt-2"
+                                    >
+                                        {quiz.currentQuestion.exam_source.year}{quiz
+                                            .currentQuestion.exam_source
+                                            .exam_type}
+                                    </p>
+                                {/if}
+                            </div>
+
+                            {#if quiz.currentQuestion.hint}
+                                <button
+                                    type="button"
+                                    class="hint-btn text-sm text-accent mb-4 self-start"
+                                    onclick={handleShowHint}
+                                >
+                                    {showHint ? "提示：" : "看提示"}
+                                </button>
+                                {#if showHint}
+                                    <p
+                                        class="hint text-sm text-content-secondary mb-4 -mt-2"
+                                    >
+                                        {quiz.currentQuestion.hint}
+                                    </p>
+                                {/if}
+                            {/if}
+                        {:else}
+                            <div class="word-display text-center mb-6">
+                                {#if quiz.currentQuestion.type === "recognition"}
+                                    <span
+                                        class="word-text text-3xl font-semibold text-content-primary"
+                                    >
+                                        {quiz.currentQuestion.prompt}
+                                    </span>
+                                    <AudioButton
+                                        text={quiz.currentQuestion.lemma}
+                                        size="lg"
+                                        class="ml-3"
+                                    />
+                                {:else}
+                                    <p
+                                        class="text-lg text-content-primary mb-2"
+                                    >
+                                        {quiz.currentQuestion.prompt}
+                                    </p>
+                                    {#if quiz.currentQuestion.hint}
+                                        <p
+                                            class="text-sm text-content-tertiary"
+                                        >
+                                            {quiz.currentQuestion.hint}
+                                        </p>
+                                    {/if}
+                                {/if}
+                            </div>
+
+                            <p class="instruction text-sm text-content-tertiary mb-4 text-center">
+                                {quiz.currentQuestion.type === "recognition"
+                                    ? "選出正確的意思"
+                                    : "選出正確的單字"}
+                            </p>
+                        {/if}
+
+                        <div class="options flex-1 flex flex-col gap-3">
+                            {#each quiz.currentQuestion.options || [] as option, i}
+                                {@const isCorrectOption =
+                                    option.value.toLowerCase() ===
+                                    quiz.currentQuestion.correct.toLowerCase()}
+                                {@const isSelectedOption =
+                                    selectedAnswer?.toLowerCase() ===
+                                    option.value.toLowerCase()}
+                                <button
+                                    type="button"
+                                    class="option p-4 text-left rounded-lg border transition-all min-h-[52px]"
+                                    class:option-correct={showFeedback &&
+                                        isCorrectOption}
+                                    class:option-incorrect={showFeedback &&
+                                        isSelectedOption &&
+                                        !isCorrectOption}
+                                    class:option-selected={!showFeedback &&
+                                        isSelectedOption}
+                                    onclick={() =>
+                                        handleChoiceSelect(option.value)}
+                                    disabled={showFeedback}
+                                >
+                                    <span
+                                        class="text-content-primary hidden sm:inline-block text-xs text-content-tertiary mr-2"
+                                    >
+                                        按 {i + 1}
+                                    </span>
+                                    <span class="text-content-primary"
+                                        >{option.label}</span
+                                    >
+                                </button>
+                            {/each}
+                        </div>
+                    {:else if isTypingQuestion(quiz.currentQuestion.type)}
+                        <div class="spelling-prompt text-center mb-6">
                             <AudioButton
                                 text={quiz.currentQuestion.lemma}
                                 size="lg"
+                                class="mb-4"
                             />
+                            <p class="text-lg text-content-primary">
+                                {quiz.currentQuestion.prompt}
+                            </p>
+                            {#if quiz.currentQuestion.hint}
+                                <p class="text-sm text-content-tertiary mt-1">
+                                    {quiz.currentQuestion.hint}
+                                </p>
+                            {/if}
                         </div>
-                    {/if}
-                    <p class="text-lg text-content-primary">
-                        {quiz.currentQuestion.prompt}
-                    </p>
-                </div>
 
-                {#if quiz.type === "choice" && quiz.currentQuestion.options}
-                    <div class="space-y-2.5">
-                        {#each quiz.currentQuestion.options as option, i}
-                            {@const currentAnswer = getCurrentAnswer()}
-                            <button
-                                type="button"
-                                class="quiz-option w-full p-4 text-left rounded-md border transition-all {getOptionClass(
-                                    option,
-                                    currentAnswer,
-                                )}"
-                                class:selected={currentAnswer ===
-                                    option.value && !showFeedback}
-                                onclick={() => handleChoiceSelect(option.value)}
-                                disabled={showFeedback}
-                            >
-                                <span
-                                    class="font-medium text-content-tertiary mr-2"
-                                    >{String.fromCharCode(65 + i)}.</span
+                        <div class="answer-area flex justify-center gap-2 mb-6">
+                            {#each answerSlots as letter, i}
+                                <button
+                                    type="button"
+                                    class="answer-slot w-10 h-12 border-2 rounded-md flex items-center justify-center text-lg font-medium transition-all"
+                                    class:answer-slot-filled={letter}
+                                    onclick={() => removeLetterAt(i)}
+                                    disabled={showFeedback}
                                 >
-                                <span class="text-content-primary"
-                                    >{option.label}</span
+                                    {letter || ""}
+                                </button>
+                            {/each}
+                        </div>
+
+                        <div
+                            class="letter-tiles flex flex-wrap justify-center gap-2 mb-6"
+                        >
+                            {#each shuffledLetters as letter, i}
+                                <button
+                                    type="button"
+                                    class="letter-tile w-10 h-10 rounded-md flex items-center justify-center text-lg font-medium transition-all"
+                                    class:letter-tile-used={usedIndices.has(i)}
+                                    onclick={() => selectLetter(i)}
+                                    disabled={usedIndices.has(i) || showFeedback}
                                 >
-                            </button>
-                        {/each}
-                    </div>
-                {:else if quiz.type === "spelling" || quiz.type === "fill"}
-                    <div class="space-y-4">
-                        <input
-                            type="text"
-                            bind:value={spellingInput}
-                            placeholder="輸入答案..."
-                            class="w-full px-4 py-3 text-base"
-                            disabled={showFeedback}
-                            onkeydown={(e) =>
-                                e.key === "Enter" && handleSpellingSubmit()}
-                        />
+                                    {letter}
+                                </button>
+                            {/each}
+                        </div>
 
                         {#if !showFeedback}
                             <button
                                 type="button"
-                                class="w-full px-4 py-3 bg-content-primary text-white font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                                class="check-btn w-full px-4 py-3 bg-accent text-white font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
                                 onclick={handleSpellingSubmit}
-                                disabled={!spellingInput.trim()}
+                                disabled={!isSpellingComplete()}
                             >
-                                提交答案
+                                確認
                             </button>
                         {/if}
-                    </div>
-                {/if}
+                    {/if}
+                </div>
 
                 {#if showFeedback}
                     {@const isCorrect = isAnswerCorrect(quiz.currentIndex)}
                     <div
-                        class="mt-6 p-4 rounded-md {isCorrect
-                            ? 'bg-srs-good/10 border border-srs-good/30'
-                            : 'bg-srs-again/10 border border-srs-again/30'}"
+                        class="feedback-sheet mt-4 p-4 rounded-lg"
+                        class:feedback-correct={isCorrect}
+                        class:feedback-incorrect={!isCorrect}
                     >
-                        <p
-                            class="font-medium {isCorrect
-                                ? 'text-srs-good'
-                                : 'text-srs-again'}"
-                        >
-                            {isCorrect ? "✓ 正確！" : "✗ 錯誤"}
-                        </p>
-                        {#if !isCorrect}
-                            <p class="mt-1 text-content-secondary text-sm">
-                                正確答案：<span
-                                    class="font-medium text-content-primary"
-                                    >{quiz.currentQuestion.correct}</span
+                        <div class="feedback-content flex items-center gap-3 mb-3">
+                            <span class="feedback-icon text-2xl">
+                                {isCorrect ? "✓" : "✗"}
+                            </span>
+                            {#if isCorrect}
+                                <span class="feedback-text font-medium"
+                                    >正確！</span
                                 >
+                            {:else}
+                                <div class="feedback-detail">
+                                    <span
+                                        class="feedback-text text-sm text-content-secondary"
+                                        >正確答案</span
+                                    >
+                                    <span
+                                        class="feedback-answer block font-semibold text-lg"
+                                    >
+                                        {quiz.currentQuestion.correct}
+                                    </span>
+                                </div>
+                            {/if}
+                        </div>
+
+                        {#if !isCorrect && quiz.currentQuestion.explanation?.memory_tip}
+                            <p class="feedback-tip text-sm mb-3">
+                                💡 {quiz.currentQuestion.explanation.memory_tip}
                             </p>
                         {/if}
-                    </div>
 
-                    <button
-                        type="button"
-                        class="mt-4 w-full px-4 py-3 bg-surface-page text-content-primary font-medium rounded-md hover:bg-surface-hover border border-border transition-colors"
-                        onclick={handleNextQuestion}
-                    >
-                        {quiz.currentIndex < quiz.questions.length - 1
-                            ? "下一題"
-                            : "查看結果"}
-                    </button>
+                        <button
+                            type="button"
+                            class="continue-btn w-full px-4 py-3 font-medium rounded-md transition-opacity"
+                            onclick={handleNextQuestion}
+                        >
+                            繼續
+                        </button>
+                    </div>
                 {/if}
             </div>
         </div>
     {:else}
-        <div class="max-w-4xl mx-auto">
-            <h2
-                class="text-2xl lg:text-3xl font-semibold tracking-tight text-content-primary mb-6"
-            >
-                選擇測驗模式
-            </h2>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <button
-                    type="button"
-                    class="quiz-type-card group"
-                    onclick={() => handleStartQuiz("choice")}
-                >
-                    <div
-                        class="w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center mb-3"
+        <div class="quiz-start-page flex flex-col items-center justify-center min-h-full p-5">
+            <div class="max-w-md w-full">
+                <div class="quiz-hero text-center mb-8">
+                    <div class="quiz-hero-icon text-5xl mb-4">📝</div>
+                    <h1
+                        class="quiz-hero-title text-2xl font-semibold text-content-primary mb-2"
                     >
-                        <svg
-                            class="w-5 h-5 text-accent"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
-                            />
-                        </svg>
-                    </div>
-                    <h3
-                        class="text-base font-semibold text-content-primary mb-1.5"
-                    >
-                        選擇題測驗
-                    </h3>
-                    <p class="text-sm text-content-secondary">
-                        給定義選單詞，或給單詞選定義
+                        單字練習
+                    </h1>
+                    <p class="quiz-hero-subtitle text-content-secondary">
+                        {availableCount} 個單字等你挑戰
                     </p>
-                </button>
-
-                <button
-                    type="button"
-                    class="quiz-type-card group"
-                    onclick={() => handleStartQuiz("spelling")}
-                >
-                    <div
-                        class="w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center mb-3"
-                    >
-                        <svg
-                            class="w-5 h-5 text-accent"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                            />
-                        </svg>
-                    </div>
-                    <h3
-                        class="text-base font-semibold text-content-primary mb-1.5"
-                    >
-                        拼寫測驗
-                    </h3>
-                    <p class="text-sm text-content-secondary">
-                        看定義後拼寫單詞
-                    </p>
-                </button>
-
-                <button
-                    type="button"
-                    class="quiz-type-card group"
-                    onclick={() => handleStartQuiz("fill")}
-                >
-                    <div
-                        class="w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center mb-3"
-                    >
-                        <svg
-                            class="w-5 h-5 text-accent"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
-                            />
-                        </svg>
-                    </div>
-                    <h3
-                        class="text-base font-semibold text-content-primary mb-1.5"
-                    >
-                        填空測驗
-                    </h3>
-                    <p class="text-sm text-content-secondary">
-                        從例句中填入正確的單詞
-                    </p>
-                </button>
-            </div>
-
-            <div
-                class="bg-surface-primary rounded-lg border border-border p-6 space-y-5"
-            >
-                <div>
-                    <label
-                        for="quiz-count"
-                        class="block text-sm font-medium text-content-secondary mb-2"
-                        >題目數量</label
-                    >
-                    <input
-                        id="quiz-count"
-                        type="number"
-                        min="1"
-                        max="50"
-                        bind:value={quizCount}
-                        class="w-full px-3.5 py-2.5 text-sm"
-                    />
                 </div>
 
-                <div>
-                    <span
-                        class="block text-sm font-medium text-content-secondary mb-2.5"
-                        >選擇題方向</span
-                    >
-                    <div class="flex flex-wrap gap-4">
-                        <label
-                            class="inline-flex items-center gap-2.5 cursor-pointer"
-                        >
-                            <input
-                                type="radio"
-                                name="choice-direction"
-                                value="word_to_def"
-                                bind:group={choiceDirection}
-                            />
-                            <span class="text-sm text-content-primary"
-                                >單字考定義</span
-                            >
-                        </label>
-                        <label
-                            class="inline-flex items-center gap-2.5 cursor-pointer"
-                        >
-                            <input
-                                type="radio"
-                                name="choice-direction"
-                                value="def_to_word"
-                                bind:group={choiceDirection}
-                            />
-                            <span class="text-sm text-content-primary"
-                                >定義考單字</span
-                            >
-                        </label>
-                    </div>
-                </div>
-
-                <div>
-                    <span
-                        class="block text-sm font-medium text-content-secondary mb-2.5"
-                        >詞性篩選</span
-                    >
-                    <div class="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            class="pos-chip"
-                            class:active={selectedPos.size === 0}
-                            onclick={() => (selectedPos = new Set())}
-                        >
-                            全部
-                        </button>
-                        {#each posOptions as pos}
-                            <button
-                                type="button"
-                                class="pos-chip"
-                                class:active={selectedPos.has(pos)}
-                                onclick={() => togglePos(pos)}
-                            >
-                                {posLabels[pos] || pos}
-                            </button>
-                        {/each}
-                    </div>
-                </div>
-
-                <div>
-                    <span
-                        class="block text-sm font-medium text-content-secondary mb-2"
-                        >頻率範圍</span
-                    >
-                    <div class="flex gap-3 items-center">
-                        <input
-                            type="number"
-                            min={1}
-                            max={9999}
-                            bind:value={freqMin}
-                            class="flex-1 px-3 py-2 text-sm"
-                            placeholder="最小"
-                        />
-                        <span class="text-content-tertiary text-sm">至</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={9999}
-                            bind:value={freqMax}
-                            class="flex-1 px-3 py-2 text-sm"
-                            placeholder="最大"
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label
-                        class="flex items-center gap-2.5 cursor-pointer group"
-                    >
-                        <input type="checkbox" bind:checked={excludePropn} />
+                <div class="quiz-quick-stats flex justify-center gap-8 mb-8">
+                    <div class="quick-stat text-center">
                         <span
-                            class="text-sm text-content-secondary group-hover:text-content-primary transition-colors"
-                            >排除專有名詞</span
+                            class="quick-stat-number text-2xl font-semibold text-accent block"
+                            >{dueCount}</span
                         >
-                    </label>
+                        <span class="quick-stat-label text-sm text-content-secondary"
+                            >該複習了</span
+                        >
+                    </div>
+                    <div class="quick-stat text-center">
+                        <span
+                            class="quick-stat-number text-2xl font-semibold text-srs-hard block"
+                            >{weakCount}</span
+                        >
+                        <span class="quick-stat-label text-sm text-content-secondary"
+                            >需要加強</span
+                        >
+                    </div>
                 </div>
+
+                <button
+                    type="button"
+                    class="quiz-start-btn w-full px-6 py-4 bg-accent text-white text-lg font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 mb-6"
+                    onclick={handleStartQuiz}
+                    disabled={availableCount === 0}
+                >
+                    開始練習
+                </button>
+
+                <button
+                    type="button"
+                    class="quiz-settings-toggle w-full flex items-center justify-center gap-2 text-content-tertiary hover:text-content-secondary transition-colors py-2"
+                    onclick={() => (showSettings = !showSettings)}
+                >
+                    <span>進階設定</span>
+                    <svg
+                        class="w-4 h-4 transition-transform"
+                        class:rotate-180={showSettings}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 9l-7 7-7-7"
+                        />
+                    </svg>
+                </button>
+
+                {#if showSettings}
+                    <div
+                        class="quiz-settings bg-surface-primary rounded-lg border border-border p-5 mt-4 space-y-5"
+                    >
+                        <div class="setting-section">
+                            <span
+                                class="setting-label text-sm font-medium text-content-secondary block mb-2"
+                                >題數</span
+                            >
+                            <div class="pill-group flex gap-2">
+                                {#each [10, 20, 30] as count}
+                                    <button
+                                        type="button"
+                                        class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
+                                        class:pill-active={questionCount ===
+                                            count}
+                                        onclick={() => (questionCount = count)}
+                                    >
+                                        {count}
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+
+                        <div class="setting-section">
+                            <span
+                                class="setting-label text-sm font-medium text-content-secondary block mb-2"
+                                >範圍</span
+                            >
+                            <div class="pill-group flex gap-2">
+                                <button
+                                    type="button"
+                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
+                                    class:pill-active={entryType === "all"}
+                                    onclick={() => (entryType = "all")}
+                                >
+                                    全部
+                                </button>
+                                <button
+                                    type="button"
+                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
+                                    class:pill-active={entryType === "word"}
+                                    onclick={() => (entryType = "word")}
+                                >
+                                    單字
+                                </button>
+                                <button
+                                    type="button"
+                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
+                                    class:pill-active={entryType === "phrase"}
+                                    onclick={() => (entryType = "phrase")}
+                                >
+                                    片語
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
             </div>
         </div>
     {/if}
 </div>
 
 <style>
-    .quiz-option {
+    .option {
         border-color: var(--color-border);
         background-color: var(--color-surface-primary);
     }
 
-    .quiz-option:hover:not(:disabled) {
+    .option:hover:not(:disabled) {
         border-color: var(--color-border-hover);
         background-color: var(--color-surface-hover);
     }
 
-    .quiz-option.selected {
+    .option-selected {
         border-color: var(--color-accent);
         background-color: var(--color-accent-soft);
     }
 
-    .quiz-option.correct {
+    .option-correct {
         border-color: var(--color-srs-good);
         background-color: var(--color-srs-good-soft);
     }
 
-    .quiz-option.incorrect {
+    .option-incorrect {
         border-color: var(--color-srs-again);
         background-color: var(--color-srs-again-soft);
     }
 
-    .quiz-option:disabled {
+    .option:disabled {
         cursor: default;
     }
 
-    .pos-chip {
-        padding: 0.375rem 0.75rem;
+    .pill {
         background-color: var(--color-surface-page);
-        border-radius: 6px;
-        font-size: 0.875rem;
-        font-weight: 500;
         color: var(--color-content-secondary);
-        transition: all 0.15s ease;
-        cursor: pointer;
-        border: 1px solid transparent;
+        border: 1px solid var(--color-border);
     }
 
-    .pos-chip:hover {
+    .pill:hover {
         background-color: var(--color-surface-hover);
-        border-color: var(--color-border);
     }
 
-    .pos-chip.active {
+    .pill-active {
         background-color: var(--color-accent-soft);
         color: var(--color-accent);
         border-color: transparent;
     }
 
-    .quiz-type-card {
-        padding: 1.25rem;
+    .answer-slot {
+        border-color: var(--color-border);
         background-color: var(--color-surface-primary);
-        border-radius: 8px;
+    }
+
+    .answer-slot-filled {
+        border-color: var(--color-accent);
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .letter-tile {
+        background-color: var(--color-surface-primary);
         border: 1px solid var(--color-border);
-        box-shadow: var(--shadow-card);
-        text-align: left;
-        transition: all 0.15s ease;
-        cursor: pointer;
+        color: var(--color-content-primary);
     }
 
-    .quiz-type-card:hover {
+    .letter-tile:hover:not(:disabled) {
+        background-color: var(--color-surface-hover);
         border-color: var(--color-border-hover);
-        background-color: var(--color-surface-secondary);
-        box-shadow: var(--shadow-card-hover);
     }
 
-    .quiz-type-card:focus-visible {
-        outline: none;
-        box-shadow:
-            0 0 0 2px var(--color-surface-primary),
-            0 0 0 4px var(--color-accent);
+    .letter-tile-used {
+        opacity: 0.3;
+    }
+
+    .feedback-correct {
+        background-color: #dcfce7;
+    }
+
+    .feedback-correct .feedback-icon,
+    .feedback-correct .feedback-text {
+        color: #22c55e;
+    }
+
+    .feedback-correct .continue-btn {
+        background-color: #22c55e;
+        color: white;
+    }
+
+    .feedback-correct .continue-btn:hover {
+        opacity: 0.9;
+    }
+
+    .feedback-incorrect {
+        background-color: #fee2e2;
+    }
+
+    .feedback-incorrect .feedback-icon {
+        color: #ef4444;
+    }
+
+    .feedback-incorrect .feedback-answer {
+        color: #ef4444;
+    }
+
+    .feedback-incorrect .continue-btn {
+        background-color: #ef4444;
+        color: white;
+    }
+
+    .feedback-incorrect .continue-btn:hover {
+        opacity: 0.9;
+    }
+
+    .feedback-tip {
+        color: var(--color-content-secondary);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .progress-fill {
+            transition: none;
+        }
     }
 </style>
