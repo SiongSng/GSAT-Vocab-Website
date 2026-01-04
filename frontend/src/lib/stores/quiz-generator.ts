@@ -53,7 +53,7 @@ export interface QuizQuestion {
 }
 
 export interface QuizConfig {
-  source: "srs_due" | "srs_weak" | "srs_new" | "custom";
+  source: "srs_due" | "srs_weak" | "today_studied" | "custom";
   count: number;
 
   lemmas?: string[];
@@ -92,30 +92,32 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
 
 async function getQuizEligibleEntries(
   config: QuizConfig
-): Promise<{ entry: VocabEntry; card: SRSCard | null }[]> {
-  const results: { entry: VocabEntry; card: SRSCard | null }[] = [];
+): Promise<{ entry: VocabEntry; card: SRSCard }[]> {
+  const results: { entry: VocabEntry; card: SRSCard }[] = [];
 
+  // Custom source: get cards for specific lemmas
   if (config.source === "custom" && config.lemmas && config.lemmas.length > 0) {
     for (const lemma of config.lemmas) {
       const word = await getWord(lemma);
-      if (word) {
-        const card = word.senses[0]
-          ? getCard(lemma, word.senses[0].sense_id)
-          : null;
-        results.push({ entry: word, card: card ?? null });
-        continue;
+      if (word && word.senses[0]) {
+        const card = getCard(lemma, word.senses[0].sense_id);
+        if (card) {
+          results.push({ entry: word, card });
+          continue;
+        }
       }
       const phrase = await getPhrase(lemma);
-      if (phrase) {
-        const card = phrase.senses[0]
-          ? getCard(lemma, phrase.senses[0].sense_id)
-          : null;
-        results.push({ entry: phrase, card: card ?? null });
+      if (phrase && phrase.senses[0]) {
+        const card = getCard(lemma, phrase.senses[0].sense_id);
+        if (card) {
+          results.push({ entry: phrase, card });
+        }
       }
     }
     return results;
   }
 
+  // SRS due cards: words that need review
   if (config.source === "srs_due") {
     const dueCards = getDueCards();
     for (const card of dueCards) {
@@ -133,6 +135,7 @@ async function getQuizEligibleEntries(
     return results;
   }
 
+  // SRS weak cards: words with high lapses or low stability
   if (config.source === "srs_weak") {
     const allCards = getAllCards();
     const weakCards = allCards.filter(
@@ -153,10 +156,20 @@ async function getQuizEligibleEntries(
     return results;
   }
 
-  if (config.source === "srs_new") {
+  // Today studied: cards reviewed today
+  if (config.source === "today_studied") {
     const allCards = getAllCards();
-    const newCards = allCards.filter((c) => c.reps === 0);
-    for (const card of newCards) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayCards = allCards.filter((c) => {
+      if (!c.last_review) return false;
+      const reviewDate = new Date(c.last_review);
+      reviewDate.setHours(0, 0, 0, 0);
+      return reviewDate.getTime() === today.getTime();
+    });
+    
+    for (const card of todayCards) {
       if (config.entry_type && config.entry_type !== "all") {
         if (card.entry_type !== config.entry_type) continue;
       }
@@ -171,43 +184,7 @@ async function getQuizEligibleEntries(
     return results;
   }
 
-  const words = await getAllWords();
-  const phrases = await getAllPhrases();
-
-  for (const word of words) {
-    if (config.entry_type && config.entry_type !== "all") {
-      if (config.entry_type !== "word") continue;
-    }
-    if (config.pos_filter && config.pos_filter.length > 0) {
-      const hasMatchingPos = word.pos.some((p) =>
-        config.pos_filter!.includes(p)
-      );
-      if (!hasMatchingPos) continue;
-    }
-    if (config.level_range) {
-      if (
-        word.level === null ||
-        word.level < config.level_range.min ||
-        word.level > config.level_range.max
-      ) {
-        continue;
-      }
-    }
-    const card = word.senses[0]
-      ? getCard(word.lemma, word.senses[0].sense_id)
-      : null;
-    results.push({ entry: word, card: card ?? null });
-  }
-
-  if (!config.entry_type || config.entry_type === "all" || config.entry_type === "phrase") {
-    for (const phrase of phrases) {
-      const card = phrase.senses[0]
-        ? getCard(phrase.lemma, phrase.senses[0].sense_id)
-        : null;
-      results.push({ entry: phrase, card: card ?? null });
-    }
-  }
-
+  // Default: return empty array (quiz should only use SRS cards)
   return results;
 }
 
@@ -540,7 +517,8 @@ export async function generateQuizLocally(
     if (!entry.senses || entry.senses.length === 0) continue;
 
     const sense = entry.senses[0];
-    const quizType = config.force_type ?? (card ? getQuizTypeForCard(card) : "recognition");
+    // Use adaptive quiz type based on SRS card state, unless force_type is specified
+    const quizType = config.force_type ?? getQuizTypeForCard(card);
 
     const question = await generateQuestion(entry, sense, quizType);
     questions.push(question);
@@ -560,6 +538,19 @@ export async function getWeakCount(): Promise<number> {
 }
 
 export async function getAvailableCount(): Promise<number> {
-  const pool = await ensureDistractorPool();
-  return pool.words.length + pool.phrases.length;
+  const allCards = getAllCards();
+  return allCards.length;
+}
+
+export async function getTodayStudiedCount(): Promise<number> {
+  const allCards = getAllCards();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  return allCards.filter((c) => {
+    if (!c.last_review) return false;
+    const reviewDate = new Date(c.last_review);
+    reviewDate.setHours(0, 0, 0, 0);
+    return reviewDate.getTime() === today.getTime();
+  }).length;
 }

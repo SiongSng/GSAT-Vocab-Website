@@ -15,7 +15,7 @@ export type { QuizQuestion, QuizQuestionType };
 
 interface QuizStore {
   type: QuizQuestionType | "adaptive" | null;
-  source: GeneratorConfig["source"];
+  source: "srs_due" | "srs_weak" | "today_studied" | "custom";
   questions: QuizQuestion[];
   currentIndex: number;
   results: QuizResult[];
@@ -120,7 +120,7 @@ export function getQuizStore() {
 }
 
 export interface QuizConfig {
-  source?: GeneratorConfig["source"];
+  source?: "srs_due" | "srs_weak" | "today_studied" | "custom";
   count: number;
   lemmas?: string[];
   entry_type?: "word" | "phrase" | "all";
