@@ -15,6 +15,7 @@
         getDueCount,
         getWeakCount,
         getAvailableCount,
+        getTodayStudiedCount,
     } from "$lib/stores/quiz-generator";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
 
@@ -22,6 +23,7 @@
 
     let questionCount = $state(10);
     let entryType = $state<"word" | "phrase" | "all">("all");
+    let quizSource = $state<"srs_due" | "srs_weak" | "today_studied">("srs_due");
     let showSettings = $state(false);
     let showFeedback = $state(false);
     let selectedAnswer = $state<string | null>(null);
@@ -34,6 +36,7 @@
 
     let dueCount = $state(0);
     let weakCount = $state(0);
+    let todayStudiedCount = $state(0);
     let availableCount = $state(0);
 
     $effect(() => {
@@ -43,6 +46,7 @@
     async function loadCounts() {
         dueCount = await getDueCount();
         weakCount = await getWeakCount();
+        todayStudiedCount = await getTodayStudiedCount();
         availableCount = await getAvailableCount();
     }
 
@@ -53,7 +57,7 @@
 
     async function handleStartQuiz() {
         const config: QuizConfig = {
-            source: "srs_due",
+            source: quizSource,
             count: questionCount,
             entry_type: entryType === "all" ? undefined : entryType,
         };
@@ -645,6 +649,60 @@
                     >
                         <div class="setting-section">
                             <span
+                                class="setting-label text-sm font-medium text-content-secondary block mb-3"
+                                >題目來源</span
+                            >
+                            <div class="space-y-2">
+                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
+                                    class:source-option-selected={quizSource === "srs_due"}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="quiz-source"
+                                        value="srs_due"
+                                        bind:group={quizSource}
+                                        class="mt-0.5"
+                                    />
+                                    <div class="flex-1">
+                                        <div class="font-medium text-content-primary text-sm">智慧推薦</div>
+                                        <div class="text-xs text-content-tertiary mt-0.5">根據遺忘曲線自動選擇需要複習的單字</div>
+                                    </div>
+                                </label>
+                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
+                                    class:source-option-selected={quizSource === "today_studied"}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="quiz-source"
+                                        value="today_studied"
+                                        bind:group={quizSource}
+                                        class="mt-0.5"
+                                    />
+                                    <div class="flex-1">
+                                        <div class="font-medium text-content-primary text-sm">今日學習</div>
+                                        <div class="text-xs text-content-tertiary mt-0.5">複習今天在 Flashcard 學過的單字</div>
+                                    </div>
+                                </label>
+                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
+                                    class:source-option-selected={quizSource === "srs_weak"}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="quiz-source"
+                                        value="srs_weak"
+                                        bind:group={quizSource}
+                                        class="mt-0.5"
+                                    />
+                                    <div class="flex-1">
+                                        <div class="font-medium text-content-primary text-sm">困難單字</div>
+                                        <div class="text-xs text-content-tertiary mt-0.5">按錯次數較多或標記為困難的單字</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="setting-section">
+                            <span
                                 class="setting-label text-sm font-medium text-content-secondary block mb-2"
                                 >題數</span
                             >
@@ -746,6 +804,25 @@
         background-color: var(--color-accent-soft);
         color: var(--color-accent);
         border-color: transparent;
+    }
+
+    .source-option {
+        border-color: var(--color-border);
+        background-color: var(--color-surface-page);
+    }
+
+    .source-option:hover {
+        border-color: var(--color-border-hover);
+        background-color: var(--color-surface-hover);
+    }
+
+    .source-option-selected {
+        border-color: var(--color-accent);
+        background-color: var(--color-accent-soft);
+    }
+
+    .source-option input[type="radio"] {
+        accent-color: var(--color-accent);
     }
 
     .answer-slot {
