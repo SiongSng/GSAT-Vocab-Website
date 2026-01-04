@@ -578,179 +578,172 @@
         </div>
     {:else}
         <div class="quiz-start-page flex flex-col items-center justify-center min-h-full p-5">
-            <div class="max-w-md w-full">
-                <div class="quiz-hero text-center mb-8">
-                    <div class="quiz-hero-icon text-5xl mb-4">📝</div>
-                    <h1
-                        class="quiz-hero-title text-2xl font-semibold text-content-primary mb-2"
-                    >
-                        單字練習
-                    </h1>
-                    <p class="quiz-hero-subtitle text-content-secondary">
-                        {availableCount} 個單字等你挑戰
-                    </p>
-                </div>
+            <div class="max-w-lg w-full bg-surface-primary rounded-lg border border-border shadow-card p-6 lg:p-8">
+                <h2 class="text-xl lg:text-2xl font-semibold tracking-tight text-content-primary mb-6">
+                    單字練習
+                </h2>
 
-                <div class="quiz-quick-stats flex justify-center gap-8 mb-8">
-                    <div class="quick-stat text-center">
-                        <span
-                            class="quick-stat-number text-2xl font-semibold text-accent block"
-                            >{dueCount}</span
-                        >
-                        <span class="quick-stat-label text-sm text-content-secondary"
-                            >該複習了</span
-                        >
+                <div class="stats-section mb-6">
+                    <div class="stats-hero">
+                        <div class="stats-hero-number">{availableCount}</div>
+                        <div class="stats-hero-label">張卡片</div>
                     </div>
-                    <div class="quick-stat text-center">
-                        <span
-                            class="quick-stat-number text-2xl font-semibold text-srs-hard block"
-                            >{weakCount}</span
-                        >
-                        <span class="quick-stat-label text-sm text-content-secondary"
-                            >需要加強</span
-                        >
+
+                    <div class="stats-row">
+                        <div class="stats-item">
+                            <span class="stats-dot stats-dot-review"></span>
+                            <span class="stats-value">{dueCount}</span>
+                            <span class="stats-label">該複習了</span>
+                        </div>
+                        <div class="stats-item">
+                            <span class="stats-dot stats-dot-learning"></span>
+                            <span class="stats-value">{weakCount}</span>
+                            <span class="stats-label">需要加強</span>
+                        </div>
+                        <div class="stats-item">
+                            <span class="stats-dot stats-dot-new"></span>
+                            <span class="stats-value">{todayStudiedCount}</span>
+                            <span class="stats-label">今日學習</span>
+                        </div>
                     </div>
                 </div>
 
                 <button
                     type="button"
-                    class="quiz-start-btn w-full px-6 py-4 bg-accent text-white text-lg font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 mb-6"
+                    class="btn-start"
                     onclick={handleStartQuiz}
                     disabled={availableCount === 0}
                 >
-                    開始練習
+                    {#if availableCount > 0}
+                        開始練習
+                    {:else}
+                        暫無可練習卡片
+                    {/if}
                 </button>
 
                 <button
                     type="button"
-                    class="quiz-settings-toggle w-full flex items-center justify-center gap-2 text-content-tertiary hover:text-content-secondary transition-colors py-2"
+                    class="settings-toggle"
                     onclick={() => (showSettings = !showSettings)}
                 >
-                    <span>進階設定</span>
+                    <span>偏好設定</span>
                     <svg
-                        class="w-4 h-4 transition-transform"
-                        class:rotate-180={showSettings}
+                        class="w-4 h-4 text-content-tertiary transition-transform {showSettings ? 'rotate-180' : ''}"
                         fill="none"
-                        viewBox="0 0 24 24"
                         stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
                     >
                         <path
                             stroke-linecap="round"
                             stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
+                            d="m19 9-7 7-7-7"
                         />
                     </svg>
                 </button>
 
                 {#if showSettings}
-                    <div
-                        class="quiz-settings bg-surface-primary rounded-lg border border-border p-5 mt-4 space-y-5"
-                    >
-                        <div class="setting-section">
-                            <span
-                                class="setting-label text-sm font-medium text-content-secondary block mb-3"
-                                >題目來源</span
-                            >
-                            <div class="space-y-2">
-                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
-                                    class:source-option-selected={quizSource === "srs_due"}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="quiz-source"
-                                        value="srs_due"
-                                        bind:group={quizSource}
-                                        class="mt-0.5"
-                                    />
-                                    <div class="flex-1">
-                                        <div class="font-medium text-content-primary text-sm">智慧推薦</div>
-                                        <div class="text-xs text-content-tertiary mt-0.5">根據遺忘曲線自動選擇需要複習的單字</div>
-                                    </div>
-                                </label>
-                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
-                                    class:source-option-selected={quizSource === "today_studied"}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="quiz-source"
-                                        value="today_studied"
-                                        bind:group={quizSource}
-                                        class="mt-0.5"
-                                    />
-                                    <div class="flex-1">
-                                        <div class="font-medium text-content-primary text-sm">今日學習</div>
-                                        <div class="text-xs text-content-tertiary mt-0.5">複習今天在 Flashcard 學過的單字</div>
-                                    </div>
-                                </label>
-                                <label class="source-option flex items-start gap-3 p-3 rounded-md border transition-colors cursor-pointer"
-                                    class:source-option-selected={quizSource === "srs_weak"}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="quiz-source"
-                                        value="srs_weak"
-                                        bind:group={quizSource}
-                                        class="mt-0.5"
-                                    />
-                                    <div class="flex-1">
-                                        <div class="font-medium text-content-primary text-sm">困難單字</div>
-                                        <div class="text-xs text-content-tertiary mt-0.5">按錯次數較多或標記為困難的單字</div>
-                                    </div>
-                                </label>
+                    <div class="border-t border-border pt-6 mt-6">
+                        <div class="settings-grid">
+                            <div class="setting-group">
+                                <h4 class="setting-group-title">題目來源</h4>
+                                
+                                <div class="source-radio-group">
+                                    <label class="source-radio-option">
+                                        <input
+                                            type="radio"
+                                            name="quiz-source"
+                                            value="srs_due"
+                                            bind:group={quizSource}
+                                        />
+                                        <div class="source-radio-content">
+                                            <div class="source-radio-title">智慧推薦</div>
+                                            <div class="source-radio-desc">根據遺忘曲線自動選擇需要複習的單字</div>
+                                        </div>
+                                    </label>
+                                    <label class="source-radio-option">
+                                        <input
+                                            type="radio"
+                                            name="quiz-source"
+                                            value="today_studied"
+                                            bind:group={quizSource}
+                                        />
+                                        <div class="source-radio-content">
+                                            <div class="source-radio-title">今日學習</div>
+                                            <div class="source-radio-desc">複習今天在 Flashcard 學過的單字</div>
+                                        </div>
+                                    </label>
+                                    <label class="source-radio-option">
+                                        <input
+                                            type="radio"
+                                            name="quiz-source"
+                                            value="srs_weak"
+                                            bind:group={quizSource}
+                                        />
+                                        <div class="source-radio-content">
+                                            <div class="source-radio-title">困難單字</div>
+                                            <div class="source-radio-desc">按錯次數較多或標記為困難的單字</div>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="setting-section">
-                            <span
-                                class="setting-label text-sm font-medium text-content-secondary block mb-2"
-                                >題數</span
-                            >
-                            <div class="pill-group flex gap-2">
-                                {#each [10, 20, 30] as count}
-                                    <button
-                                        type="button"
-                                        class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
-                                        class:pill-active={questionCount ===
-                                            count}
-                                        onclick={() => (questionCount = count)}
-                                    >
-                                        {count}
-                                    </button>
-                                {/each}
-                            </div>
-                        </div>
+                            <div class="setting-group">
+                                <h4 class="setting-group-title">測驗設定</h4>
 
-                        <div class="setting-section">
-                            <span
-                                class="setting-label text-sm font-medium text-content-secondary block mb-2"
-                                >範圍</span
-                            >
-                            <div class="pill-group flex gap-2">
-                                <button
-                                    type="button"
-                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
-                                    class:pill-active={entryType === "all"}
-                                    onclick={() => (entryType = "all")}
-                                >
-                                    全部
-                                </button>
-                                <button
-                                    type="button"
-                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
-                                    class:pill-active={entryType === "word"}
-                                    onclick={() => (entryType = "word")}
-                                >
-                                    單字
-                                </button>
-                                <button
-                                    type="button"
-                                    class="pill px-4 py-2 rounded-md text-sm font-medium transition-all"
-                                    class:pill-active={entryType === "phrase"}
-                                    onclick={() => (entryType = "phrase")}
-                                >
-                                    片語
-                                </button>
+                                <div class="setting-row">
+                                    <div class="setting-row-label">
+                                        <span>題數</span>
+                                    </div>
+                                    <div class="setting-row-control">
+                                        <div class="chip-group">
+                                            {#each [10, 20, 30] as count}
+                                                <button
+                                                    type="button"
+                                                    class="chip"
+                                                    class:chip-active={questionCount === count}
+                                                    onclick={() => (questionCount = count)}
+                                                >
+                                                    {count}
+                                                </button>
+                                            {/each}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="setting-row">
+                                    <div class="setting-row-label">
+                                        <span>範圍</span>
+                                    </div>
+                                    <div class="setting-row-control">
+                                        <div class="chip-group">
+                                            <button
+                                                type="button"
+                                                class="chip"
+                                                class:chip-active={entryType === "all"}
+                                                onclick={() => (entryType = "all")}
+                                            >
+                                                全部
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="chip"
+                                                class:chip-active={entryType === "word"}
+                                                onclick={() => (entryType = "word")}
+                                            >
+                                                單字
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="chip"
+                                                class:chip-active={entryType === "phrase"}
+                                                onclick={() => (entryType = "phrase")}
+                                            >
+                                                片語
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -761,6 +754,255 @@
 </div>
 
 <style>
+    /* Stats Section - Matching StudyDashboard */
+    .stats-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .stats-hero {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .stats-hero-number {
+        font-size: 3.5rem;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.03em;
+        color: var(--color-content-primary);
+    }
+
+    .stats-hero-label {
+        font-size: 1.125rem;
+        color: var(--color-content-tertiary);
+    }
+
+    .stats-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+    }
+
+    .stats-item {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .stats-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .stats-dot-review {
+        background-color: var(--color-srs-again);
+        opacity: 0.7;
+    }
+
+    .stats-dot-learning {
+        background-color: var(--color-srs-hard);
+        opacity: 0.7;
+    }
+
+    .stats-dot-new {
+        background-color: var(--color-srs-easy);
+        opacity: 0.7;
+    }
+
+    .stats-value {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--color-content-primary);
+    }
+
+    .stats-label {
+        font-size: 0.8125rem;
+        color: var(--color-content-tertiary);
+    }
+
+    /* Buttons - Matching StudyDashboard */
+    .btn-start {
+        width: 100%;
+        padding: 0.875rem 1.25rem;
+        background-color: var(--color-content-primary);
+        color: white;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+
+    .btn-start:hover:not(:disabled) {
+        background-color: var(--color-content-primary-hover);
+    }
+
+    .btn-start:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .settings-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 0.25rem;
+        font-size: 0.875rem;
+        color: var(--color-content-secondary);
+        cursor: pointer;
+        transition: color 0.15s ease;
+        margin-top: 1rem;
+    }
+
+    .settings-toggle:hover {
+        color: var(--color-content-primary);
+    }
+
+    /* Settings Grid - Matching StudyDashboard */
+    .settings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .setting-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .setting-group:not(:first-child) {
+        padding-top: 1rem;
+        border-top: 1px solid var(--color-border);
+    }
+
+    .setting-group-title {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-section-header);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .setting-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        padding: 0.5rem 0;
+    }
+
+    .setting-row-label {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.875rem;
+        color: var(--color-content-primary);
+    }
+
+    .setting-row-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        justify-content: flex-end;
+    }
+
+    /* Chip Group - Matching StudyDashboard */
+    .chip-group {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .chip {
+        min-width: 2.5rem;
+        height: 1.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 0.625rem;
+        background-color: var(--color-surface-page);
+        border-radius: 4px;
+        font-weight: 500;
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        transition: all 0.15s ease;
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+
+    .chip:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-content-secondary);
+    }
+
+    .chip-active {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .chip-active:hover {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    /* Source Radio Options */
+    .source-radio-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .source-radio-option {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--color-border);
+        background-color: transparent;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .source-radio-option:hover {
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-border-hover);
+    }
+
+    .source-radio-option:has(input:checked) {
+        background-color: var(--color-accent-soft);
+        border-color: var(--color-accent);
+    }
+
+    .source-radio-option input[type="radio"] {
+        margin-top: 0.125rem;
+        accent-color: var(--color-accent);
+        cursor: pointer;
+    }
+
+    .source-radio-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .source-radio-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-content-primary);
+        margin-bottom: 0.125rem;
+    }
+
+    .source-radio-desc {
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        line-height: 1.4;
+    }
+
+    /* Question Screen Styles */
     .option {
         border-color: var(--color-border);
         background-color: var(--color-surface-primary);
@@ -788,41 +1030,6 @@
 
     .option:disabled {
         cursor: default;
-    }
-
-    .pill {
-        background-color: var(--color-surface-page);
-        color: var(--color-content-secondary);
-        border: 1px solid var(--color-border);
-    }
-
-    .pill:hover {
-        background-color: var(--color-surface-hover);
-    }
-
-    .pill-active {
-        background-color: var(--color-accent-soft);
-        color: var(--color-accent);
-        border-color: transparent;
-    }
-
-    .source-option {
-        border-color: var(--color-border);
-        background-color: var(--color-surface-page);
-    }
-
-    .source-option:hover {
-        border-color: var(--color-border-hover);
-        background-color: var(--color-surface-hover);
-    }
-
-    .source-option-selected {
-        border-color: var(--color-accent);
-        background-color: var(--color-accent-soft);
-    }
-
-    .source-option input[type="radio"] {
-        accent-color: var(--color-accent);
     }
 
     .answer-slot {
