@@ -419,18 +419,24 @@ export async function migratePrimarySenseIds(
 
   const uniqueLemmas = [...new Set(cards.map((c) => c.lemma))];
   const entryMap = new Map<string, SRSEligibleEntry>();
+  const orphanedLemmas: string[] = [];
 
   for (const lemma of uniqueLemmas) {
     const entry = await getEntry(lemma);
     if (entry && entry.senses && entry.senses.length > 0) {
       entryMap.set(lemma, entry);
+    } else {
+      orphanedLemmas.push(lemma);
     }
   }
 
-  if (entryMap.size === 0) return 0;
-
   const cardsToDelete: SRSCard[] = [];
   const cardsToMigrate: Array<{ oldCard: SRSCard; newSenseId: string }> = [];
+
+  for (const lemma of orphanedLemmas) {
+    const lemmaCards = cards.filter((c) => c.lemma === lemma);
+    cardsToDelete.push(...lemmaCards);
+  }
 
   for (const lemma of uniqueLemmas) {
     const entry = entryMap.get(lemma);
@@ -456,17 +462,29 @@ export async function migratePrimarySenseIds(
   if (cardsToDelete.length === 0 && cardsToMigrate.length === 0) return 0;
 
   const database = await getDB();
-  const tx = database.transaction(CARDS_STORE, "readwrite");
-  const store = tx.objectStore(CARDS_STORE);
+
+  const orphanedLogs: SRSReviewLog[] = [];
+  for (const lemma of orphanedLemmas) {
+    const logs = await database.getAllFromIndex(LOGS_STORE, "lemma", lemma);
+    orphanedLogs.push(...logs);
+  }
+
+  const tx = database.transaction([CARDS_STORE, LOGS_STORE], "readwrite");
+  const cardsStore = tx.objectStore(CARDS_STORE);
+  const logsStore = tx.objectStore(LOGS_STORE);
 
   for (const card of cardsToDelete) {
-    store.delete([card.lemma, card.sense_id]);
+    cardsStore.delete([card.lemma, card.sense_id]);
+  }
+
+  for (const log of orphanedLogs) {
+    logsStore.delete([log.lemma, log.sense_id, log.review]);
   }
 
   for (const { oldCard, newSenseId } of cardsToMigrate) {
-    store.delete([oldCard.lemma, oldCard.sense_id]);
+    cardsStore.delete([oldCard.lemma, oldCard.sense_id]);
     const newCard: SRSCard = { ...oldCard, sense_id: newSenseId };
-    store.put(newCard);
+    cardsStore.put(newCard);
   }
 
   await tx.done;
