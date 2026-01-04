@@ -4,13 +4,19 @@ import {
   State,
   Rating,
 } from "ts-fsrs";
-import type { VocabEntry, VocabSense } from "./vocab";
+import type { VocabSense, WordEntry, PhraseEntry } from "./vocab";
+import { sortSensesByExamFrequency } from "./vocab";
 
 export { State, Rating };
+
+export type SRSEntryType = "word" | "phrase";
+
+export type SRSEligibleEntry = WordEntry | PhraseEntry;
 
 export interface SRSCard extends FSRSCard {
   lemma: string;
   sense_id: string;
+  entry_type: SRSEntryType;
 }
 
 export interface SRSReviewLog extends FSRSReviewLog {
@@ -111,33 +117,25 @@ export interface PrioritizedSense {
   isPrimary: boolean;
 }
 
-export function getPrioritizedSenses(entry: VocabEntry): PrioritizedSense[] {
+export function getPrioritizedSenses(entry: SRSEligibleEntry): PrioritizedSense[] {
   if (!entry.senses || entry.senses.length === 0) return [];
 
-  const sensesWithPriority = entry.senses.map((sense, originalIndex) => {
-    const exampleCount = sense.examples?.length ?? 0;
-    const testedBonus = sense.tested_in_exam ? 1 : 0;
-    const priority =
-      exampleCount * 1000 + testedBonus * 100 + (1000 - originalIndex);
-    return { sense, priority, originalIndex };
-  });
+  const sortedSenses = sortSensesByExamFrequency(entry.senses);
 
-  sensesWithPriority.sort((a, b) => b.priority - a.priority);
-
-  return sensesWithPriority.map((item, idx) => ({
-    sense: item.sense,
+  return sortedSenses.map((sense, idx) => ({
+    sense,
     priority: idx,
     isPrimary: idx === 0,
   }));
 }
 
-export function getPrimarySenseId(entry: VocabEntry): string {
+export function getPrimarySenseId(entry: SRSEligibleEntry): string {
   const prioritized = getPrioritizedSenses(entry);
   return prioritized.length > 0 ? prioritized[0].sense.sense_id : "primary";
 }
 
 export function getSensePriorityIndex(
-  entry: VocabEntry,
+  entry: SRSEligibleEntry,
   senseId: string,
 ): number {
   const prioritized = getPrioritizedSenses(entry);
@@ -146,7 +144,7 @@ export function getSensePriorityIndex(
 }
 
 export function resolveSenseId(
-  entry: VocabEntry | null,
+  entry: SRSEligibleEntry | null,
   senseId: string,
 ): string {
   if (!entry || !entry.senses || entry.senses.length === 0) return senseId;
@@ -155,7 +153,7 @@ export function resolveSenseId(
     return getPrimarySenseId(entry);
   }
 
-  const exists = entry.senses.some((s) => s.sense_id === senseId);
+  const exists = entry.senses.some((s: VocabSense) => s.sense_id === senseId);
   if (exists) return senseId;
 
   return getPrimarySenseId(entry);

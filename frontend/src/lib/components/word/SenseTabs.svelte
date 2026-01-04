@@ -1,18 +1,23 @@
 <script lang="ts">
     import type { VocabSense } from "$lib/types/vocab";
-    import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
+    import { sortSensesByExamFrequency } from "$lib/types/vocab";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
+    import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
+    import { formatExamSource } from "$lib/constants/exam-types";
 
     interface Props {
         senses: VocabSense[];
         lemma: string;
+        isPhrase?: boolean;
     }
 
-    let { senses, lemma }: Props = $props();
+    let { senses, lemma, isPhrase = false }: Props = $props();
     let activeSenseIndex = $state(0);
     let showExamExamples = $state(true);
     let examplePage = $state(0);
     const EXAMPLES_PER_PAGE = 5;
+
+    const sortedSenses = $derived(sortSensesByExamFrequency(senses));
 
     $effect(() => {
         lemma;
@@ -21,10 +26,10 @@
         showExamExamples = true;
     });
 
-    const activeSense = $derived(senses[activeSenseIndex]);
-    const showTabs = $derived(senses.length > 1);
+    const activeSense = $derived(sortedSenses[activeSenseIndex]);
+    const showTabs = $derived(sortedSenses.length > 1);
     const maxVisibleTabs = 4;
-    const hasMoreTabs = $derived(senses.length > maxVisibleTabs);
+    const hasMoreTabs = $derived(sortedSenses.length > maxVisibleTabs);
 
     const totalExamples = $derived(activeSense?.examples?.length ?? 0);
     const totalPages = $derived(Math.ceil(totalExamples / EXAMPLES_PER_PAGE));
@@ -46,8 +51,62 @@
     }
 
     function truncateDef(def: string, maxLen: number = 8): string {
-        if (def.length <= maxLen) return def;
-        return def.slice(0, maxLen) + "…";
+        // Remove parenthetical content: 角色（故事、戲劇） -> 角色
+        let cleaned = def.replace(/[（(][^）)]*[）)]/g, "").trim();
+
+        // Keep only first part before semicolon: 零錢；找錢 -> 零錢
+        const semicolonIndex = cleaned.search(/[；;]/);
+        if (semicolonIndex > 0) {
+            cleaned = cleaned.slice(0, semicolonIndex).trim();
+        }
+
+        if (cleaned.length <= maxLen) return cleaned;
+        return cleaned.slice(0, maxLen) + "…";
+    }
+
+    function formatPosAbbrev(pos: string | null): string {
+        if (!pos) return "";
+
+        // Handle compound POS like "ADJ/ADV"
+        const parts = pos.split("/");
+        const abbrevParts = parts.map((p) => {
+            const upper = p.toUpperCase().trim();
+            switch (upper) {
+                case "NOUN":
+                case "N":
+                    return "N.";
+                case "VERB":
+                case "V":
+                    return "V.";
+                case "ADJ":
+                case "ADJECTIVE":
+                case "A":
+                    return "A.";
+                case "ADV":
+                case "ADVERB":
+                    return "AD.";
+                case "PREP":
+                case "PREPOSITION":
+                    return "P.";
+                case "CONJ":
+                case "CONJUNCTION":
+                    return "C.";
+                case "PRON":
+                case "PRONOUN":
+                    return "PN.";
+                case "INT":
+                case "INTERJECTION":
+                    return "I.";
+                case "DET":
+                case "DETERMINER":
+                    return "D.";
+                default:
+                    // Return first letter + dot for unknown
+                    return upper.charAt(0) + ".";
+            }
+        });
+
+        return abbrevParts.join("/");
     }
 
     function formatSource(source: {
@@ -56,43 +115,27 @@
         section_type: string;
         question_number?: number;
     }): string {
-        const examTypeMap: Record<string, string> = {
-            gsat: "學測",
-            gsat_makeup: "學測補考",
-            ast: "指考",
-            ast_makeup: "指考補考",
-            gsat_trial: "學測試辦",
-            gsat_ref: "學測參考試卷",
-        };
-        const sectionMap: Record<string, string> = {
-            vocabulary: "詞彙",
-            cloze: "克漏字",
-            discourse: "篇章結構",
-            structure: "句型",
-            reading: "閱讀",
-            translation: "翻譯",
-            mixed: "綜合",
-        };
-        const examType = examTypeMap[source.exam_type] ?? source.exam_type;
-        const section = sectionMap[source.section_type] ?? source.section_type;
-        return `${source.year} ${examType} · ${section}`;
+        return formatExamSource(source);
     }
 </script>
 
 <div class="sense-tabs-container">
     <!-- Tabs for multiple senses -->
     {#if showTabs}
-        <div class="flex gap-1 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
-            {#each senses.slice(0, maxVisibleTabs) as sense, i}
+        <div class="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
+            {#each sortedSenses.slice(0, maxVisibleTabs) as sense, i}
+                {@const posAbbrev = formatPosAbbrev(sense.pos)}
                 <button
                     type="button"
                     class="sense-tab"
                     class:active={activeSenseIndex === i}
                     onclick={() => selectSense(i)}
                 >
-                    <span class="tab-pos">{sense.pos}</span>
+                    {#if posAbbrev}
+                        <span class="tab-pos">{posAbbrev}</span>
+                    {/if}
                     <span class="tab-def">{truncateDef(sense.zh_def)}</span>
-                    {#if sense.tested_in_exam}
+                    {#if sense.examples && sense.examples.length > 0}
                         <span class="tab-tested-dot"></span>
                     {/if}
                 </button>
@@ -101,20 +144,23 @@
                 <span
                     class="flex-shrink-0 px-2 py-1.5 text-sm text-content-tertiary"
                 >
-                    +{senses.length - maxVisibleTabs}
+                    +{sortedSenses.length - maxVisibleTabs}
                 </span>
             {/if}
         </div>
     {/if}
 
     {#if activeSense}
+        {@const posAbbrev = formatPosAbbrev(activeSense.pos)}
         <div class="sense-content">
             <!-- Definition Block - Primary focus -->
             <div class="definition-block mb-4">
-                {#if !showTabs}
+                {#if !showTabs && (posAbbrev || (activeSense.examples && activeSense.examples.length > 0))}
                     <div class="flex items-center gap-2 mb-2">
-                        <span class="pos-tag">{activeSense.pos}</span>
-                        {#if activeSense.tested_in_exam}
+                        {#if posAbbrev}
+                            <span class="pos-tag">{posAbbrev}</span>
+                        {/if}
+                        {#if activeSense.examples && activeSense.examples.length > 0}
                             <span class="tested-tag">曾考</span>
                         {/if}
                     </div>
@@ -129,9 +175,10 @@
             {#if activeSense.generated_example}
                 <div class="learning-example mb-4">
                     <p class="example-text">
-                        <ClickableWord
+                        <HighlightedText
                             text={activeSense.generated_example}
-                            highlightWord={lemma}
+                            highlightLemma={lemma}
+                            {isPhrase}
                         />
                     </p>
                     <AudioButton
@@ -232,9 +279,10 @@
                                 {#each paginatedExamples as example, idx (example.text + example.source.year + example.source.exam_type + idx)}
                                     <div class="exam-item">
                                         <p class="exam-text">
-                                            <ClickableWord
+                                            <HighlightedText
                                                 text={example.text}
-                                                highlightWord={lemma}
+                                                highlightLemma={lemma}
+                                                {isPhrase}
                                             />
                                         </p>
                                         <div class="exam-meta">
@@ -262,15 +310,14 @@
     .sense-tab {
         display: flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: 0.375rem;
         flex-shrink: 0;
-        padding: 0.375rem 0.75rem;
-        font-size: 0.875rem;
+        padding: 0.5rem 0.875rem;
+        font-size: 0.8125rem;
         font-weight: 500;
-        border-radius: 6px;
-        background: var(--color-surface-page);
-        color: var(--color-content-secondary);
-        transition: all 0.15s ease;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-content-tertiary);
         position: relative;
     }
 
@@ -280,21 +327,31 @@
     }
 
     .sense-tab.active {
-        background: var(--color-accent-soft);
-        color: var(--color-accent);
+        background: var(--color-content-primary);
+        color: var(--color-surface-primary);
     }
 
-    .tab-pos {
-        font-size: 0.75rem;
+    .sense-tab.active .tab-pos {
         opacity: 0.7;
     }
 
+    .sense-tab.active .tab-tested-dot {
+        background: var(--color-surface-primary);
+    }
+
+    .tab-pos {
+        font-size: 0.6875rem;
+        opacity: 0.6;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+
     .tab-tested-dot {
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
         background: var(--color-srs-good);
-        margin-left: 0.25rem;
+        margin-left: 0.125rem;
     }
 
     /* Definition Block */

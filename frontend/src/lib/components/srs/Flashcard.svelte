@@ -3,11 +3,13 @@
     import type { SRSCard } from "$lib/types/srs";
     import { getPrioritizedSenses } from "$lib/types/srs";
     import type { VocabEntry } from "$lib/types/vocab";
+    import { isWordEntry, isPhraseEntry } from "$lib/types/vocab";
+    import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
     import StateBadge from "./StateBadge.svelte";
     import WordDetailModal from "./WordDetailModal.svelte";
     import { findSenseForCard, getSenseIndex } from "$lib/stores/srs.svelte";
-    import ClickableWord from "$lib/components/ui/ClickableWord.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
+    import { formatExamSource } from "$lib/constants/exam-types";
 
     interface Props {
         card: SRSCard;
@@ -23,6 +25,8 @@
 
     const cardKey = $derived(`${card.lemma}:${card.sense_id}`);
 
+    const isPhrase = $derived(vocabEntry ? isPhraseEntry(vocabEntry) : false);
+
     const currentSense = $derived.by(() => {
         return findSenseForCard(card, vocabEntry);
     });
@@ -36,7 +40,10 @@
         return getPrioritizedSenses(vocabEntry).length;
     });
 
-    const memoryTip = $derived(vocabEntry?.root_info?.memory_strategy ?? null);
+    const memoryTip = $derived.by(() => {
+        if (!vocabEntry || !isWordEntry(vocabEntry)) return null;
+        return vocabEntry.root_info?.memory_strategy ?? null;
+    });
 
     const currentExample = $derived.by(() => {
         if (!currentSense) return null;
@@ -67,26 +74,7 @@
         } | null,
     ): string {
         if (!source) return "AI 生成例句";
-        const examTypeMap: Record<string, string> = {
-            gsat: "學測",
-            gsat_makeup: "學測補考",
-            ast: "指考",
-            ast_makeup: "指考補考",
-            gsat_trial: "學測試辦",
-            gsat_ref: "參考試卷",
-        };
-        const sectionMap: Record<string, string> = {
-            vocabulary: "詞彙題",
-            cloze: "克漏字",
-            discourse: "文意選填",
-            structure: "句型",
-            reading: "閱讀測驗",
-            translation: "翻譯",
-            mixed: "綜合",
-        };
-        const examType = examTypeMap[source.exam_type] || source.exam_type;
-        const section = sectionMap[source.section_type] || source.section_type;
-        return `${source.year} ${examType}・${section}`;
+        return formatExamSource(source);
     }
 
     function handleOpenModal(e: MouseEvent) {
@@ -151,7 +139,9 @@
                             {card.lemma}
                         </h2>
                         {#if currentSense}
-                            <p class="text-base text-content-tertiary lowercase">
+                            <p
+                                class="text-base text-content-tertiary lowercase"
+                            >
                                 {currentSense.pos}
                             </p>
                         {/if}
@@ -292,9 +282,10 @@
                                             onclick={(e) => e.stopPropagation()}
                                             role="presentation"
                                         >
-                                            <ClickableWord
+                                            <HighlightedText
                                                 text={currentExample.text}
-                                                highlightWord={card.lemma}
+                                                highlightLemma={card.lemma}
+                                                {isPhrase}
                                             />
                                         </span>
                                         {#if currentExample.source}
@@ -314,7 +305,9 @@
                                                         d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
                                                     />
                                                 </svg>
-                                                {formatSource(currentExample.source)}
+                                                {formatSource(
+                                                    currentExample.source,
+                                                )}
                                             </div>
                                         {/if}
                                     </div>

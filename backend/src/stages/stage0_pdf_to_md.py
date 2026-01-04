@@ -1,5 +1,6 @@
 import asyncio
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pdfplumber
@@ -89,13 +90,15 @@ Convert this exam to clean Markdown. Preserve all questions, options, and passag
         system=STAGE0_SYSTEM,
         response_model=FormattedMarkdown,
         temperature=0.1,
-        tier=ModelTier.FAST,  # Simple formatting task
+        tier=ModelTier.FAST,
     )
     return result.content, year, exam_type
 
 
 async def process_all_pdfs(
-    pdf_dir: Path, output_dir: Path, progress_callback: callable = None
+    pdf_dir: Path,
+    output_dir: Path,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> list[tuple[Path, int, ExamType]]:
     output_dir.mkdir(parents=True, exist_ok=True)
 

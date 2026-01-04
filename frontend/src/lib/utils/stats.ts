@@ -303,3 +303,93 @@ export function formatStudyTime(ms: number): string {
 export function getTotalCardsFromStats(stats: DailyStats[]): number {
   return stats.reduce((sum, s) => sum + s.new_cards + s.reviews, 0);
 }
+
+export interface MultiSenseProgress {
+  totalSenses: number;
+  masteredSenses: number;
+  activeSenses: number;
+  wordsFullyMastered: number;
+  wordsPartiallyMastered: number;
+  wordsStarted: number;
+  wordsNotStarted: number;
+  multiSenseWords: number;
+}
+
+export function getMultiSenseProgress(
+  cards: SRSCard[],
+  vocabIndex: { lemma: string; sense_count?: number }[],
+): MultiSenseProgress {
+  const MASTERY_STABILITY_THRESHOLD = 21;
+
+  const senseCountByLemma = new Map<string, number>();
+  let multiSenseWords = 0;
+
+  for (const item of vocabIndex) {
+    const count = (item as { sense_count?: number }).sense_count ?? 1;
+    senseCountByLemma.set(item.lemma, count);
+    if (count > 1) multiSenseWords++;
+  }
+
+  const cardsByLemma = new Map<string, SRSCard[]>();
+  for (const card of cards) {
+    const existing = cardsByLemma.get(card.lemma) || [];
+    existing.push(card);
+    cardsByLemma.set(card.lemma, existing);
+  }
+
+  let totalSenses = 0;
+  let masteredSenses = 0;
+  let activeSenses = 0;
+  let wordsFullyMastered = 0;
+  let wordsPartiallyMastered = 0;
+  let wordsStarted = 0;
+  let wordsNotStarted = 0;
+
+  for (const item of vocabIndex) {
+    const senseCount = senseCountByLemma.get(item.lemma) ?? 1;
+    totalSenses += senseCount;
+
+    const wordCards = cardsByLemma.get(item.lemma) || [];
+    if (wordCards.length === 0) {
+      wordsNotStarted++;
+      continue;
+    }
+
+    let wordMasteredCount = 0;
+    let wordActiveCount = 0;
+
+    for (const card of wordCards) {
+      if (
+        card.state === State.Review &&
+        card.stability >= MASTERY_STABILITY_THRESHOLD
+      ) {
+        masteredSenses++;
+        wordMasteredCount++;
+      } else if (card.state !== State.New) {
+        activeSenses++;
+        wordActiveCount++;
+      }
+    }
+
+    if (wordMasteredCount >= senseCount) {
+      wordsFullyMastered++;
+    } else if (wordMasteredCount > 0) {
+      wordsPartiallyMastered++;
+    } else if (wordActiveCount > 0 || wordCards.some((c) => c.state === State.New && c.reps > 0)) {
+      wordsStarted++;
+    } else {
+      wordsNotStarted++;
+    }
+  }
+
+  return {
+    totalSenses,
+    masteredSenses,
+    activeSenses,
+    wordsFullyMastered,
+    wordsPartiallyMastered,
+    wordsStarted,
+    wordsNotStarted,
+    multiSenseWords,
+  };
+}

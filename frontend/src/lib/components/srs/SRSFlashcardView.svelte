@@ -3,12 +3,10 @@
     import {
         getSRSStore,
         initSRS,
-        addWordsToSRS,
         startStudySession,
         endStudySession,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
-    import { getVocabStore } from "$lib/stores/vocab.svelte";
     import StudyDashboard from "./StudyDashboard.svelte";
     import StudySession from "./StudySession.svelte";
     import SessionComplete from "./SessionComplete.svelte";
@@ -16,20 +14,12 @@
     type ViewState = "dashboard" | "studying" | "complete";
 
     const srs = getSRSStore();
-    const vocab = getVocabStore();
 
     let viewState: ViewState = $state("dashboard");
     let isInitializing = $state(true);
 
     onMount(async () => {
         await initSRS();
-
-        const words = vocab.index;
-        if (words && words.length > 0) {
-            const lemmas = words.map((w) => w.lemma);
-            addWordsToSRS(lemmas);
-        }
-
         isInitializing = false;
     });
 

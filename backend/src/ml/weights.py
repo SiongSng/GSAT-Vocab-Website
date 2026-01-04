@@ -7,11 +7,29 @@ Constants and weight configurations for GSAT vocabulary importance prediction.
 - Year 111 (2022): First official GSAT under new curriculum + reference papers (參考試卷)
 
 So the actual exam impact starts from year 111, with 110/111 as transition period.
+
+Exam Temporal Order (within the same year Y):
+- gsat_ref_Y: Released BEFORE the official GSAT → can be used to predict Y
+- gsat_Y: The official exam → ground truth for Y
+- gsat_makeup_Y: Released AFTER official GSAT → can only predict Y+1
+
+Note: AST (指考) is now treated equally because post-AST-abolition,
+GSAT difficulty is trending towards AST level.
 """
 
 CURRICULUM_CUTOFF_YEAR = 111
 
 TRIAL_YEARS = {110, 111}
+
+# Temporal order within the same year (lower = earlier in time)
+EXAM_TEMPORAL_ORDER = {
+    "gsat_ref": 0,      # Before official exam
+    "gsat_trial": 0,    # Before official exam
+    "gsat": 1,          # Official exam
+    "ast": 1,           # Official exam (same temporal slot)
+    "gsat_makeup": 2,   # After official exam
+    "ast_makeup": 2,    # After official exam
+}
 
 ROLE_WEIGHTS = {
     "correct_answer": 1.0,
@@ -33,11 +51,11 @@ SECTION_WEIGHTS = {
 
 EXAM_WEIGHTS = {
     "gsat": 1.2,
-    "gsat_ref": 1.1,
+    "gsat_ref": 1.3,      # Higher weight: direction indicator
     "gsat_makeup": 1.0,
-    "gsat_trial": 1.0,
-    "ast": 0.6,
-    "ast_makeup": 0.5,
+    "gsat_trial": 1.2,    # Higher weight: direction indicator
+    "ast": 1.0,           # Changed from 0.6 to 1.0 (equal weight)
+    "ast_makeup": 0.8,    # Slightly lower but not heavily discounted
 }
 
 OFFICIAL_BONUS_COEFFICIENT = 0.54

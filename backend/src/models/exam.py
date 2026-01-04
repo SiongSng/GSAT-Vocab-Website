@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ExamType(str, Enum):
@@ -20,6 +20,7 @@ class SectionType(str, Enum):
     READING = "reading"
     TRANSLATION = "translation"
     MIXED = "mixed"
+    ESSAY = "essay"
 
 
 class SentenceRole(str, Enum):
@@ -30,13 +31,16 @@ class SentenceRole(str, Enum):
     UNUSED_OPTION = "unused_option"
 
 
-class AnnotationType(str, Enum):
-    WORD = "word"
-    PHRASE = "phrase"
-    PATTERN = "pattern"
-
-
 class AnnotationRole(str, Enum):
+    """
+    Annotation roles:
+    - correct_answer: The word/phrase that correctly fills the blank
+    - distractor: An incorrect option from the exam
+    - tested_keyword: A keyword being tested in translation questions
+    - notable_phrase: A 2-4 word phrase where meaning ≠ sum of individual words (e.g., 'give up', 'in terms of'). NOT for sentence fragments or regular collocations.
+    - notable_pattern: A high-difficulty grammar pattern (requires pattern_category)
+    """
+
     CORRECT_ANSWER = "correct_answer"
     DISTRACTOR = "distractor"
     TESTED_KEYWORD = "tested_keyword"
@@ -111,8 +115,9 @@ class SourceInfo(BaseModel):
 
 
 class Annotation(BaseModel):
-    surface: str
-    type: AnnotationType
+    surface: str = Field(
+        description="For notable_phrase: ONLY the dictionary headword form (2-4 words). NEVER include objects, complements, or following words. Examples: 'set about' (NOT 'set about establishing'), 'give up' (NOT 'give up smoking'), 'look forward to' (NOT 'look forward to meeting'). Must be an exact substring from the sentence."
+    )
     role: AnnotationRole
     pattern_category: PatternCategory | None = None
     pattern_subtype: PatternSubtype | None = None

@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel
 
@@ -34,25 +33,27 @@ class RootInfo(BaseModel):
 
 
 class WordEntry(BaseModel):
-    type: Literal["word"] = "word"
     lemma: str
     pos: list[str]
     level: int | None
     in_official_list: bool
-    senses: list[VocabSense]
     frequency: FrequencyData
+    senses: list[VocabSense]
     confusion_notes: list[ConfusionNote] = []
     root_info: RootInfo | None = None
     synonyms: list[str] | None = None
     antonyms: list[str] | None = None
+    derived_forms: list[str] | None = None
 
 
 class PhraseEntry(BaseModel):
-    type: Literal["phrase"] = "phrase"
     lemma: str
-    senses: list[VocabSense]
     frequency: FrequencyData
+    senses: list[VocabSense]
     confusion_notes: list[ConfusionNote] = []
+    synonyms: list[str] | None = None
+    antonyms: list[str] | None = None
+    derived_forms: list[str] | None = None
 
 
 class PatternSubtypeOutput(BaseModel):
@@ -64,12 +65,10 @@ class PatternSubtypeOutput(BaseModel):
 
 
 class PatternEntry(BaseModel):
-    type: Literal["pattern"] = "pattern"
     lemma: str
     pattern_category: PatternCategory
     subtypes: list[PatternSubtypeOutput]
     teaching_explanation: str
-    frequency: FrequencyData
 
 
 VocabEntry = WordEntry | PhraseEntry | PatternEntry
@@ -85,7 +84,9 @@ class VocabDatabase(BaseModel):
     version: str
     generated_at: str
     metadata: VocabMetadata
-    entries: list[VocabEntry]
+    words: list[WordEntry] = []
+    phrases: list[PhraseEntry] = []
+    patterns: list[PatternEntry] = []
 
 
 class OfficialWordEntry(BaseModel):

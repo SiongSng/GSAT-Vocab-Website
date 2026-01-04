@@ -29,6 +29,7 @@ data/pdf/
 data/markdown/
 data/intermediate/
 data/output/
+data/cache
 
 # macOS
 .DS_Store

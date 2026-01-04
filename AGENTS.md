@@ -59,32 +59,35 @@ The backend is a Python-based data processing pipeline that generates vocabulary
 - **Python Version**: 3.13+
 - **CLI Framework**: typer + rich
 
-#### Pipeline Stages
+#### Pipeline Stages (Refactored)
 
 | Stage | Module | Description |
 |-------|--------|-------------|
 | 0 | `stage0_pdf_to_md.py` | PDF → Markdown conversion |
 | 1 | `stage1_structurize.py` | LLM-based exam structurization |
-| 2 | `stage2_clean.py` | Data cleaning & classification |
-| 2.5 | `ml/model.py` | ML importance model training |
-| 3 | `stage3_generate.py` | LLM vocabulary entry generation |
-| 4 | `stage4_output.py` | Database building & output |
-| 5 | `stage5_relations.py` | WordNet relation computation |
+| 2 | `stage2_extract.py` | Vocabulary extraction with NLP |
+| 3 | `stage3_sense_inventory.py` | Build sense inventory via LLM |
+| 4 | `stage4_generate.py` | LLM content generation |
+| 5 | `stage5_wsd.py` | Word sense disambiguation |
+| 6 | `stage6_relations.py` | WordNet relation computation |
+| 6.5 | `ml/train.py` | ML importance scoring (WIP) |
+| 7 | `stage7_output.py` | Database building & output |
 
 #### Key Modules
 
-- `src/cli.py` - CLI entry point with `run`, `scrape`, `train-ml` commands
+- `src/cli.py` - CLI entry point with `run`, `scrape`, `train-ml`, `export` commands
 - `src/config.py` - Pydantic settings for OpenAI configuration
 - `src/llm/` - OpenAI client wrapper and prompt templates
-- `src/ml/` - Machine learning importance scoring (scikit-learn)
-- `src/models/` - Pydantic data models for exams, vocabulary, analysis
+- `src/ml/` - Machine learning importance scoring (LightGBM, survival analysis)
+- `src/models/` - Pydantic data models for exams, vocabulary, sense assignment
+- `src/registry/` - SQLite-based sense registry for vocabulary management
 - `src/stages/` - Pipeline stage implementations
-- `src/utils/` - Scraper and validation utilities
+- `src/utils/` - NLP utilities, pattern matching, and scraper
 
 #### Data Flow
 
 ```
-PDF files → Markdown → Structured Exams → Cleaned Vocab → ML Scoring → Generated Entries → vocab.json
+PDF files → Markdown → Structured Exams → Extracted Vocab → Sense Inventory → Generated Content → WSD → Relations → vocab.json
 ```
 
 ## Development Commands
@@ -107,14 +110,17 @@ uv sync --dev      # Install with dev dependencies
 
 # Pipeline commands
 uv run gsat-pipeline run              # Run full pipeline
-uv run gsat-pipeline run --skip-llm   # Skip LLM stages (use cached)
+uv run gsat-pipeline run --skip-ml    # Skip ML training stage
+uv run gsat-pipeline run --exam-only  # Only include exam words
 uv run gsat-pipeline scrape           # Scrape CEEC papers
 uv run gsat-pipeline train-ml         # Train ML model separately
+uv run gsat-pipeline export           # Export vocab.json.gz to frontend
 
 # Development
 uv run pytest                         # Run tests
 uv run ruff check src/                # Lint code
 uv run ruff format src/               # Format code
+uvx ty check                          # Type check (10-100x faster than mypy/Pyright)
 ```
 
 ## Performance Considerations
@@ -138,7 +144,8 @@ The word list contains 5000+ items. Key optimizations:
 1. **No unnecessary comments** - Code should be self-explanatory
 2. **All comments in English** - When comments are needed
 3. **TDD principles** - Write meaningful tests, not tests for coverage
-4. **Use built-in diagnostics** - Prefer IDE diagnostics over `cargo check` or similar CLI tools
+4. **Type checking: `uvx ty check` FIRST** - Always use ty as the primary type checker for Python (10-100x faster than mypy/Pyright). Only fall back to mypy/Pyright if ty doesn't catch specific issues.
+5. **Prefer IDE diagnostics** - For other languages, use built-in IDE diagnostics over CLI tools like `cargo check`
 
 ## CSS Notes
 

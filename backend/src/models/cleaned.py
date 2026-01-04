@@ -3,10 +3,8 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from .exam import (
-    AnnotationRole,
     PatternCategory,
     PatternSubtype,
-    SentenceRole,
     SourceInfo,
 )
 
@@ -17,6 +15,27 @@ class VocabType(str, Enum):
     PATTERN = "pattern"
 
 
+class FrequencyData(BaseModel):
+    """Aggregated frequency statistics"""
+    total_appearances: int
+    tested_count: int
+    active_tested_count: int
+    year_spread: int
+    years: list[int]
+    by_role: dict[str, int]
+    by_section: dict[str, int]
+    by_exam_type: dict[str, int]
+    ml_score: float | None = None
+
+
+class ContextSentence(BaseModel):
+    """Sentence context where word actually appears"""
+    text: str
+    source: SourceInfo
+    pos: str
+    surface: str
+
+
 class LemmaOccurrence(BaseModel):
     pos: str
     surface: str
@@ -24,84 +43,46 @@ class LemmaOccurrence(BaseModel):
     source: SourceInfo
 
 
+class PhraseOccurrence(BaseModel):
+    surface: str
+    sentence: str
+    source: SourceInfo
+
+
 class PatternOccurrence(BaseModel):
-    pattern_category: PatternCategory
     pattern_subtype: PatternSubtype | None
     surface: str
     sentence: str
     source: SourceInfo
 
 
-class FrequencyData(BaseModel):
-    total_occurrences: int = Field(
-        description="Total number of times this item appeared across all exams."
-    )
-
-    tested_count: int = Field(
-        description="Number of times this item was directly tested "
-        "(as answer, keyword, or distractor, or extracted from option sentences)."
-    )
-
-    year_spread: int = Field(description="Number of distinct years this item appeared in.")
-
-    ml_score: float | None = Field(
-        default=None,
-        description="ML-predicted probability of being tested in future exams (0.0-1.0). "
-        "Filled in Stage 6 after all data is processed.",
-    )
-
-
-def is_tested(source: SourceInfo) -> bool:
-    if source.role in (
-        AnnotationRole.CORRECT_ANSWER,
-        AnnotationRole.DISTRACTOR,
-        AnnotationRole.TESTED_KEYWORD,
-    ):
-        return True
-
-    if source.role is None and source.sentence_role == SentenceRole.OPTION:
-        return True
-
-    return False
-
-
-class EssayTopicData(BaseModel):
-    description: str
-    suggested_words: list[str]
-    source: SourceInfo
-
-
 class CleanedWordEntry(BaseModel):
     lemma: str
-    type: VocabType = VocabType.WORD
     level: int | None = Field(
         default=None,
         description="Official difficulty level (1-6) from CEEC wordlist.",
     )
     in_official_list: bool
     pos: list[str]
-    occurrences: list[LemmaOccurrence]
     frequency: FrequencyData
+    contexts: list[ContextSentence]
 
 
 class CleanedPhraseEntry(BaseModel):
     lemma: str
-    type: VocabType = VocabType.PHRASE
-    occurrences: list[LemmaOccurrence]
     frequency: FrequencyData
+    contexts: list[ContextSentence]
 
 
 class CleanedPatternEntry(BaseModel):
-    lemma: str
-    type: VocabType = VocabType.PATTERN
     pattern_category: PatternCategory
     occurrences: list[PatternOccurrence]
-    frequency: FrequencyData
 
 
 CleanedVocabEntry = CleanedWordEntry | CleanedPhraseEntry | CleanedPatternEntry
 
 
 class CleanedVocabData(BaseModel):
-    entries: list[CleanedVocabEntry]
-    essay_topics: list[EssayTopicData] = []
+    words: list[CleanedWordEntry] = []
+    phrases: list[CleanedPhraseEntry] = []
+    patterns: list[CleanedPatternEntry] = []

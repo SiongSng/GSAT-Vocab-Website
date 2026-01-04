@@ -1,34 +1,39 @@
+from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel
 
-from .cleaned import FrequencyData, LemmaOccurrence, PatternOccurrence
+from .cleaned import ContextSentence, FrequencyData, PatternOccurrence
 from .exam import PatternCategory, PatternSubtype
 
 
 class AssignedSense(BaseModel):
     sense_id: str
-    source: Literal["wordnet", "registry"]
+    source: Literal["dictionaryapi", "llm_generated"]
     pos: str | None = None
-    gloss: str | None = None
-    occurrences: list[LemmaOccurrence]
+    definition: str | None = None
+    examples: list[str] = []
+    source_metadata: dict | None = None
+    contexts: Sequence[ContextSentence] = ()
+    merged_definitions: list[str] = []
+    core_meaning: str | None = None
 
 
 class SenseAssignedWordEntry(BaseModel):
     lemma: str
-    type: Literal["word"] = "word"
     pos: list[str]
     level: int | None
     in_official_list: bool
-    senses: list[AssignedSense]
     frequency: FrequencyData
+    senses: list[AssignedSense]
+    contexts: list[ContextSentence] = []
 
 
 class SenseAssignedPhraseEntry(BaseModel):
     lemma: str
-    type: Literal["phrase"] = "phrase"
-    senses: list[AssignedSense]
     frequency: FrequencyData
+    senses: list[AssignedSense]
+    contexts: list[ContextSentence] = []
 
 
 class PatternSubtypeData(BaseModel):
@@ -40,14 +45,14 @@ class PatternSubtypeData(BaseModel):
 
 class SenseAssignedPatternEntry(BaseModel):
     lemma: str
-    type: Literal["pattern"] = "pattern"
     pattern_category: PatternCategory
     subtypes: list[PatternSubtypeData]
-    frequency: FrequencyData
 
 
 SenseAssignedEntry = SenseAssignedWordEntry | SenseAssignedPhraseEntry | SenseAssignedPatternEntry
 
 
 class SenseAssignedData(BaseModel):
-    entries: list[SenseAssignedEntry]
+    words: list[SenseAssignedWordEntry] = []
+    phrases: list[SenseAssignedPhraseEntry] = []
+    patterns: list[SenseAssignedPatternEntry] = []

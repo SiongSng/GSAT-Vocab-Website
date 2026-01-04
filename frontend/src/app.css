@@ -235,6 +235,11 @@ input[type="number"] {
 }
 
 /* Highlight marker style */
+mark {
+    background: transparent;
+    color: inherit;
+}
+
 .highlight {
     background: linear-gradient(
         to top,

@@ -1,6 +1,8 @@
-import type { VocabEntry } from "$lib/types/vocab";
-import { getEntry } from "./vocab-db";
+import type { WordEntry, PhraseEntry, PatternEntry } from "$lib/types/vocab";
+import { lookupEntry } from "./vocab-db";
 import { getAppStore } from "./app.svelte";
+
+type VocabEntry = WordEntry | PhraseEntry | PatternEntry;
 
 interface LookupItem {
     lemma: string;
@@ -53,7 +55,7 @@ export async function openLookup(lemma: string) {
             isLoading: true,
         };
         try {
-            const entry = await getEntry(lemma);
+            const entry = await lookupEntry(lemma);
             if (state.mobileItem?.lemma === lemma) {
                 state.mobileItem.entry = entry ?? null;
                 state.mobileItem.isLoading = false;
@@ -80,7 +82,7 @@ export async function openLookup(lemma: string) {
         state.items.push(newItem);
 
         try {
-            const entry = await getEntry(lemma);
+            const entry = await lookupEntry(lemma);
             const itemIndex = state.items.findIndex((item) => item.lemma === lemma);
             if (itemIndex !== -1) {
                 state.items[itemIndex].entry = entry ?? null;

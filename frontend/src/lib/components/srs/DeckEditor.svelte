@@ -1,6 +1,7 @@
 <script lang="ts">
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import type { VocabIndexItem } from "$lib/types/vocab";
+    import { isWordIndexItem } from "$lib/types/vocab";
 
     interface Props {
         initialName: string;
@@ -309,7 +310,7 @@
                                 onclick={() => handleItemClick(item.lemma)}
                             >
                                 <span class="item-lemma">{item.lemma}</span>
-                                <span class="item-pos">{item.primary_pos}</span>
+                                <span class="item-pos">{isWordIndexItem(item) ? item.primary_pos : ""}</span>
                             </button>
                         {/each}
                     </div>

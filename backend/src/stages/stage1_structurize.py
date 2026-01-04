@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -12,7 +13,6 @@ from ..models import (
     AnnotatedSentence,
     Annotation,
     AnnotationRole,
-    AnnotationType,
     EssayTopic,
     ExamType,
     MixedQuestionType,
@@ -100,31 +100,25 @@ class AnnotationOutput(BaseModel):
     surface: Annotated[
         str,
         Field(
-            description="Copy-paste the exact text from the sentence. This enables the flashcard system to highlight the word in context."
-        ),
-    ]
-    type: Annotated[
-        Literal["word", "phrase", "pattern"],
-        Field(
-            description="word: single token (e.g. 'draft'). phrase: dictionary-entry expressions like phrasal verbs ('give up', 'look forward to') or idioms ('in terms of'). pattern: grammar structures that have pattern_category and pattern_subtype (e.g. 'Had it not been for')."
+            description="For correct_answer/distractor: exact substring from sentence. For notable_phrase: dictionary lemma form (e.g., 'give up' not 'gave up')."
         ),
     ]
     role: Annotated[
         ANNOTATION_ROLE_VALUES,
         Field(
-            description="correct_answer: fills the blank. distractor: wrong option. notable_phrase: phrasal verb or idiom that appears as its own dictionary entry. notable_pattern: grammar pattern with both pattern_category and pattern_subtype specified."
+            description="correct_answer: word filling the blank. distractor: wrong option. notable_phrase: phrasal verb with dictionary entry (use lemma). notable_pattern: requires pattern_category + pattern_subtype."
         ),
     ]
     pattern_category: Annotated[
         PATTERN_CATEGORY_VALUES | None,
         Field(
-            description="Required for notable_pattern. Identifies the grammar category so students can study related patterns together."
+            description="Required for notable_pattern: participle, inversion, comparison_adv, etc."
         ),
     ] = None
     pattern_subtype: Annotated[
         PATTERN_SUBTYPE_VALUES | None,
         Field(
-            description="Required for notable_pattern. Specific pattern type within the category for precise learning."
+            description="Required for notable_pattern: perfect_participle, conditional_inversion, etc."
         ),
     ] = None
 
@@ -134,36 +128,36 @@ class SentenceOutput(BaseModel):
 
     text: Annotated[
         str,
-        Field(
-            description="Complete sentence with the correct answer filled in. Students will see this as an example sentence in their flashcards."
-        ),
+        Field(description="Complete sentence with blank filled in. No __N__ markers allowed."),
     ]
     question: Annotated[
         int | None,
-        Field(description="Exam question number for traceability. Null for passage paragraphs."),
+        Field(
+            description="Question number N from __N__ blank. Required for cloze/question_prompt/option. Null only for passage."
+        ),
     ] = None
     sentence_role: Annotated[
         SENTENCE_ROLE_VALUES,
         Field(
-            description="cloze: sentence with filled blank (vocabulary/cloze/discourse). passage: article paragraph. question_prompt: question like 'What is the main idea?'. option: answer choice. unused_option: structure section's extra option (for 5-choose-4)."
+            description="cloze: had __N__ blank. passage: context paragraph. question_prompt: 'What is...?'. option: answer choice. unused_option: structure/discourse unused item."
         ),
     ]
     annotations: Annotated[
         list[AnnotationOutput] | None,
         Field(
-            description="cloze sentences: 1 correct_answer + 3 distractors. discourse: correct_answer, plus distractors only for semantically similar alternatives. passage/option: notable_phrase or notable_pattern when genuinely useful for learning."
+            description="cloze: 1 correct_answer + 3 distractors. Add notable_phrase/notable_pattern when criteria met."
         ),
     ] = None
     mixed_question_type: Annotated[
         MIXED_QUESTION_TYPE_VALUES | None,
         Field(
-            description="For mixed section: fill_in_word (open blank), multiple_select (choose options), short_answer (written response)."
+            description="For mixed section only: fill_in_word, multiple_select, or short_answer."
         ),
     ] = None
     acceptable_answers: Annotated[
         list[str] | None,
         Field(
-            description="For fill_in_word with multiple valid answers (e.g. ['educating', 'entertaining'])."
+            description="For fill_in_word: words from the passage that fit the blank, with appropriate morphological forms applied as needed."
         ),
     ] = None
 
@@ -173,13 +167,11 @@ class SectionOutput(BaseModel):
 
     type: Annotated[
         Literal["vocabulary", "cloze", "discourse", "structure", "reading", "mixed"],
-        Field(description="Section type matching the exam structure."),
+        Field(description="Section type from exam header."),
     ]
     sentences: Annotated[
         list[SentenceOutput],
-        Field(
-            description="Each sentence is atomic with a sentence_role. One sentence per logical unit."
-        ),
+        Field(description="All sentences in order. Every __N__ blank must have a cloze entry."),
     ]
 
 
@@ -188,16 +180,16 @@ class TranslationOutput(BaseModel):
 
     question: Annotated[
         int,
-        Field(description="Translation question number."),
+        Field(description="Translation question number (1, 2, etc.)."),
     ]
     chinese_prompt: Annotated[
         str,
-        Field(description="Original Chinese text."),
+        Field(description="Original Chinese sentence to translate."),
     ]
     keywords: Annotated[
         list[str],
         Field(
-            description="3-6 English words/phrases essential for the translation. These become vocabulary entries."
+            description="3-6 key single English words (no spaces, no phrases). Break phrases into separate words."
         ),
     ]
 
@@ -207,15 +199,11 @@ class EssayOutput(BaseModel):
 
     description: Annotated[
         str,
-        Field(
-            description="Essay topic starting from '提示：'. The core prompt without meta instructions."
-        ),
+        Field(description="Essay topic text starting from '提示：'."),
     ]
     suggested_words: Annotated[
         list[str],
-        Field(
-            description="5-10 sophisticated single words that elevate essays on this topic. Focus on topic-specific vocabulary."
-        ),
+        Field(description="5-10 sophisticated single words for the topic."),
     ]
 
 
@@ -224,17 +212,15 @@ class StructuredExamOutput(BaseModel):
 
     sections: Annotated[
         list[SectionOutput],
-        Field(
-            description="Exam sections: vocabulary, cloze, discourse, structure, reading, mixed."
-        ),
+        Field(description="Exam sections in order. Do NOT include translation here."),
     ] = Field(default_factory=list)
     translation_items: Annotated[
         list[TranslationOutput],
-        Field(description="Translation questions as separate items with keywords."),
+        Field(description="Translation questions extracted separately."),
     ] = Field(default_factory=list)
     essay_topics: Annotated[
         list[EssayOutput],
-        Field(description="Essay topics with suggested vocabulary."),
+        Field(description="Essay prompts with suggested vocabulary."),
     ] = Field(default_factory=list)
 
 
@@ -249,15 +235,6 @@ def _parse_section_type(s: str) -> SectionType:
         "mixed": SectionType.MIXED,
     }
     return mapping.get(s.lower(), SectionType.MIXED)
-
-
-def _parse_annotation_type(s: str) -> AnnotationType:
-    mapping = {
-        "word": AnnotationType.WORD,
-        "phrase": AnnotationType.PHRASE,
-        "pattern": AnnotationType.PATTERN,
-    }
-    return mapping.get(s.lower(), AnnotationType.WORD)
 
 
 def _parse_annotation_role(s: str | None) -> AnnotationRole:
@@ -355,7 +332,6 @@ def _parse_mixed_question_type(s: str | None) -> MixedQuestionType | None:
 def _convert_annotation(a: AnnotationOutput) -> Annotation:
     return Annotation(
         surface=a.surface,
-        type=_parse_annotation_type(a.type),
         role=_parse_annotation_role(a.role),
         pattern_category=_parse_pattern_category(a.pattern_category),
         pattern_subtype=_parse_pattern_subtype(a.pattern_subtype),
@@ -506,9 +482,13 @@ async def structurize_exam(markdown_path: Path, year: int, exam_type: ExamType) 
             if key in STAGE1_EXAMPLES
         )
 
-        system = f"{STAGE1_SYSTEM}\n\n{STAGE1_RULES}\n\n<examples>\n{examples_text}\n</examples>"
+        prompt = f"""{STAGE1_RULES}
 
-        prompt = f"""<exam_metadata>
+<examples>
+{examples_text}
+</examples>
+
+<exam_metadata>
 Year: {year} (民國)
 Type: {exam_type.value}
 </exam_metadata>
@@ -522,7 +502,7 @@ Structure this exam section into JSON following the schema and examples provided
         try:
             return await client.complete(
                 prompt=prompt,
-                system=system,
+                system=STAGE1_SYSTEM,
                 response_model=StructuredExamOutput,
                 temperature=0.1,
                 tier=ModelTier.SMART,
@@ -552,7 +532,7 @@ Structure this exam section into JSON following the schema and examples provided
 async def process_all_markdowns(
     markdown_files: list[tuple[Path, int, ExamType]],
     cache_dir: Path,
-    progress_callback: callable = None,
+    progress_callback: Callable[[int, int], None] | None = None,
     concurrency: int = 5,
 ) -> list[StructuredExam]:
     cache_dir.mkdir(parents=True, exist_ok=True)

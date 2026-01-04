@@ -1,10 +1,17 @@
 <script lang="ts">
-    import { tick } from "svelte";
     import type { VocabIndexItem } from "$lib/types/vocab";
+    import {
+        isWordIndexItem,
+        isPhraseIndexItem,
+        isPatternIndexItem,
+    } from "$lib/types/vocab";
     import { getAppStore, openMobileDetail } from "$lib/stores/app.svelte";
-    import { selectWordAndNavigate, getVocabStore } from "$lib/stores/vocab.svelte";
+    import {
+        selectWordAndNavigate,
+        getVocabStore,
+    } from "$lib/stores/vocab.svelte";
 
-    const ITEM_HEIGHT = 72;
+    const ITEM_HEIGHT = 48;
     const GRID_ITEM_HEIGHT = 40;
     const BUFFER_COUNT = 5;
 
@@ -18,35 +25,14 @@
     const app = getAppStore();
     const vocab = getVocabStore();
 
-    let rankMapCache: Map<string, number> | null = null;
-    let lastIndexLength = 0;
-    let listContainer: HTMLDivElement | null = null;
     let scrollTop = $state(0);
     let containerHeight = $state(0);
 
-    function getRankMap(): Map<string, number> {
-        const index = vocab.index;
-        if (rankMapCache && index.length === lastIndexLength) {
-            return rankMapCache;
-        }
-        const map = new Map<string, number>();
-        for (let i = 0; i < index.length; i++) {
-            map.set(index[i].lemma, i + 1);
-        }
-        rankMapCache = map;
-        lastIndexLength = index.length;
-        return map;
-    }
-
     async function handleWordClick(word: VocabIndexItem) {
-        await selectWordAndNavigate(word.lemma);
+        await selectWordAndNavigate(word.lemma, word.type);
         if (app.isMobile) {
             openMobileDetail();
         }
-    }
-
-    function getRank(lemma: string): number {
-        return getRankMap().get(lemma) ?? 0;
     }
 
     function handleScroll(e: Event) {
@@ -85,37 +71,16 @@
         words.slice(visibleRange.startIndex, visibleRange.endIndex),
     );
     const offsetY = $derived(visibleRange.startRow * rowHeight);
-
-    $effect(() => {
-        const selectedLemma = vocab.selectedLemma;
-        void words;
-
-        tick().then(() => {
-            if (listContainer) {
-                const prev = listContainer.querySelector(".active-item");
-                if (prev) prev.classList.remove("active-item");
-
-                if (selectedLemma) {
-                    const el = listContainer.querySelector(
-                        `[data-lemma="${CSS.escape(selectedLemma)}"]`,
-                    );
-                    if (el) el.classList.add("active-item");
-                }
-            }
-        });
-    });
 </script>
 
 <div
     class="word-list-container"
-    bind:this={listContainer}
     bind:clientHeight={containerHeight}
     onscroll={handleScroll}
 >
     {#if words.length === 0}
         <div
-            class="flex flex-col items-center justify-center h-full px-4 py
--12"
+            class="flex flex-col items-center justify-center h-full px-4 py-12"
         >
             <div
                 class="w-12 h-12 rounded-full bg-surface-secondary flex items-center justify-center mb-4"
@@ -147,6 +112,9 @@
                 {#each visibleWords as word (word.lemma)}
                     <button
                         class="browse-cell"
+                        class:phrase-cell={word.type === "phrase"}
+                        class:pattern-cell={word.type === "pattern"}
+                        class:active-item={vocab.selectedLemma === word.lemma}
                         data-lemma={word.lemma}
                         onclick={() => handleWordClick(word)}
                         type="button"
@@ -162,45 +130,19 @@
                 {#each visibleWords as word (word.lemma)}
                     <button
                         class="list-item"
+                        class:active-item={vocab.selectedLemma === word.lemma}
                         data-lemma={word.lemma}
                         onclick={() => handleWordClick(word)}
                         type="button"
                     >
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <span class="font-semibold text-content-primary"
-                                    >{word.lemma}</span
-                                >
-                                <span
-                                    class="text-xs font-medium text-content-tertiary"
-                                    >{word.primary_pos}</span
-                                >
-                                {#if word.meaning_count > 1}
-                                    <span
-                                        class="text-xs px-1.5 py-0.5 bg-accent-soft text-accent rounded font-medium"
-                                    >
-                                        {word.meaning_count}義
-                                    </span>
-                                {/if}
-                            </div>
-                            {#if word.zh_preview}
-                                <p
-                                    class="text-xs text-content-secondary mt-1 truncate"
-                                >
-                                    {word.zh_preview.slice(0, 40)}...
-                                </p>
+                        <span class="item-lemma">{word.lemma}</span>
+                        <span class="item-def">
+                            {#if isWordIndexItem(word) || isPhraseIndexItem(word)}
+                                {word.zh_preview || ""}
+                            {:else if isPatternIndexItem(word)}
+                                {word.pattern_category}
                             {/if}
-                        </div>
-                        <div class="flex items-center gap-3 flex-shrink-0">
-                            <span class="text-xs text-content-tertiary"
-                                >#{getRank(word.lemma)}</span
-                            >
-                            <span
-                                class="text-xs font-mono bg-surface-page text-content-secondary px-2 py-0.5 rounded-full"
-                            >
-                                {word.count}
-                            </span>
-                        </div>
+                        </span>
                     </button>
                 {/each}
             </div>
@@ -212,26 +154,13 @@
     .word-list-container {
         height: 100%;
         overflow-y: auto;
+        overflow-x: hidden;
         contain: strict;
-        scrollbar-width: thin;
-        scrollbar-color: var(--color-border-hover) transparent;
+        scrollbar-width: none; /* Firefox */
     }
 
     .word-list-container::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .word-list-container::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .word-list-container::-webkit-scrollbar-thumb {
-        background-color: var(--color-border-hover);
-        border-radius: 3px;
-    }
-
-    .word-list-container::-webkit-scrollbar-thumb:hover {
-        background-color: var(--color-content-tertiary);
+        display: none; /* Chrome, Safari */
     }
 
     .virtual-scroll-wrapper {
@@ -247,15 +176,14 @@
 
     .list-item {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        padding: 0.875rem 1rem;
+        gap: 0.75rem;
+        padding: 0 0.75rem;
         cursor: pointer;
-        border-bottom: 1px solid var(--color-border);
+        border-left: 2px solid transparent;
         background-color: var(--color-surface-primary);
         text-align: left;
-        transition: background-color 0.15s ease;
-        height: 72px;
+        height: 48px;
         box-sizing: border-box;
     }
 
@@ -263,8 +191,31 @@
         background-color: var(--color-surface-hover);
     }
 
-    .list-item:global(.active-item) {
+    .list-item.active-item {
         background-color: var(--color-accent-soft);
+        border-left-color: var(--color-accent);
+    }
+
+    .item-lemma {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--color-content-primary);
+        letter-spacing: -0.01em;
+        flex-shrink: 0;
+    }
+
+    .item-def {
+        font-size: 0.8125rem;
+        color: var(--color-content-tertiary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .list-item.active-item .item-def {
+        color: var(--color-content-secondary);
     }
 
     .browse-cell {
@@ -285,10 +236,18 @@
         border-color: var(--color-border-hover);
     }
 
-    .browse-cell:global(.active-item) {
+    .browse-cell.active-item {
         background-color: var(--color-accent-soft);
         border-color: var(--color-accent);
         color: var(--color-accent);
+    }
+
+    .browse-cell.phrase-cell {
+        border-left: 3px solid #10b981;
+    }
+
+    .browse-cell.pattern-cell {
+        border-left: 3px solid #8b5cf6;
     }
 
     .grid-container {

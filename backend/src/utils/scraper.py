@@ -30,6 +30,11 @@ SOURCES = [
 
 SPECIAL_FILES = [
     {
+        "url": "https://www.ceec.edu.tw/files/file_pool/1/0J053430863374769111/03-01-107%E5%AD%B8%E6%B8%AC%E8%8B%B1%E6%96%87%E5%8F%83%E8%80%83%E8%A9%A6%E5%8D%B7%28%E5%AE%9A%E7%A8%BF%29.pdf",
+        "year": 107,
+        "type": "GSAT_REF",
+    },
+    {
         "url": "https://www.ceec.edu.tw/files/file_pool/1/0L251351892018529090/02-110%E8%A9%A6%E8%BE%A6%E8%80%83%E8%A9%A6%E8%8B%B1%E6%96%87%E8%A9%A6%E5%8D%B7%E5%AE%9A%E7%A8%BF.pdf",
         "year": 110,
         "type": "GSAT_TRIAL",
@@ -84,7 +89,10 @@ def download(session: requests.Session, url: str, path: Path) -> bool:
 
 def hidden_inputs(html: str) -> dict[str, str]:
     soup = BeautifulSoup(html, "html.parser")
-    return {i["name"]: i.get("value", "") for i in soup.select("form#MainForm input[type=hidden]")}
+    return {
+        str(i["name"]): str(i.get("value", ""))
+        for i in soup.select("form#MainForm input[type=hidden]")
+    }
 
 
 def fetch_page(session: requests.Session, base: dict, page: int, cat_id: str) -> str:
@@ -113,7 +121,8 @@ def parse_links(html: str, index_url: str) -> list[tuple[str, str]]:
         if "英文" not in title:
             continue
         for a in tds[2].find_all("a"):
-            ext = Path(unquote(a["href"])).suffix.lower()
+            href = str(a.get("href", ""))
+            ext = Path(unquote(href)).suffix.lower()
             text = a.get_text(strip=True)
             if ext not in ALLOW_EXT:
                 continue
@@ -121,7 +130,7 @@ def parse_links(html: str, index_url: str) -> list[tuple[str, str]]:
                 continue
             if not KEEP_RE.search(text):
                 continue
-            url = urljoin(index_url, a["href"])
+            url = urljoin(index_url, href)
             out.append((title, url))
             break
     return out
@@ -185,16 +194,16 @@ def scrape_ceec_papers(save_dir: Path, limit: int | None = None) -> int:
     print("Downloading special files...")
     for item in SPECIAL_FILES:
         try:
-            url = item["url"]
+            url = str(item["url"])
             twy = str(item["year"])
             y = str(int(twy) + 1911)
-            type_str = item["type"]
+            type_str = str(item["type"])
 
             fname = Path(unquote(url)).name
             save = save_dir / sanitize(f"{y}_{twy}_{type_str}_{fname}")
             if download(sess, url, save):
                 count += 1
         except Exception as e:
-            print(f"Error downloading {url}: {e}")
+            print(f"Error downloading {item.get('url', 'unknown')}: {e}")
 
     return count
