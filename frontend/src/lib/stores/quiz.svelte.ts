@@ -285,9 +285,3 @@ export function isAnswerCorrect(index: number): boolean | null {
   if (!result) return null;
   return result.correct;
 }
-
-export function getCurrentAnswer(): string | null {
-  const result = store.results[store.currentIndex];
-  if (!result) return null;
-  return result.correct ? store.questions[store.currentIndex].correct : null;
-}

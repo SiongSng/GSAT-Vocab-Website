@@ -87,9 +87,6 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   if (stability >= 7 && stability < 21) {
     return "spelling";
   }
-  if (stability >= 21 && stability < 60) {
-    return "spelling";
-  }
   return "distinction";
 }
 

@@ -455,7 +455,7 @@
                                     disabled={showFeedback}
                                 >
                                     <span
-                                        class="text-content-primary hidden sm:inline-block text-xs text-content-tertiary mr-2"
+                                        class="hidden sm:inline-block text-xs text-content-tertiary mr-2"
                                     >
                                         按 {i + 1}
                                     </span>
@@ -775,16 +775,16 @@
     }
 
     .feedback-correct {
-        background-color: #dcfce7;
+        background-color: var(--color-srs-good-soft);
     }
 
     .feedback-correct .feedback-icon,
     .feedback-correct .feedback-text {
-        color: #22c55e;
+        color: var(--color-srs-good);
     }
 
     .feedback-correct .continue-btn {
-        background-color: #22c55e;
+        background-color: var(--color-srs-good);
         color: white;
     }
 
@@ -793,19 +793,19 @@
     }
 
     .feedback-incorrect {
-        background-color: #fee2e2;
+        background-color: var(--color-srs-again-soft);
     }
 
     .feedback-incorrect .feedback-icon {
-        color: #ef4444;
+        color: var(--color-srs-again);
     }
 
     .feedback-incorrect .feedback-answer {
-        color: #ef4444;
+        color: var(--color-srs-again);
     }
 
     .feedback-incorrect .continue-btn {
-        background-color: #ef4444;
+        background-color: var(--color-srs-again);
         color: white;
     }
 

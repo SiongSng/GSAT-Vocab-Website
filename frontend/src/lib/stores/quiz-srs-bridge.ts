@@ -63,13 +63,11 @@ export function recordQuizResult(result: QuizResult): void {
   }
 
   const rating = mapQuizResultToRating(result);
-  if (rating === Rating.Manual) return;
-
   const now = new Date();
   const wasNew = card.state === State.New;
 
   const scheduling = fsrs.repeat(card, now);
-  const recordLog = scheduling[rating];
+  const recordLog = scheduling[rating as Exclude<Rating, Rating.Manual>];
 
   if (!recordLog) return;
 
