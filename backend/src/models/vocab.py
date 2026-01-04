@@ -3,8 +3,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from .cleaned import DistractorGroup, FrequencyData, VocabTier
-from .exam import PatternType, SourceInfo
+from .cleaned import FrequencyData
+from .exam import PatternCategory, PatternSubtype, SourceInfo
 
 
 class ExamExample(BaseModel):
@@ -14,10 +14,9 @@ class ExamExample(BaseModel):
 
 class VocabSense(BaseModel):
     sense_id: str
-    pos: str
+    pos: str | None = None
     zh_def: str
     en_def: str
-    tested_in_exam: bool
     examples: list[ExamExample]
     generated_example: str
 
@@ -33,33 +32,51 @@ class RootInfo(BaseModel):
     memory_strategy: str
 
 
-class PatternInfo(BaseModel):
-    pattern_type: PatternType
-    display_name: str | None
-    structure: str
-
-
-class VocabEntry(BaseModel):
+class WordEntry(BaseModel):
     lemma: str
-    type: str
     pos: list[str]
     level: int | None
-    tier: VocabTier
     in_official_list: bool
-    senses: list[VocabSense]
     frequency: FrequencyData
-    confusion_notes: list[ConfusionNote]
+    senses: list[VocabSense]
+    confusion_notes: list[ConfusionNote] = []
     root_info: RootInfo | None = None
-    pattern_info: PatternInfo | None = None
     synonyms: list[str] | None = None
     antonyms: list[str] | None = None
     derived_forms: list[str] | None = None
 
 
+class PhraseEntry(BaseModel):
+    lemma: str
+    frequency: FrequencyData
+    senses: list[VocabSense]
+    confusion_notes: list[ConfusionNote] = []
+    synonyms: list[str] | None = None
+    antonyms: list[str] | None = None
+    derived_forms: list[str] | None = None
+
+
+class PatternSubtypeOutput(BaseModel):
+    subtype: PatternSubtype
+    display_name: str
+    structure: str
+    examples: list[ExamExample]
+    generated_example: str
+
+
+class PatternEntry(BaseModel):
+    lemma: str
+    pattern_category: PatternCategory
+    subtypes: list[PatternSubtypeOutput]
+    teaching_explanation: str
+
+
+VocabEntry = WordEntry | PhraseEntry | PatternEntry
+
+
 class VocabMetadata(BaseModel):
     exam_year_range: dict[str, int]
     total_entries: int
-    count_by_tier: dict[str, int]
     count_by_type: dict[str, int]
 
 
@@ -67,8 +84,9 @@ class VocabDatabase(BaseModel):
     version: str
     generated_at: str
     metadata: VocabMetadata
-    entries: list[VocabEntry]
-    distractor_groups: list[DistractorGroup] = []
+    words: list[WordEntry] = []
+    phrases: list[PhraseEntry] = []
+    patterns: list[PatternEntry] = []
 
 
 class OfficialWordEntry(BaseModel):

@@ -1,23 +1,26 @@
 <script lang="ts">
     import {
-        addWordsToSRS,
+        ensureEntryCard,
         getSessionCardCounts,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import {
-        getNewCards,
         getAllCards,
         getTodayStats,
         onDataChange,
     } from "$lib/stores/srs-storage";
+    import { getSRSEligibleEntryCached } from "$lib/stores/vocab-db";
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import DeckEditor from "./DeckEditor.svelte";
     import { onDestroy } from "svelte";
     import { STORAGE_KEYS } from "$lib/storage-keys";
+    import { isWordIndexItem } from "$lib/types/vocab";
+
+    import type { SRSCard } from "$lib/types/srs";
 
     interface Props {
         onStart: (options: SessionOptions) => void;
@@ -73,8 +76,6 @@
     const unsubscribeDataChange = onDataChange(() => {
         dataVersion++;
         loadTodayStats();
-        loadCustomDecks();
-        loadSettings();
     });
 
     onDestroy(() => {
@@ -238,8 +239,11 @@
         }
 
         const newOnes = lemmas.filter((lemma) => !existingLemmaSet.has(lemma));
-        if (newOnes.length > 0) {
-            addWordsToSRS(newOnes);
+        for (const lemma of newOnes) {
+            const entry = getSRSEligibleEntryCached(lemma);
+            if (entry) {
+                ensureEntryCard(entry);
+            }
         }
 
         customDecks = decks;
@@ -272,14 +276,23 @@
         editingDeckId = null;
     }
 
-    const newCardLemmas = $derived.by(() => {
+    const allCardsSnapshot = $derived.by(() => {
         dataVersion;
-        return new Set(getNewCards().map((c) => c.lemma));
+        return getAllCards();
     });
 
     const existingLemmaSet = $derived.by(() => {
-        dataVersion;
-        return new Set(getAllCards().map((c) => c.lemma));
+        return new Set(allCardsSnapshot.map((c) => c.lemma));
+    });
+
+    const learnedLemmaSet = $derived.by(() => {
+        const set = new Set<string>();
+        for (const card of allCardsSnapshot) {
+            if (card.state !== State.New) {
+                set.add(card.lemma);
+            }
+        }
+        return set;
     });
 
     const customDeckMap = $derived.by(() => {
@@ -300,58 +313,48 @@
     });
 
     const customNewCardPool = $derived.by(() => {
-        dataVersion;
         if (!selectedDeck) return [];
-        const newSet = new Set(getNewCards().map((c) => c.lemma));
-        return selectedDeck.lemmas.filter((lemma) => newSet.has(lemma));
+        // Include lemmas that are not yet learned
+        return selectedDeck.lemmas.filter((lemma) => !learnedLemmaSet.has(lemma));
     });
 
     const deckLearnedCountMap = $derived.by(() => {
-        dataVersion;
-        const cards = getAllCards();
-        const learnedSet = new Set<string>();
-        for (const card of cards) {
-            if (card.state !== State.New) {
-                learnedSet.add(card.lemma);
-            }
-        }
         const map = new Map<string, number>();
         for (const deck of customDecks) {
             let count = 0;
             for (const lemma of deck.lemmas) {
-                if (learnedSet.has(lemma)) count++;
+                if (learnedLemmaSet.has(lemma)) count++;
             }
             map.set(deck.id, count);
         }
         return map;
     });
 
-    const learnedLemmaCount = $derived.by(() => {
-        dataVersion;
-        const cards = getAllCards();
-        const learnedLemmas = new Set<string>();
-        for (const card of cards) {
-            if (card.state !== State.New) {
-                learnedLemmas.add(card.lemma);
-            }
-        }
-        return learnedLemmas.size;
-    });
+    const learnedLemmaCount = $derived(learnedLemmaSet.size);
 
     const filteredNewCardPool = $derived.by(() => {
         let pool = vocab.index || [];
 
-        pool = pool.filter((w) => newCardLemmas.has(w.lemma));
-        pool = pool.filter((w) => w.primary_pos !== "PROPN");
+        // Only include words and phrases (patterns are not SRS eligible)
+        pool = pool.filter((w) => w.type === "word" || w.type === "phrase");
 
+        // Exclude already learned (non-New state) lemmas
+        pool = pool.filter((w) => !learnedLemmaSet.has(w.lemma));
+        pool = pool.filter((w) => !isWordIndexItem(w) || w.primary_pos !== "PROPN");
+
+        // Level filter only applies to words (phrases don't have levels)
         if (levelFilter.length > 0) {
             pool = pool.filter(
-                (w) => w.level !== null && levelFilter.includes(w.level),
+                (w) => !isWordIndexItem(w) || (w.level !== null && levelFilter.includes(w.level)),
             );
         }
 
         if (smartMode) {
-            pool = pool.sort((a, b) => b.importance_score - a.importance_score);
+            pool = pool.sort((a, b) => {
+                const aScore = "importance_score" in a ? a.importance_score : 0;
+                const bScore = "importance_score" in b ? b.importance_score : 0;
+                return bScore - aScore;
+            });
         }
 
         return pool.map((w) => w.lemma);
@@ -361,7 +364,7 @@
 
     const excludedLemmas = $derived.by(() => {
         const propnLemmas = (vocab.index || [])
-            .filter((w) => w.primary_pos === "PROPN")
+            .filter((w) => isWordIndexItem(w) && w.primary_pos === "PROPN")
             .map((w) => w.lemma);
         return new Set(propnLemmas);
     });
@@ -386,22 +389,28 @@
 
     const sessionOptions = $derived.by<SessionOptions>(() => ({
         newLimit: actualNewCardLimit,
-        newCardPool: filteredNewCardPool,
+        selectionPool: filteredNewCardPool,
         excludeLemmas: excludedLemmas,
         priority: studyPriority,
         isCustomDeck: false,
     }));
 
     const sessionCounts = $derived.by(() => {
-        dataVersion;
-        return getSessionCardCounts(sessionOptions);
+        const baseCounts = getSessionCardCounts(sessionOptions);
+        const newCount = Math.min(actualNewCardLimit, filteredNewCardPool.length);
+        return {
+            newCount,
+            learningCount: baseCounts.learningCount,
+            reviewCount: baseCounts.reviewCount,
+            total: baseCounts.learningCount + baseCounts.reviewCount + newCount,
+        };
     });
 
     const customDeckSessionOptions = $derived.by<SessionOptions | null>(() => {
         if (!selectedDeck) return null;
         return {
             newLimit: customNewCardPool.length,
-            newCardPool: customNewCardPool,
+            selectionPool: customNewCardPool,
             excludeLemmas: customExcludedLemmas,
             priority: studyPriority,
             isCustomDeck: true,
@@ -409,20 +418,47 @@
     });
 
     const customDeckSessionCounts = $derived.by(() => {
-        dataVersion;
         if (!customDeckSessionOptions) return null;
-        return getSessionCardCounts(customDeckSessionOptions);
+        const baseCounts = getSessionCardCounts(customDeckSessionOptions);
+        const newCount = customNewCardPool.length;
+        return {
+            newCount,
+            learningCount: baseCounts.learningCount,
+            reviewCount: baseCounts.reviewCount,
+            total: baseCounts.learningCount + baseCounts.reviewCount + newCount,
+        };
     });
 
     const hasCardsToStudy = $derived(sessionCounts.total > 0);
 
     function handleStart() {
-        onStart(sessionOptions);
+        const poolLemmas = filteredNewCardPool.slice(0, actualNewCardLimit);
+        const newCards: SRSCard[] = [];
+        for (const lemma of poolLemmas) {
+            const entry = getSRSEligibleEntryCached(lemma);
+            if (entry) {
+                const card = ensureEntryCard(entry);
+                if (card) {
+                    newCards.push(card);
+                }
+            }
+        }
+        onStart({ ...sessionOptions, newCards });
     }
 
     function handleStartCustomDeck() {
         if (!customDeckSessionOptions) return;
-        onStart(customDeckSessionOptions);
+        const newCards: SRSCard[] = [];
+        for (const lemma of customNewCardPool) {
+            const entry = getSRSEligibleEntryCached(lemma);
+            if (entry) {
+                const card = ensureEntryCard(entry);
+                if (card) {
+                    newCards.push(card);
+                }
+            }
+        }
+        onStart({ ...customDeckSessionOptions, newCards });
     }
 
     function handleCramDeck() {

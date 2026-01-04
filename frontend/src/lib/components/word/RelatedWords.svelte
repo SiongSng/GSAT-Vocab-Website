@@ -5,16 +5,14 @@
     interface Props {
         synonyms?: string[] | null;
         antonyms?: string[] | null;
-        derivedForms?: string[] | null;
     }
 
-    let { synonyms, antonyms, derivedForms }: Props = $props();
+    let { synonyms, antonyms }: Props = $props();
 
     const vocab = getVocabStore();
 
     const hasSynonyms = $derived(synonyms && synonyms.length > 0);
     const hasAntonyms = $derived(antonyms && antonyms.length > 0);
-    const hasDerivedForms = $derived(derivedForms && derivedForms.length > 0);
 
     function isInVocab(word: string): boolean {
         return vocab.lemmaSet.has(word.toLowerCase());
@@ -57,28 +55,6 @@
             </h4>
             <div class="flex flex-wrap gap-2">
                 {#each antonyms as word}
-                    {@const clickable = isInVocab(word)}
-                    <button
-                        type="button"
-                        class="word-chip"
-                        class:clickable
-                        onclick={() => handleClick(word)}
-                        disabled={!clickable}
-                    >
-                        {word}
-                    </button>
-                {/each}
-            </div>
-        </div>
-    {/if}
-
-    {#if hasDerivedForms}
-        <div class="derived-group">
-            <h4 class="text-xs font-medium text-content-tertiary mb-2">
-                衍生詞
-            </h4>
-            <div class="flex flex-wrap gap-2">
-                {#each derivedForms as word}
                     {@const clickable = isInVocab(word)}
                     <button
                         type="button"

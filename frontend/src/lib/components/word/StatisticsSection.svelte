@@ -25,7 +25,7 @@
     const posDistribution = $derived.by(() => {
         const posCounts = new Map<string, number>();
         for (const sense of senses) {
-            const pos = sense.pos;
+            const pos = sense.pos ?? "unknown";
             const exampleCount = sense.examples?.length ?? 0;
             const count = exampleCount > 0 ? exampleCount : 1;
             posCounts.set(pos, (posCounts.get(pos) ?? 0) + count);
@@ -81,7 +81,7 @@
             <div
                 class="text-xl font-semibold text-content-primary tracking-tight"
             >
-                {frequency.total_occurrences}
+                {frequency.total_appearances}
             </div>
             <div class="text-xs text-content-tertiary mt-1">總出現</div>
         </div>

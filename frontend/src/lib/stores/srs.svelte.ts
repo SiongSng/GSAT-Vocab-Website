@@ -16,6 +16,7 @@ import {
   shouldUnlockSecondarySenses,
   updateDailyStats,
   addSessionLog,
+  migratePrimarySenseIds,
 } from "./srs-storage";
 import { STORAGE_KEYS } from "$lib/storage-keys";
 import type {
@@ -24,6 +25,7 @@ import type {
   DeckStats,
   StudySessionStats,
   DailyLimits,
+  SRSEligibleEntry,
 } from "$lib/types/srs";
 import { DEFAULT_DAILY_LIMITS, getPrioritizedSenses } from "$lib/types/srs";
 import { preloadAudio } from "$lib/tts";
@@ -158,6 +160,19 @@ export async function initSRS(): Promise<void> {
   store.initialized = true;
 }
 
+export async function runSRSSenseMigration(
+  getEntry: (lemma: string) => Promise<SRSEligibleEntry | undefined>,
+): Promise<number> {
+  if (!store.initialized) {
+    await initSRS();
+  }
+  const migrated = await migratePrimarySenseIds(getEntry);
+  if (migrated > 0) {
+    store.statsVersion++;
+  }
+  return migrated;
+}
+
 function loadDailyProgress(): void {
   const today = getTodayKey();
   try {
@@ -196,24 +211,50 @@ function getTodayKey(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-export function addWordToSRS(lemma: string, senseId: string = "primary"): void {
+export function addWordToSRS(lemma: string, senseId: string): void {
   ensureCard(lemma, senseId);
 }
 
-export function addWordsToSRS(lemmas: string[]): void {
-  for (const lemma of lemmas) {
-    ensureCard(lemma, "primary");
+export function addEntryToSRS(entry: SRSEligibleEntry): void {
+  const prioritizedSenses = getPrioritizedSenses(entry);
+  const entryType = "pos" in entry ? "word" : "phrase";
+
+  if (prioritizedSenses.length === 0) {
+    return;
+  }
+
+  // Only add the primary sense initially
+  const primarySense = prioritizedSenses[0].sense;
+  ensureCard(entry.lemma, primarySense.sense_id, entryType);
+}
+
+export function ensureEntryCard(entry: SRSEligibleEntry): SRSCard | null {
+  const prioritizedSenses = getPrioritizedSenses(entry);
+  const entryType = "pos" in entry ? "word" : "phrase";
+
+  if (prioritizedSenses.length === 0) {
+    return null;
+  }
+
+  const primarySense = prioritizedSenses[0].sense;
+  return ensureCard(entry.lemma, primarySense.sense_id, entryType);
+}
+
+export function addEntriesToSRS(entries: SRSEligibleEntry[]): void {
+  for (const entry of entries) {
+    addEntryToSRS(entry);
   }
 }
 
 export function addWordWithAllSenses(entry: VocabEntry): void {
   const prioritizedSenses = getPrioritizedSenses(entry);
+  const entryType = "pos" in entry ? "word" : "phrase";
+
   if (prioritizedSenses.length === 0) {
-    ensureCard(entry.lemma, "primary");
     return;
   }
   for (const { sense } of prioritizedSenses) {
-    ensureCard(entry.lemma, sense.sense_id);
+    ensureCard(entry.lemma, sense.sense_id, entryType);
   }
 }
 
@@ -223,25 +264,46 @@ export function addWordsWithAllSenses(entries: VocabEntry[]): void {
   }
 }
 
-export function addSenseToSRS(lemma: string, senseId: string): void {
-  ensureCard(lemma, senseId);
+export function addSenseToSRS(
+  lemma: string,
+  senseId: string,
+  entryType: "word" | "phrase" = "word",
+): void {
+  ensureCard(lemma, senseId, entryType);
 }
 
 function getEligibleNewCards(
   excludeSet: Set<string>,
-  orderedPool?: string[],
+  selectionPool?: string[],
 ): SRSCard[] {
+  if (selectionPool && selectionPool.length > 0) {
+    const result: SRSCard[] = [];
+    for (const lemma of selectionPool) {
+      if (excludeSet.has(lemma)) continue;
+      const cardsForLemma = getCardsByLemma(lemma);
+      if (cardsForLemma.length === 0) continue;
+
+      const newCards = cardsForLemma.filter((c) => c.state === State.New);
+      if (newCards.length === 0) continue;
+
+      const primaryCard = newCards[0];
+      const isPrimarySense = cardsForLemma.length === 1 || cardsForLemma[0] === primaryCard;
+
+      if (isPrimarySense || shouldUnlockSecondarySenses(lemma)) {
+        result.push(primaryCard);
+      }
+    }
+    return result;
+  }
+
   const allNewCards = getNewCards();
   const cardMap = new Map<string, SRSCard[]>();
 
   for (const card of allNewCards) {
     if (excludeSet.has(card.lemma)) continue;
 
-    const isPrimarySense =
-      card.sense_id === "primary" ||
-      !getCardsByLemma(card.lemma).some(
-        (c) => c.sense_id === "primary" && c !== card,
-      );
+    const cardsForLemma = getCardsByLemma(card.lemma);
+    const isPrimarySense = cardsForLemma.length === 1 || cardsForLemma[0] === card;
 
     const isEligible =
       isPrimarySense || shouldUnlockSecondarySenses(card.lemma);
@@ -253,17 +315,6 @@ function getEligibleNewCards(
     }
   }
 
-  if (orderedPool && orderedPool.length > 0) {
-    const result: SRSCard[] = [];
-    for (const lemma of orderedPool) {
-      const cards = cardMap.get(lemma);
-      if (cards) {
-        result.push(...cards);
-      }
-    }
-    return result;
-  }
-
   return Array.from(cardMap.values()).flat();
 }
 
@@ -272,7 +323,8 @@ export type StudyPriority = "mixed" | "new_first" | "review_first";
 export interface SessionOptions {
   newLimit: number;
   reviewLimit?: number;
-  newCardPool?: string[];
+  selectionPool?: string[];
+  newCards?: SRSCard[];
   excludeLemmas?: Set<string>;
   priority?: StudyPriority;
   isCustomDeck?: boolean;
@@ -292,7 +344,7 @@ interface SessionCards {
   reviewCards: SRSCard[];
 }
 
-function getSessionCardsInternal(options: SessionOptions): SessionCards {
+function selectSessionCards(options: SessionOptions): SessionCards {
   const now = new Date();
   const excludeSet = options.excludeLemmas ?? new Set();
   const isCustomDeck = options.isCustomDeck ?? false;
@@ -308,8 +360,9 @@ function getSessionCardsInternal(options: SessionOptions): SessionCards {
     .filter((c) => !excludeSet.has(c.lemma))
     .slice(0, reviewLimit === Infinity ? undefined : reviewLimit);
 
-  const eligibleNewCards = getEligibleNewCards(excludeSet, options.newCardPool);
-  const newCards = eligibleNewCards.slice(0, options.newLimit);
+  const newCards = options.newCards
+    ? options.newCards.slice(0, options.newLimit)
+    : getEligibleNewCards(excludeSet, options.selectionPool).slice(0, options.newLimit);
 
   return { newCards, learningCards, reviewCards };
 }
@@ -317,14 +370,69 @@ function getSessionCardsInternal(options: SessionOptions): SessionCards {
 export function getSessionCardCounts(
   options: SessionOptions,
 ): SessionCardCounts {
-  const { newCards, learningCards, reviewCards } =
-    getSessionCardsInternal(options);
+  const { newCards, learningCards, reviewCards } = selectSessionCards(options);
   return {
     newCount: newCards.length,
     learningCount: learningCards.length,
     reviewCount: reviewCards.length,
     total: newCards.length + learningCards.length + reviewCards.length,
   };
+}
+
+function shuffleArray<T>(array: T[]): void {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+function buildStudyQueue(
+  cards: SessionCards,
+  priority: StudyPriority,
+): SRSCard[] {
+  const { newCards, learningCards, reviewCards } = cards;
+
+  shuffleArray(newCards);
+  shuffleArray(learningCards);
+  shuffleArray(reviewCards);
+
+  switch (priority) {
+    case "new_first":
+      return [...newCards, ...learningCards, ...reviewCards];
+    case "review_first":
+      return [...learningCards, ...reviewCards, ...newCards];
+    case "mixed":
+    default: {
+      const reviewPart = [...learningCards, ...reviewCards];
+      return interleaveCards(reviewPart, newCards);
+    }
+  }
+}
+
+function interleaveCards<T>(reviewCards: T[], newCards: T[]): T[] {
+  if (newCards.length === 0) return reviewCards;
+  if (reviewCards.length === 0) return newCards;
+
+  const result: T[] = [];
+  const ratio = reviewCards.length / newCards.length;
+
+  let reviewIdx = 0;
+  let newIdx = 0;
+
+  while (reviewIdx < reviewCards.length || newIdx < newCards.length) {
+    if (reviewIdx < reviewCards.length) {
+      const reviewsToAdd = Math.max(1, Math.round(ratio));
+      for (let i = 0; i < reviewsToAdd && reviewIdx < reviewCards.length; i++) {
+        result.push(reviewCards[reviewIdx++]);
+      }
+    }
+
+    if (newIdx < newCards.length) {
+      result.push(newCards[newIdx++]);
+    }
+  }
+
+  return result;
 }
 
 export function startStudySession(options: SessionOptions): void {
@@ -344,24 +452,9 @@ export function startStudySession(options: SessionOptions): void {
     queue = Array.from(seen.values());
     shuffleArray(queue);
   } else {
-    const { newCards, learningCards, reviewCards } =
-      getSessionCardsInternal(options);
+    const cards = selectSessionCards(options);
     const priority = options.priority ?? "mixed";
-
-    if (priority === "mixed") {
-      queue = [...learningCards, ...reviewCards, ...newCards];
-      shuffleArray(queue);
-    } else if (priority === "review_first") {
-      shuffleArray(learningCards);
-      shuffleArray(reviewCards);
-      shuffleArray(newCards);
-      queue = [...learningCards, ...reviewCards, ...newCards];
-    } else {
-      shuffleArray(learningCards);
-      shuffleArray(reviewCards);
-      shuffleArray(newCards);
-      queue = [...newCards, ...learningCards, ...reviewCards];
-    }
+    queue = buildStudyQueue(cards, priority);
   }
 
   store.studyQueue = queue;
@@ -453,6 +546,7 @@ export function rateCard(rating: Rating): void {
     ...newCard,
     lemma: store.currentCard.lemma,
     sense_id: store.currentCard.sense_id,
+    entry_type: store.currentCard.entry_type,
   };
 
   updateCard(updatedCard);
@@ -588,13 +682,6 @@ export function loadDailyLimits(): void {
     }
   } catch {
     // ignore
-  }
-}
-
-function shuffleArray<T>(array: T[]): void {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
   }
 }
 

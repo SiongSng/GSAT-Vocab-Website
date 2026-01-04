@@ -4,8 +4,9 @@ import type {
   SRSReviewLog,
   DailyStats,
   SessionLog,
+  SRSEligibleEntry,
 } from "$lib/types/srs";
-import { createCardKey } from "$lib/types/srs";
+import { createCardKey, getPrimarySenseId } from "$lib/types/srs";
 import { createEmptyCard, State, Rating } from "ts-fsrs";
 
 const DB_NAME = "gsat-vocab-srs-v2";
@@ -28,6 +29,7 @@ interface SRSDatabase {
 
 let db: IDBPDatabase<SRSDatabase> | null = null;
 let cardsCache: Map<string, SRSCard> = new Map();
+let cardsByLemmaCache: Map<string, SRSCard[]> = new Map();
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -117,6 +119,7 @@ async function migrateFromOldDB(): Promise<boolean> {
       const migratedCard: SRSCard = {
         ...oldCard,
         sense_id: "primary",
+        entry_type: "word" as const,
       };
       await store.put(migratedCard);
     }
@@ -130,21 +133,84 @@ async function migrateFromOldDB(): Promise<boolean> {
   }
 }
 
+function ensureCardHasEntryType(card: SRSCard): SRSCard {
+  if (!card.entry_type) {
+    return { ...card, entry_type: "word" as const };
+  }
+  return card;
+}
+
+function rebuildLemmaIndex(cards: SRSCard[]): void {
+  cardsByLemmaCache.clear();
+  for (const card of cards) {
+    const existing = cardsByLemmaCache.get(card.lemma);
+    if (existing) {
+      existing.push(card);
+    } else {
+      cardsByLemmaCache.set(card.lemma, [card]);
+    }
+  }
+}
+
+function addToLemmaIndex(card: SRSCard): void {
+  const existing = cardsByLemmaCache.get(card.lemma);
+  if (existing) {
+    const idx = existing.findIndex(
+      (c) => c.sense_id === card.sense_id,
+    );
+    if (idx >= 0) {
+      existing[idx] = card;
+    } else {
+      existing.push(card);
+    }
+  } else {
+    cardsByLemmaCache.set(card.lemma, [card]);
+  }
+}
+
+function removeFromLemmaIndex(lemma: string, senseId: string): void {
+  const existing = cardsByLemmaCache.get(lemma);
+  if (existing) {
+    const idx = existing.findIndex((c) => c.sense_id === senseId);
+    if (idx >= 0) {
+      existing.splice(idx, 1);
+      if (existing.length === 0) {
+        cardsByLemmaCache.delete(lemma);
+      }
+    }
+  }
+}
+
 export async function initStorage(): Promise<void> {
   const database = await getDB();
 
   const migrated = await migrateFromOldDB();
-  if (migrated) {
-    const cards = await database.getAll(CARDS_STORE);
-    cardsCache = new Map(
-      cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
-    );
-  } else {
-    const cards = await database.getAll(CARDS_STORE);
-    cardsCache = new Map(
-      cards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
-    );
+  const cards = await database.getAll(CARDS_STORE);
+
+  let needsUpdate = false;
+  const updatedCards: SRSCard[] = [];
+
+  for (const card of cards) {
+    const updated = ensureCardHasEntryType(card);
+    if (updated !== card) {
+      needsUpdate = true;
+    }
+    updatedCards.push(updated);
   }
+
+  if (needsUpdate && !migrated) {
+    const tx = database.transaction(CARDS_STORE, "readwrite");
+    const store = tx.objectStore(CARDS_STORE);
+    for (const card of updatedCards) {
+      await store.put(card);
+    }
+    await tx.done;
+  }
+
+  cardsCache = new Map(
+    updatedCards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
+  );
+  rebuildLemmaIndex(updatedCards);
 }
 
 export function getCard(lemma: string, senseId: string): SRSCard | undefined {
@@ -152,13 +218,7 @@ export function getCard(lemma: string, senseId: string): SRSCard | undefined {
 }
 
 export function getCardsByLemma(lemma: string): SRSCard[] {
-  const cards: SRSCard[] = [];
-  for (const card of cardsCache.values()) {
-    if (card.lemma === lemma) {
-      cards.push(card);
-    }
-  }
-  return cards;
+  return cardsByLemmaCache.get(lemma) ?? [];
 }
 
 export function getAllCards(): SRSCard[] {
@@ -189,22 +249,32 @@ export function getReviewCards(now: Date = new Date()): SRSCard[] {
   );
 }
 
-export function createCard(lemma: string, senseId: string): SRSCard {
+export function createCard(
+  lemma: string,
+  senseId: string,
+  entryType: "word" | "phrase" = "word",
+): SRSCard {
   const baseCard = createEmptyCard();
   const card: SRSCard = {
     ...baseCard,
     lemma,
     sense_id: senseId,
+    entry_type: entryType,
   };
   return card;
 }
 
-export function ensureCard(lemma: string, senseId: string): SRSCard {
+export function ensureCard(
+  lemma: string,
+  senseId: string,
+  entryType: "word" | "phrase" = "word",
+): SRSCard {
   const key = createCardKey(lemma, senseId);
   let card = cardsCache.get(key);
   if (!card) {
-    card = createCard(lemma, senseId);
+    card = createCard(lemma, senseId, entryType);
     cardsCache.set(key, card);
+    addToLemmaIndex(card);
     scheduleSave();
   }
   return card;
@@ -212,6 +282,7 @@ export function ensureCard(lemma: string, senseId: string): SRSCard {
 
 export function updateCard(card: SRSCard): void {
   cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
+  addToLemmaIndex(card);
   setLastUpdated(Date.now());
   scheduleSave();
 }
@@ -222,11 +293,13 @@ export async function setAllCards(cards: SRSCard[]): Promise<void> {
   const store = tx.objectStore(CARDS_STORE);
   await store.clear();
   cardsCache.clear();
+  cardsByLemmaCache.clear();
   for (const card of cards) {
     cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
     await store.put(card);
   }
   await tx.done;
+  rebuildLemmaIndex(cards);
 }
 
 export async function getLastUpdated(): Promise<number> {
@@ -307,6 +380,7 @@ export async function clearAllData(): Promise<void> {
   await database.clear(LOGS_STORE);
   await database.clear(META_STORE);
   cardsCache.clear();
+  cardsByLemmaCache.clear();
 }
 
 export function getCacheSize(): number {
@@ -314,17 +388,12 @@ export function getCacheSize(): number {
 }
 
 export function hasCardForLemma(lemma: string): boolean {
-  for (const card of cardsCache.values()) {
-    if (card.lemma === lemma) {
-      return true;
-    }
-  }
-  return false;
+  return cardsByLemmaCache.has(lemma);
 }
 
 export function getPrimaryCard(lemma: string): SRSCard | undefined {
   const cards = getCardsByLemma(lemma);
-  return cards.find((c) => c.sense_id === "primary") || cards[0];
+  return cards[0];
 }
 
 export function getStableSenseCards(
@@ -337,9 +406,85 @@ export function getStableSenseCards(
 }
 
 export function shouldUnlockSecondarySenses(lemma: string): boolean {
-  const primaryCard = getCard(lemma, "primary");
+  const primaryCard = getPrimaryCard(lemma);
   if (!primaryCard) return false;
-  return primaryCard.stability >= 10 && primaryCard.state === State.Review;
+  return primaryCard.reps >= 3;
+}
+
+export async function migratePrimarySenseIds(
+  getEntry: (lemma: string) => Promise<SRSEligibleEntry | undefined>,
+): Promise<number> {
+  const cards = getAllCards();
+  if (cards.length === 0) return 0;
+
+  const uniqueLemmas = [...new Set(cards.map((c) => c.lemma))];
+  const entryMap = new Map<string, SRSEligibleEntry>();
+
+  for (const lemma of uniqueLemmas) {
+    const entry = await getEntry(lemma);
+    if (entry && entry.senses && entry.senses.length > 0) {
+      entryMap.set(lemma, entry);
+    }
+  }
+
+  if (entryMap.size === 0) return 0;
+
+  const cardsToDelete: SRSCard[] = [];
+  const cardsToMigrate: Array<{ oldCard: SRSCard; newSenseId: string }> = [];
+
+  for (const lemma of uniqueLemmas) {
+    const entry = entryMap.get(lemma);
+    if (!entry) continue;
+
+    const primarySenseId = getPrimarySenseId(entry);
+    const lemmaCards = cards.filter((c) => c.lemma === lemma);
+    const hasPrimaryCard = lemmaCards.some((c) => c.sense_id === primarySenseId);
+
+    for (const card of lemmaCards) {
+      if (card.sense_id === primarySenseId) {
+        continue;
+      }
+
+      if (hasPrimaryCard) {
+        cardsToDelete.push(card);
+      } else {
+        cardsToMigrate.push({ oldCard: card, newSenseId: primarySenseId });
+      }
+    }
+  }
+
+  if (cardsToDelete.length === 0 && cardsToMigrate.length === 0) return 0;
+
+  const database = await getDB();
+  const tx = database.transaction(CARDS_STORE, "readwrite");
+  const store = tx.objectStore(CARDS_STORE);
+
+  for (const card of cardsToDelete) {
+    store.delete([card.lemma, card.sense_id]);
+  }
+
+  for (const { oldCard, newSenseId } of cardsToMigrate) {
+    store.delete([oldCard.lemma, oldCard.sense_id]);
+    const newCard: SRSCard = { ...oldCard, sense_id: newSenseId };
+    store.put(newCard);
+  }
+
+  await tx.done;
+
+  for (const card of cardsToDelete) {
+    cardsCache.delete(createCardKey(card.lemma, card.sense_id));
+    removeFromLemmaIndex(card.lemma, card.sense_id);
+  }
+
+  for (const { oldCard, newSenseId } of cardsToMigrate) {
+    cardsCache.delete(createCardKey(oldCard.lemma, oldCard.sense_id));
+    removeFromLemmaIndex(oldCard.lemma, oldCard.sense_id);
+    const newCard: SRSCard = { ...oldCard, sense_id: newSenseId };
+    cardsCache.set(createCardKey(newCard.lemma, newCard.sense_id), newCard);
+    addToLemmaIndex(newCard);
+  }
+
+  return cardsToDelete.length + cardsToMigrate.length;
 }
 
 function getTodayDateKey(): string {
@@ -566,6 +711,7 @@ export async function importDatabase(
   for (const card of snapshot.cards) {
     cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
   }
+  rebuildLemmaIndex(snapshot.cards);
 
   notifyDataChange();
 }

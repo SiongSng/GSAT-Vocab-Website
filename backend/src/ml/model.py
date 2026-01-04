@@ -202,7 +202,7 @@ def train_model(
     Train an importance prediction model.
 
     Args:
-        entries: List of vocabulary entries from cleaned.json
+        entries: List of vocabulary entries from extracted.json
         distractor_groups: List of distractor groups
         essay_topics: List of essay topics with suggested words (NEW)
         target_year: Year to predict for
@@ -217,9 +217,6 @@ def train_model(
     logger.info(f"Preparing training data for target year {target_year} (mode: {target_mode})...")
 
     extractor = FeatureExtractor(current_year=target_year)
-    extractor.build_distractor_index(distractor_groups)
-    if essay_topics:
-        extractor.build_essay_index(essay_topics)
 
     X_data: list[list[float]] = []
     y_data: list[int] = []
@@ -227,18 +224,18 @@ def train_model(
 
     for entry in entries:
         if gsat_only:
-            filtered_occurrences = [
-                occ
-                for occ in entry.get("occurrences", [])
-                if occ.get("source", {}).get("exam_type", "").startswith("gsat")
+            filtered_contexts = [
+                ctx
+                for ctx in entry.get("contexts", [])
+                if ctx.get("source", {}).get("exam_type", "").startswith("gsat")
             ]
-            if not filtered_occurrences:
+            if not filtered_contexts:
                 continue
-            entry = {**entry, "occurrences": filtered_occurrences}
+            entry = {**entry, "contexts": filtered_contexts}
 
         word_data = extractor.extract_word_data(entry)
         features = extractor.extract_feature_vector(
-            word_data, target_year=target_year, lookback_years=lookback_years
+            word_data, target_year=target_year
         )
 
         if features is None:
@@ -248,7 +245,8 @@ def train_model(
 
         X_data.append(features)
         y_data.append(label)
-        lemmas.append(entry["lemma"])
+        lemma = entry.get("lemma") or entry.get("word") or ""
+        lemmas.append(str(lemma))
 
     X = np.array(X_data)
     y = np.array(y_data)
@@ -289,25 +287,18 @@ class ImportanceScorer:
     def __init__(
         self,
         model: ImportanceModel | None = None,
-        distractor_groups: list[dict] | None = None,
-        essay_topics: list[dict] | None = None,
         current_year: int = 114,
     ):
         self.model = model
         self.extractor = FeatureExtractor(current_year=current_year)
         self.current_year = current_year
 
-        if distractor_groups:
-            self.extractor.build_distractor_index(distractor_groups)
-        if essay_topics:
-            self.extractor.build_essay_index(essay_topics)
-
     def score_entry(self, entry: dict[str, Any]) -> float | None:
         if self.model is None:
             return None
 
         word_data = self.extractor.extract_word_data(entry)
-        features = self.extractor.extract_feature_vector(word_data)
+        features = self.extractor.extract_feature_vector(word_data, target_year=self.current_year)
 
         if features is None:
             return None
@@ -324,7 +315,7 @@ class ImportanceScorer:
 
         for entry in entries:
             word_data = self.extractor.extract_word_data(entry)
-            features = self.extractor.extract_feature_vector(word_data)
+            features = self.extractor.extract_feature_vector(word_data, target_year=self.current_year)
 
             if features is not None:
                 batch_features.append(features)

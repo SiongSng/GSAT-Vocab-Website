@@ -1,13 +1,14 @@
-import type { VocabDatabase, VersionInfo } from "$lib/types/vocab";
+import type { VocabDatabase, VersionInfo, WordEntry, PhraseEntry } from "$lib/types/vocab";
 import {
   getStoredVersion,
   setStoredVersion,
   getStoredMetadata,
   setStoredMetadata,
   clearAllStores,
-  bulkInsertEntries,
-  bulkInsertDistractorGroups,
-  getEntriesCount,
+  bulkInsertWords,
+  bulkInsertPhrases,
+  bulkInsertPatterns,
+  getTotalEntriesCount,
 } from "./vocab-db";
 
 const VERSION_URL = `${import.meta.env.BASE_URL}data/version.json`;
@@ -39,14 +40,15 @@ export async function checkForUpdate(): Promise<{
   const needsUpdate =
     !localVersion ||
     localVersion !== remoteVersion.version ||
-    (remoteVersion.vocab_hash && localMetadata?.vocab_hash !== remoteVersion.vocab_hash) ||
-    (await getEntriesCount()) === 0;
+    (remoteVersion.vocab_hash &&
+      localMetadata?.vocab_hash !== remoteVersion.vocab_hash) ||
+    (await getTotalEntriesCount()) === 0;
 
   return { needsUpdate, remoteVersion };
 }
 
 async function decompressGzipStream(
-  response: Response
+  response: Response,
 ): Promise<VocabDatabase> {
   if (!response.body) {
     throw new Error("Response body is null");
@@ -77,7 +79,7 @@ async function decompressGzipStream(
 }
 
 async function decompressGzipFallback(
-  response: Response
+  response: Response,
 ): Promise<VocabDatabase> {
   const arrayBuffer = await response.arrayBuffer();
   const blob = new Blob([arrayBuffer]);
@@ -89,7 +91,8 @@ async function decompressGzipFallback(
 }
 
 export async function downloadAndStoreVocab(
-  onProgress?: (progress: LoadProgress) => void
+  onProgress?: (progress: LoadProgress) => void,
+  versionInfo?: VersionInfo,
 ): Promise<void> {
   onProgress?.({
     phase: "downloading",
@@ -114,10 +117,8 @@ export async function downloadAndStoreVocab(
   const contentEncoding = response.headers.get("Content-Encoding");
 
   if (contentEncoding === "gzip") {
-    // Server already decompressed it (Vite dev server behavior)
     vocabData = await response.json();
   } else {
-    // Need to decompress manually (production with static .gz file)
     try {
       const clonedResponse = response.clone();
       vocabData = await decompressGzipStream(clonedResponse);
@@ -125,17 +126,19 @@ export async function downloadAndStoreVocab(
       try {
         vocabData = await decompressGzipFallback(response);
       } catch {
-        // Last resort: maybe it's already JSON
         const text = await response.text();
         vocabData = JSON.parse(text);
       }
     }
   }
 
-  const entries = vocabData.entries;
-  const distractorGroups = vocabData.distractor_groups ?? [];
-  const total = entries.length;
-  const distractorTotal = distractorGroups.length;
+  const words = vocabData.words ?? [];
+  const phrases = vocabData.phrases ?? [];
+  const patterns = vocabData.patterns ?? [];
+
+  normalizeImportanceScores(words, phrases);
+
+  const total = words.length + phrases.length + patterns.length;
 
   onProgress?.({
     phase: "storing",
@@ -146,28 +149,47 @@ export async function downloadAndStoreVocab(
 
   await clearAllStores();
 
-  await bulkInsertEntries(entries, (current, entriesTotal) => {
+  let processed = 0;
+
+  await bulkInsertWords(words, (current, wordsTotal) => {
+    processed = current;
     onProgress?.({
       phase: "storing",
-      current,
-      total: entriesTotal,
-      message: `正在儲存詞彙資料 (${current} / ${entriesTotal})...`,
+      current: processed,
+      total,
+      message: `正在儲存單字資料 (${current} / ${wordsTotal})...`,
     });
   });
 
-  if (distractorGroups.length > 0) {
+  processed = words.length;
+
+  if (phrases.length > 0) {
     onProgress?.({
       phase: "storing",
-      current: 0,
-      total: distractorTotal,
-      message: `正在儲存考古題資料 (0 / ${distractorTotal})...`,
+      current: processed,
+      total,
+      message: `正在儲存片語資料...`,
     });
-
-    await bulkInsertDistractorGroups(distractorGroups);
+    await bulkInsertPhrases(phrases);
+    processed += phrases.length;
   }
 
-  await setStoredVersion(vocabData.version);
-  await setStoredMetadata(vocabData.metadata);
+  if (patterns.length > 0) {
+    onProgress?.({
+      phase: "storing",
+      current: processed,
+      total,
+      message: `正在儲存句型資料...`,
+    });
+    await bulkInsertPatterns(patterns);
+    processed += patterns.length;
+  }
+
+  await setStoredVersion(versionInfo?.version ?? vocabData.version);
+  await setStoredMetadata({
+    ...vocabData.metadata,
+    vocab_hash: versionInfo?.vocab_hash,
+  });
 
   onProgress?.({
     phase: "ready",
@@ -178,7 +200,7 @@ export async function downloadAndStoreVocab(
 }
 
 export async function loadVocabWithVersionCheck(
-  onProgress?: (progress: LoadProgress) => void
+  onProgress?: (progress: LoadProgress) => void,
 ): Promise<boolean> {
   onProgress?.({
     phase: "checking",
@@ -187,10 +209,10 @@ export async function loadVocabWithVersionCheck(
     message: "正在檢查更新...",
   });
 
-  const { needsUpdate } = await checkForUpdate();
+  const { needsUpdate, remoteVersion } = await checkForUpdate();
 
   if (needsUpdate) {
-    await downloadAndStoreVocab(onProgress);
+    await downloadAndStoreVocab(onProgress, remoteVersion);
     return true;
   }
 
@@ -202,4 +224,48 @@ export async function loadVocabWithVersionCheck(
   });
 
   return false;
+}
+
+function normalizeImportanceScores(
+  words: WordEntry[],
+  phrases: PhraseEntry[],
+): void {
+  const allScores: number[] = [];
+
+  for (const word of words) {
+    if (word.frequency?.ml_score != null) {
+      allScores.push(word.frequency.ml_score);
+    }
+  }
+  for (const phrase of phrases) {
+    if (phrase.frequency?.ml_score != null) {
+      allScores.push(phrase.frequency.ml_score);
+    }
+  }
+
+  let minScore = 0;
+  let maxScore = 1;
+  if (allScores.length > 0) {
+    minScore = Math.min(...allScores);
+    maxScore = Math.max(...allScores);
+  }
+  const scoreRange = maxScore - minScore || 1;
+
+  for (const word of words) {
+    if (word.frequency) {
+      word.frequency.importance_score =
+        word.frequency.ml_score != null
+          ? (word.frequency.ml_score - minScore) / scoreRange
+          : word.frequency.total_appearances / 100;
+    }
+  }
+
+  for (const phrase of phrases) {
+    if (phrase.frequency) {
+      phrase.frequency.importance_score =
+        phrase.frequency.ml_score != null
+          ? (phrase.frequency.ml_score - minScore) / scoreRange
+          : phrase.frequency.total_appearances / 100;
+    }
+  }
 }

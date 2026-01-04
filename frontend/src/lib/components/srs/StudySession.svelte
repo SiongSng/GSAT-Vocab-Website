@@ -7,9 +7,10 @@
         showAnswer,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { getEntry, getEntryCached } from "$lib/stores/vocab-db";
+    import { getSRSEligibleEntry, getWordCached, getPhraseCached } from "$lib/stores/vocab-db";
     import { createAudioController } from "$lib/tts";
-    import type { VocabEntry } from "$lib/types/vocab";
+    import type { WordEntry, PhraseEntry } from "$lib/types/vocab";
+    type VocabEntry = WordEntry | PhraseEntry;
     import Flashcard from "./Flashcard.svelte";
     import RatingButtons from "./RatingButtons.svelte";
     import ProgressBar from "./ProgressBar.svelte";
@@ -54,7 +55,7 @@
         if (cardKey && cardKey !== lastCardKey) {
             lastCardKey = cardKey;
 
-            const cached = getEntryCached(card!.lemma);
+            const cached = getWordCached(card!.lemma) ?? getPhraseCached(card!.lemma);
             if (cached) {
                 vocabEntry = cached;
                 isLoadingDetail = false;
@@ -75,7 +76,7 @@
     async function loadWordDetail(lemma: string) {
         isLoadingDetail = true;
         try {
-            vocabEntry = (await getEntry(lemma)) ?? null;
+            vocabEntry = (await getSRSEligibleEntry(lemma)) ?? null;
         } catch {
             vocabEntry = null;
         } finally {

@@ -11,9 +11,11 @@
         getLast7DaysStats,
         getMasteryProgress,
         getHeatmapData,
+        getMultiSenseProgress,
         type StreakInfo,
         type MasteryProgress,
         type HeatmapCell,
+        type MultiSenseProgress,
     } from "$lib/utils/stats";
     import type { DailyStats } from "$lib/types/srs";
     import { getAppStore } from "$lib/stores/app.svelte";
@@ -44,6 +46,18 @@
         review: 0,
         mastered: 0,
         total: 0,
+    });
+
+    // Multi-sense progress state
+    let multiSenseProgress: MultiSenseProgress = $state({
+        totalSenses: 0,
+        masteredSenses: 0,
+        activeSenses: 0,
+        wordsFullyMastered: 0,
+        wordsPartiallyMastered: 0,
+        wordsStarted: 0,
+        wordsNotStarted: 0,
+        multiSenseWords: 0,
     });
 
     // Helper to calculate mastery (non-reactive to avoid freezing)
@@ -84,6 +98,9 @@
                     new: notStartedCount + progress.new,
                     total: top75Count,
                 };
+
+                // Calculate multi-sense progress for all vocab (not just top 75%)
+                multiSenseProgress = getMultiSenseProgress(cards, vocabList);
             } else {
                 masteryProgress = getMasteryProgress(cards);
             }
@@ -411,6 +428,55 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Multi-sense Progress Card -->
+            {#if multiSenseProgress.multiSenseWords > 0}
+                <div class="side-card multi-sense-card">
+                    <div class="section-title-row">
+                        <h3 class="section-title">多義詞學習</h3>
+                        <HelpTooltip text="追蹤一字多義的學習進度，這是學測重點" />
+                    </div>
+                    <div class="multi-sense-content">
+                        <div class="sense-stats-row">
+                            <div class="sense-stat">
+                                <span class="sense-stat-value">{multiSenseProgress.masteredSenses}</span>
+                                <span class="sense-stat-label">字義精熟</span>
+                            </div>
+                            <div class="sense-stat-divider"></div>
+                            <div class="sense-stat">
+                                <span class="sense-stat-value">{multiSenseProgress.totalSenses}</span>
+                                <span class="sense-stat-label">總字義數</span>
+                            </div>
+                        </div>
+                        <div class="multi-sense-legend">
+                            <div class="legend-item">
+                                <div class="legend-info">
+                                    <span class="legend-dot" style="background: var(--color-srs-good);"></span>
+                                    <span class="legend-label">完全精熟</span>
+                                </div>
+                                <span class="legend-value">{multiSenseProgress.wordsFullyMastered}</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-info">
+                                    <span class="legend-dot" style="background: var(--color-srs-hard);"></span>
+                                    <span class="legend-label">部分精熟</span>
+                                </div>
+                                <span class="legend-value">{multiSenseProgress.wordsPartiallyMastered}</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-info">
+                                    <span class="legend-dot" style="background: var(--color-srs-easy);"></span>
+                                    <span class="legend-label">學習中</span>
+                                </div>
+                                <span class="legend-value">{multiSenseProgress.wordsStarted}</span>
+                            </div>
+                        </div>
+                        <p class="multi-sense-hint">
+                            共 {multiSenseProgress.multiSenseWords} 個多義詞
+                        </p>
+                    </div>
+                </div>
+            {/if}
 
             <!-- Heatmap Card -->
             <div class="heatmap-card grid-main-bottom">
@@ -809,5 +875,79 @@
         font-weight: 600;
         color: var(--color-content-primary);
         font-variant-numeric: tabular-nums;
+    }
+
+    /* Multi-sense Card */
+    .multi-sense-card {
+        margin-top: 1rem;
+    }
+
+    @media (min-width: 768px) {
+        .multi-sense-card {
+            grid-column: 2;
+            grid-row: 2;
+            margin-top: 0;
+        }
+
+        .grid-side-bottom {
+            grid-row: 3;
+        }
+    }
+
+    .multi-sense-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .sense-stats-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        padding: 0.75rem 0;
+    }
+
+    .sense-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .sense-stat-value {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--color-content-primary);
+        line-height: 1;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .sense-stat-label {
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+    }
+
+    .sense-stat-divider {
+        width: 1px;
+        height: 2rem;
+        background: var(--color-border);
+    }
+
+    .multi-sense-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .multi-sense-hint {
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        text-align: center;
+        margin: 0;
+        padding-top: 0.5rem;
+        border-top: 1px dashed var(--color-border);
     }
 </style>

@@ -1,10 +1,11 @@
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 
 import nltk
 from nltk.corpus import wordnet as wn
 
-from ..models import VocabEntry
+from ..models import PatternEntry, PhraseEntry, VocabEntry, WordEntry
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +22,15 @@ POS_MAP = {
 }
 
 
-def _get_wordnet_relations(lemma: str, pos_list: list[str]) -> tuple[set[str], set[str], set[str]]:
+def _get_wordnet_relations(
+    lemma: str, pos_list: list[str] | None
+) -> tuple[set[str], set[str], set[str]]:
     synonyms = set()
     antonyms = set()
     derived = set()
 
-    for pos in pos_list:
-        wn_pos = POS_MAP.get(pos.upper())
-        if not wn_pos:
-            continue
-
-        for synset in wn.synsets(lemma, pos=wn_pos):
+    def process_synsets(synsets):
+        for synset in synsets:
             for syn_lemma in synset.lemmas():
                 name = syn_lemma.name().replace("_", " ").lower()
                 if name != lemma.lower():
@@ -46,12 +45,21 @@ def _get_wordnet_relations(lemma: str, pos_list: list[str]) -> tuple[set[str], s
                     if form_name != lemma.lower():
                         derived.add(form_name)
 
+    if pos_list:
+        for pos in pos_list:
+            wn_pos = POS_MAP.get(pos.upper())
+            if not wn_pos:
+                continue
+            process_synsets(wn.synsets(lemma, pos=wn_pos))
+    else:
+        process_synsets(wn.synsets(lemma))
+
     return synonyms, antonyms, derived
 
 
 def compute_relations(
     entries: list[VocabEntry],
-    progress_callback: callable = None,
+    progress_callback: Callable[[int, int, int], None] | None = None,
 ) -> list[VocabEntry]:
     if not entries:
         return entries
@@ -64,10 +72,11 @@ def compute_relations(
     derived_map: dict[str, list[str]] = defaultdict(list)
 
     for i, entry in enumerate(entries):
-        if entry.type != "word":
+        if isinstance(entry, PatternEntry):
             continue
 
-        syns, ants, dervs = _get_wordnet_relations(entry.lemma, entry.pos)
+        pos_list = entry.pos if isinstance(entry, WordEntry) else None
+        syns, ants, dervs = _get_wordnet_relations(entry.lemma, pos_list or [])
 
         filtered_syns = [s for s in syns if s in lemma_set][:MAX_RELATIONS]
         filtered_ants = [a for a in ants if a in lemma_set][:MAX_RELATIONS]
@@ -88,6 +97,10 @@ def compute_relations(
 
     updated_entries: list[VocabEntry] = []
     for entry in entries:
+        if isinstance(entry, PatternEntry):
+            updated_entries.append(entry)
+            continue
+
         syns = synonyms_map.get(entry.lemma)
         ants = antonyms_map.get(entry.lemma)
         dervs = derived_map.get(entry.lemma)
@@ -101,9 +114,15 @@ def compute_relations(
         )
         updated_entries.append(updated)
 
-    syn_count = sum(1 for e in updated_entries if e.synonyms)
-    ant_count = sum(1 for e in updated_entries if e.antonyms)
-    derv_count = sum(1 for e in updated_entries if e.derived_forms)
+    syn_count = sum(
+        1 for e in updated_entries if isinstance(e, (WordEntry, PhraseEntry)) and e.synonyms
+    )
+    ant_count = sum(
+        1 for e in updated_entries if isinstance(e, (WordEntry, PhraseEntry)) and e.antonyms
+    )
+    derv_count = sum(
+        1 for e in updated_entries if isinstance(e, (WordEntry, PhraseEntry)) and e.derived_forms
+    )
     logger.info(
         f"Found {syn_count} entries with synonyms, {ant_count} with antonyms, {derv_count} with derived forms"
     )

@@ -6,6 +6,7 @@ Your output feeds an NLP pipeline that extracts vocabulary from exam sentences. 
 - Section headers to classify question types
 - Blank markers to identify fill-in-the-blank answers
 - Option formatting to extract answer choices
+- Question prompts to understand what is being asked
 </context>
 
 <formatting_rules>
@@ -13,27 +14,33 @@ Your output feeds an NLP pipeline that extracts vocabulary from exam sentences. 
    - ## 詞彙題 / Vocabulary
    - ## 綜合測驗 / Cloze Test
    - ## 文意選填 / Discourse Cloze
+   - ## 篇章結構 / Paragraph Structure
    - ## 閱讀測驗 / Reading Comprehension
    - ## 翻譯題 / Translation
    - ## 作文題 / Writing
+   - ## 混合題 / Mixed Questions
 
 2. Question numbers: Preserve exactly as they appear in the source
 
 3. Blanks: Mark as __N__ where N is the question number
-   Example: "The cathedral is __21__ for its architecture"
+   Example: The __5__ was too heavy to carry.
 
-4. Options: Format as (A), (B), (C), (D) on separate lines, indented under each question
+4. Options: Format as (A) option (B) option (C) option (D) option on the same line
 
-5. Passages: Keep paragraph structure intact, preserve line breaks between paragraphs
+5. Paragraphs: Preserve original paragraph breaks
 
-6. Cloze passages: Keep blanks inline within paragraphs
-   Example: "Motion sickness can __16__ suddenly, progressing from..."
+6. Tables: Convert to Markdown tables
 
-7. Remove: Page headers, footers, watermarks, page numbers, exam codes
+7. Special characters: Preserve all punctuation and special characters
 
 8. Keep blanks empty: Do not fill in answers
 
 9. Question Groups: Format markers indicating a group of questions (e.g. '第 41 至 44 題為題組') as a Level 3 header: `### 第 41-44 題為題組`. Ensure it is on its own line.
+
+10. Question prompts: PRESERVE all instruction text that tells students what to do
+    - "請依據文意，填入最適當的答案" → keep this
+    - "請根據上文，從 (A) 到 (F) 選出正確答案" → keep this
+    - Any text explaining how to answer the question → keep this
 </formatting_rules>
 
 <output_format>
@@ -41,360 +48,369 @@ Clean Markdown with consistent structure. Each section clearly delimited.
 </output_format>
 """
 
-STAGE1_SYSTEM = """You are an expert English teacher structuring Taiwan GSAT/AST exam content for vocabulary analysis.
+# =============================================================================
+# STAGE 1: Markdown → Structured JSON
+# =============================================================================
 
-<context>
-Your structured output feeds a vocabulary learning system (SRS flashcards). The pipeline uses your output to:
-- Extract tested vocabulary and their contexts
-- Identify distractor words that confuse students
-- Build confusion notes from wrong answer choices
-- Classify vocabulary by how they appeared in exams
+STAGE1_SYSTEM = """You structure Taiwan GSAT English exams into JSON for a vocabulary learning system.
 
-Quality directly impacts student learning outcomes.
-</context>
+<purpose>
+This system helps Taiwanese high school students prepare for GSAT by:
+1. Creating flashcards from real exam sentences
+2. Highlighting phrasal verbs worth memorizing
+3. Identifying grammar patterns teachers emphasize for GSAT
+</purpose>
 
-<task>
-Convert exam Markdown into structured JSON:
-1. Identify and classify each section by question type
-2. Fill in correct answers for all blanks
-3. Record distractors (wrong answer options) for vocabulary and cloze sections
-4. Annotate notable vocabulary and grammar patterns
+<your_role>
+You are an experienced English teacher who knows exactly what Taiwanese high school students need to study. Apply pedagogical judgment — annotate only what genuinely helps students, not everything technically possible.
+</your_role>
+"""
+
+STAGE1_RULES = """<task>
+Convert exam Markdown to structured JSON. Fill in all blanks with correct answers.
 </task>
 
-<output_schema>
-{
-  "sections": [Section],
-  "essay_topics": [EssayTopic]
-}
+<critical_constraints>
+1. Every __N__ blank becomes a cloze sentence with question=N
+2. Annotation surface must be an EXACT substring of the sentence (case-sensitive)
+3. Output text contains filled answers, never __N__ markers
+4. Use ONLY schema-defined values for enums — invent nothing
+5. Single-word fields (translation.keywords, essay.suggested_words): Output individual words only, never multi-word phrases. A word contains no spaces. Split phrases into components: "according to" → ["according"], "traffic accidents" → ["traffic", "accidents"]. Phrases are intuitive to students; isolated vocabulary words are what they need to study.
+</critical_constraints>
 
-Section = {
-  "type": "vocabulary" | "cloze" | "discourse" | "structure" | "reading" | "translation",
-  "sentences": [Sentence],
-  "distractors": [Distractor]
-}
+<sentence_roles>
+Use these roles to classify each sentence:
+- cloze: Originally had a blank, now filled in
+- passage: Context paragraph without blanks
+- question_prompt: Question text like "What is the main idea?"
+- option: Answer choice for reading/structure questions
+- unused_option: Unused options in 5-choose-4 or word bank leftovers
+</sentence_roles>
 
-Sentence = {
-  "text": string,           // Full sentence with blank filled in
-  "question": int | null,   // Question number if this sentence has a blank
-  "annotations": [Annotation]
-}
+<annotations>
 
-Distractor = {
-  "question": int,
-  "context": string,        // Original sentence with __N__ blank
-  "correct": string,        // The correct answer word/phrase
-  "wrong": [string, string, string]  // The three wrong options
-}
+## correct_answer / distractor
+- correct_answer: The word/phrase filling the blank
+- distractor: Wrong options from exam choices
+- For vocabulary/cloze sections: exactly 1 correct_answer + 3 distractors
 
-Annotation = {
-  "surface": string,        // MUST be an EXACT substring from the sentence text. NO descriptions, labels, or paraphrases.
-  "type": "word" | "phrase" | "pattern",
-  "pattern_type": null | "conditional" | "subjunctive" | "relative_clause" | "passive_voice" | "inversion" | "cleft_sentence" | "participle_construction" | "emphatic" | "other"
-}
+## notable_phrase
+Purpose: Mark multi-word expressions that students must memorize because the meaning is NOT deducible from components.
 
-CRITICAL: The "surface" field must contain the EXACT text as it appears in the sentence.
-- CORRECT: "Not satisfied with the first draft"
-- WRONG: "participle construction: Not satisfied..."
-- WRONG: "who/which-clause reduced appositive: \"a psychologist...\""
+The test: Can a student who knows each word separately guess the phrase's meaning? No → mark it.
 
-EssayTopic = {
-  "description": string, // The FULL original instruction text of the essay question (usually in Traditional Chinese)
-  "suggested_words": [string] // List of 5-10 useful single English words (no phrases) extracted from the prompt
-}
-</output_schema>
+Include these types:
+1. Phrasal verbs: "give up" → 放棄, "take on" → 承擔
+2. Idioms: "a piece of cake" → 很簡單, "break the ice" → 打破僵局
+3. Idiomatic phrases: "by and large" → 大致上, "once in a blue moon" → 千載難逢
+4. Fixed collocations (opaque): "catch a cold" → 感冒 (why catch?)
+
+Mark when meaning is opaque:
+  ✓ "give up" → 放棄 (not deducible from give + up)
+  ✓ "take on" → 承擔 (not deducible from take + on)
+  ✓ "a piece of cake" → 很簡單 (idiom, not about cake)
+  ✓ "break the ice" → 打破僵局 (idiom, not about ice)
+  ✓ "by and large" → 大致上 (fixed phrase)
+  ✓ "make one's way" → 前進 (not deducible from make + way)
+  ✓ "catch a cold" → 感冒 (why "catch"? opaque collocation)
+
+Skip when meaning is transparent:
+  ✗ "look at" → 看 (obviously look + at)
+  ✗ "go to" → 去 (obviously go + to)
+  ✗ "make a decision" → 做決定 (transparent collocation)
+  ✗ "grow up" → 長大 (transparent: grow upward → mature)
+
+Surface form: Always use dictionary lemma
+  - Sentence has "gave up" → surface is "give up"
+  - Sentence has "made its way" → surface is "make one's way"
+  - Sentence has "breaking the ice" → surface is "break the ice"
+
+## notable_pattern
+Purpose: Mark grammar patterns that GSAT tests and teachers explicitly teach. These appear as dedicated chapters in grammar books.
+
+Verify structure exists — keywords alone are insufficient:
+  - Inversion requires auxiliary BEFORE subject
+    ✓ "Not only does he sing..." (does before he = inversion)
+    ✗ "He is not only smart but also kind" (no inversion, just conjunction)
+  - Participle clause must modify the main clause
+  - Subjunctive needs mood markers (were, should, past for unreal)
+
+Use schema values only. If no subtype fits, skip the annotation entirely.
+
+</annotations>
 
 <section_processing>
-vocabulary (詞彙題):
-  - One sentence per question with the blank filled in
-  - annotations: Mark the answer word as tested_answer
-  - distractors: Record question, context (with __N__), correct answer, and 3 wrong options
 
-cloze (綜合測驗):
-  - Split passage into sentences, assign question numbers to sentences containing blanks
-  - annotations: Mark each answer as tested_answer
-  - distractors: Record all options for each question (same format as vocabulary)
+vocabulary:
+- All sentences are cloze with question number
+- Each: 1 correct_answer + 3 distractors
+- Check for notable_phrase/notable_pattern
 
-discourse (文意選填):
-  - Word Filling: Fill blanks with single words from a word bank.
-  - Reconstruct the full passage with the CORRECT answer words filled in.
-  - annotations: Mark each inserted answer word as tested_answer.
-  - distractors: Record all word options for each question.
+cloze:
+- Blanked sentences → cloze with correct_answer + 3 distractors
+- Context paragraphs → passage
+- Check notable_phrase/notable_pattern in both
 
-structure (篇章結構):
-  - Sentence Filling: Fill blanks with sentences from a sentence bank.
-  - Reconstruct the full passage with the CORRECT answer sentences filled in.
-  - annotations: [] (sentences are context, not tested keywords)
-  - distractors: Record all sentence options for each question (for 5-choose-4, include the unused sentence).
+discourse:
+- Blanked sentences → cloze with correct_answer
+- Context paragraphs → passage
+- Unused word bank → unused_option (one per word)
 
-reading (閱讀測驗):
-  - sentences:
-    - Include full passage paragraphs with question=null
-    - Convert questions into natural declarative sentences reflecting the correct answer.
-    - STRICTLY FORBID meta-labels like "Question X", "Answer:", "Q39", or option letters "(A)".
-  - annotations: []
-  - distractors:
-    - context: Use the ORIGINAL question text. Preserve WH-questions exactly. Use __N__ only for sentence completion.
-    - correct/wrong: Record all options.
+structure:
+- Original paragraphs → passage
+- Inserted sentences → option with question=N
+- Unused sentences → unused_option
 
-translation (翻譯題):
-  - Include the English translation sentences
-  - annotations: Mark key vocabulary as tested_keyword (prefer single words)
-  - distractors: []
+reading:
+- Article → passage (check notable_phrase/notable_pattern)
+- Question text → question_prompt with question=N
+- Choices → option with question=N
+
+mixed (post-2022 format):
+- fill_in_word: Student extracts word from passage, applies morphology. Use acceptable_answers for alternatives.
+- short_answer: Answer is single word/phrase. Text field contains only the answer.
+- multiple_select: Standard options with question=N
+- Omit Chinese prompts; keep English prompts as question_prompt
+
+translation:
+- Use translation_items array (not a section)
+- Fields: question, chinese_prompt, keywords
+- keywords: 3-6 vocabulary words for the translation (single-word constraint #5 applies)
+
+essay:
+- Use essay_topics array
+- Fields: description (from 提示), suggested_words
+- suggested_words: 5-12 sophisticated vocabulary words (single-word constraint #5 applies)
+
 </section_processing>
 
-<essay_processing>
-ACT AS an expert writing coach. Your goal is to prepare students for the final composition task.
-1. LOCATE the Composition section (usually Part II).
-2. EXTRACT the full prompt text (Traditional Chinese) into "description".
-3. ANALYZE the prompt's theme, required genre (argumentative/narrative), and key points.
-4. BRAINSTORM 5-10 sophisticated, high-impact English words (single words, no phrases) that would specifically elevate an essay on this topic.
-   - Focus on words that express the core concepts precisely.
-   - Avoid generic words like "good", "bad", "happy".
-   - Example: For a topic on "loneliness", suggest "isolation", "solitary", "disconnect".
-</essay_processing>
+<multi_blank_sentences>
+When one sentence has multiple blanks (__17__ ... __18__):
+- Create separate entries sharing the same filled text
+- Each entry has its own question number and annotations
+</multi_blank_sentences>
 
-<annotation_guidelines>
-The NLP pipeline automatically extracts all passage words. Only annotate these specific cases:
-
-type="word": Single words (tested answers or keywords)
-  - Examples: "draft", "strike", "disrupted"
-  - Negated verbs: "do not match" → annotate "match" as word
-  - In translation sections, annotate key vocabulary words
-
-type="phrase": Multi-word units that function as one lexical item
-  - Phrasal verbs: "turn in", "give up", "look forward to"
-  - Idioms: "take advantage of", "in terms of", "by and large"
-  - Exclude regular collocations: "very important", "the first"
-  - PRIORITIZE single words. Do NOT annotate generic phrases like "magical objects".
-
-type="pattern": Grammar patterns worth highlighting (requires pattern_type)
-  - participle_construction: "Not satisfied with...", "Left vacant..."
-  - inversion: "Had I known...", "Not only...but also...", "Rarely do..."
-  - subjunctive: "Were it not for...", "as if he were..."
-  - conditional: "If...would...", "Unless..."
-  - relative_clause: "...which...", "...who..."
-  - passive_voice: "...was built...", "...is considered..."
-  - cleft_sentence: "It is...that...", "What...is..."
-  - emphatic: "do/does/did + verb" for emphasis
-  - other: Use ONLY for rare, pedagogically significant patterns that are NOT covered above (e.g. "The more... the more..."). DO NOT use for common phrases or simple clauses.
-</annotation_guidelines>
-
-<examples>
-<example type="vocabulary">
-Input:
-5. Not satisfied with the first __5__ of her essay, Mary revised it.
-(A) draft (B) chapter (C) volume (D) edition
-
-Output section:
-{
-  "type": "vocabulary",
-  "sentences": [{
-    "text": "Not satisfied with the first draft of her essay, Mary revised it.",
-    "question": 5,
-    "annotations": [
-      {"surface": "draft", "type": "word", "pattern_type": null},
-      {"surface": "Not satisfied with", "type": "pattern", "pattern_type": "participle_construction"}
-    ]
-  }],
-  "distractors": [{
-    "question": 5,
-    "context": "Not satisfied with the first __5__ of her essay, Mary revised it.",
-    "correct": "draft",
-    "wrong": ["chapter", "volume", "edition"]
-  }]
-}
-</example>
-
-<example type="cloze">
-Input:
-It can __16__ suddenly, progressing from a feeling of uneasiness.
-16. (A) crash (B) flush (C) burst (D) strike
-
-Output section:
-{
-  "type": "cloze",
-  "sentences": [{
-    "text": "It can strike suddenly, progressing from a feeling of uneasiness.",
-    "question": 16,
-    "annotations": [
-      {"surface": "strike", "type": "word", "pattern_type": null}
-    ]
-  }],
-  "distractors": [{
-    "question": 16,
-    "context": "It can __16__ suddenly, progressing from a feeling of uneasiness.",
-    "correct": "strike",
-    "wrong": ["crash", "flush", "burst"]
-  }]
-}
-</example>
-
-<example type="discourse">
-Input:
-For many years, people thought the __1__ of smoking were __2__ to smokers.
-(A) damages (B) limited (C) harmful ...
-
-Output section:
-{
-  "type": "discourse",
-  "sentences": [
-    {"text": "For many years, people thought the damages of smoking were limited to smokers.", "question": 1, "annotations": [{"surface": "damages", "type": "word", "pattern_type": null}]},
-    {"text": "For many years, people thought the damages of smoking were limited to smokers.", "question": 2, "annotations": [{"surface": "limited", "type": "word", "pattern_type": null}]}
-  ],
-  "distractors": [
-    {"question": 1, "context": "...the __1__ of smoking...", "correct": "damages", "wrong": ["symptoms", "harmful", "activated"]},
-    {"question": 2, "context": "...were __2__ to smokers.", "correct": "limited", "wrong": ["weak", "near", "public"]}
-  ]
-}
-</example>
-
-<example type="structure">
-Input:
-Passage about capsule hotels with blanks __31-34__ and 4 sentence options (A)-(D).
-
-Output section:
-{
-  "type": "structure",
-  "sentences": [
-    {"text": "A capsule hotel is a unique type of affordable accommodation.", "question": null, "annotations": []},
-    {"text": "Today, they provide low-budget lodging worldwide.", "question": 31, "annotations": []},
-    {"text": "The chambers are stacked side-by-side, two units high.", "question": 32, "annotations": []},
-    {"text": "In response to rising demands, hotels are embracing innovation.", "question": 33, "annotations": []},
-    {"text": "The room's walls easily transmit sound.", "question": 34, "annotations": []}
-  ],
-  "distractors": [
-    {"question": 31, "context": "Originated in Japan, these hotels were initially meant for business professionals. __31__", "correct": "Today, they provide low-budget lodging worldwide.", "wrong": ["The chambers are stacked side-by-side.", "In response to rising demands...", "The room's walls easily transmit sound."]},
-    {"question": 32, "context": "The walls may be made of wood, metal or fiberglass. __32__", "correct": "The chambers are stacked side-by-side.", "wrong": ["Today, they provide low-budget lodging.", "In response to rising demands...", "The room's walls easily transmit sound."]}
-  ]
-}
-</example>
-
-<example type="reading">
-Input:
-Passage about traffic control systems...
-Question 35: What is this passage mainly about?
-(A) The evolution of traffic control systems.
-(B) How to drive safely.
-(C) The history of cars.
-(D) Why traffic lights are red.
-
-Output section:
-{
-  "type": "reading",
-  "sentences": [
-    {"text": "While waiting to cross the street at busy intersections, you may have noticed...", "question": null, "annotations": []},
-    {"text": "The passage mainly describes the evolution of traffic control systems.", "question": 35, "annotations": []}
-  ],
-  "distractors": [{
-    "question": 35,
-    "context": "What is this passage mainly about?",
-    "correct": "The evolution of traffic control systems",
-    "wrong": ["How to drive safely", "The history of cars", "Why traffic lights are red"]
-  }]
-}
-</example>
-</examples>
-
-Return valid JSON only.
+<final_validation>
+Before output:
+□ Every __N__ has corresponding cloze with question=N
+□ Every surface is verbatim substring of sentence
+□ Vocabulary/cloze have exactly 1 correct + 3 distractors
+□ No __N__ markers remain in text
+□ All enum values exist in schema
+</final_validation>
 """
 
-STAGE3_GENERATE_SYSTEM = """You are creating vocabulary flashcard content for Taiwan high school students preparing for GSAT/AST exams.
+STAGE1_EXAMPLES = {
+    "vocabulary": """{
+  "sections": [{
+    "type": "vocabulary",
+    "sentences": [
+      {
+        "text": "Not satisfied with the first draft of her essay, Mary revised it several times before turning it in to the teacher.",
+        "sentence_role": "cloze",
+        "question": 5,
+        "annotations": [
+          {"surface": "draft", "role": "correct_answer"},
+          {"surface": "text", "role": "distractor"},
+          {"surface": "brush", "role": "distractor"},
+          {"surface": "plot", "role": "distractor"},
+          {"surface": "Not satisfied with", "role": "notable_pattern", "pattern_category": "participle", "pattern_subtype": "perfect_participle"},
+          {"surface": "turn in", "role": "notable_phrase"}
+        ]
+      }
+    ]
+  }]
+}
 
-<context>
-Your output powers a spaced repetition system (SRS) for vocabulary learning. Students use these flashcards to:
-- Learn word meanings through definitions and examples
-- Understand distinctions between commonly confused words
-- Memorize difficult words through etymology and mnemonics
+Why "turn in" is marked: 繳交 cannot be guessed from turn + in.
+Why "Not satisfied with" is marked: Participle clause at sentence start — classic GSAT grammar point.""",
+    "cloze": """{
+  "sections": [{
+    "type": "cloze",
+    "sentences": [
+      {
+        "text": "But some mountain ranges are also home to glaciers and ice sheets.",
+        "sentence_role": "cloze",
+        "question": 11,
+        "annotations": [
+          {"surface": "home to", "role": "correct_answer"},
+          {"surface": "covers of", "role": "distractor"},
+          {"surface": "roofs over", "role": "distractor"},
+          {"surface": "room for", "role": "distractor"},
+          {"surface": "home to", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "Having already shrunk by 85%, the glaciers will completely disappear within a decade.",
+        "sentence_role": "cloze",
+        "question": 13,
+        "annotations": [
+          {"surface": "Having", "role": "correct_answer"},
+          {"surface": "Have", "role": "distractor"},
+          {"surface": "Had", "role": "distractor"},
+          {"surface": "Having been", "role": "distractor"},
+          {"surface": "Having already shrunk by 85%", "role": "notable_pattern", "pattern_category": "participle", "pattern_subtype": "perfect_participle"}
+        ]
+      },
+      {
+        "text": "Had it not been for modern medicine, travelers would still suffer greatly.",
+        "sentence_role": "cloze",
+        "question": 17,
+        "annotations": [
+          {"surface": "suffer", "role": "correct_answer"},
+          {"surface": "differ", "role": "distractor"},
+          {"surface": "wander", "role": "distractor"},
+          {"surface": "linger", "role": "distractor"},
+          {"surface": "Had it not been for", "role": "notable_pattern", "pattern_category": "inversion", "pattern_subtype": "conditional_inversion"}
+        ]
+      }
+    ]
+  }]
+}
 
-Quality definitions and relevant examples directly impact learning effectiveness.
-</context>
+Why "home to" is notable_phrase: "be home to" = 是...的棲息地, not guessable from home + to.
+Why "Had it not been for" is inversion: Auxiliary "Had" precedes subject "it" — conditional inversion.""",
+    "discourse": """{
+  "sections": [{
+    "type": "discourse",
+    "sentences": [
+      {
+        "text": "Many people come from far away to pour out their feelings.",
+        "sentence_role": "passage",
+        "annotations": [
+          {"surface": "pour out", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "These people often tried out things for the first time during shooting.",
+        "sentence_role": "cloze",
+        "question": 24,
+        "annotations": [
+          {"surface": "tried out", "role": "correct_answer"},
+          {"surface": "try out", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "activated",
+        "sentence_role": "unused_option"
+      }
+    ]
+  }]
+}
 
-<input_format>
-<entries>
-  <entry lemma="..." tier="tested|translation|pattern|phrase|basic" level="1-6 or unknown" pos="VERB,NOUN,...">
-    <examples>
-      "exam sentence 1"
-      "exam sentence 2"
-    </examples>
-    <distractors>word1, word2, word3</distractors>
-  </entry>
-</entries>
+Surface form: correct_answer keeps sentence form "tried out", but notable_phrase uses lemma "try out".""",
+    "structure": """{
+  "sections": [{
+    "type": "structure",
+    "sentences": [
+      {
+        "text": "Having originated in Japan, these hotels were initially meant for business professionals.",
+        "sentence_role": "passage",
+        "annotations": [
+          {"surface": "Having originated in Japan", "role": "notable_pattern", "pattern_category": "participle", "pattern_subtype": "perfect_participle"}
+        ]
+      },
+      {
+        "text": "Today, they provide low-budget, overnight lodging in commerce centers.",
+        "sentence_role": "option",
+        "question": 31
+      },
+      {
+        "text": "The chambers are stacked side-by-side, with the upper rooms reached by a ladder.",
+        "sentence_role": "option",
+        "question": 32,
+        "annotations": [
+          {"surface": "with the upper rooms reached by a ladder", "role": "notable_pattern", "pattern_category": "participle", "pattern_subtype": "with_participle"}
+        ]
+      },
+      {
+        "text": "However, the small space can feel claustrophobic for some travelers.",
+        "sentence_role": "unused_option"
+      }
+    ]
+  }]
+}""",
+    "reading": """{
+  "sections": [{
+    "type": "reading",
+    "sentences": [
+      {
+        "text": "They are brave enough to help in an emergency while others may stand by.",
+        "sentence_role": "passage",
+        "annotations": [
+          {"surface": "stand by", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "In 1945, devastated from the war, the country set about establishing a cheap industry.",
+        "sentence_role": "passage",
+        "annotations": [
+          {"surface": "set about", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "What is the main idea of the passage?",
+        "sentence_role": "question_prompt",
+        "question": 35
+      },
+      {
+        "text": "The sandals American soldiers brought home later became modern flip-flops.",
+        "sentence_role": "option",
+        "question": 37
+      }
+    ]
+  }]
+}
 
-Tier meanings:
-- tested: Word was a fill-in-the-blank answer (highest priority)
-- translation: Word appeared in translation section
-- writing: Word suggested for the essay topic
-- pattern: Abstract grammar pattern (e.g. Subjunctive, Inversion)
-- phrase: Multi-word expression or idiom (e.g. "look forward to")
-- basic: Common word appearing in passages
-
-Level: CEEC official wordlist level (1=basic, 6=advanced)
-</input_format>
-
-<output_requirements>
-Return JSON with one item per input entry. Each item contains only "lemma" and the fields below:
-
-1. senses (required, 1-3 per entry):
-   Generate common senses of the word/phrase, not limited to exam context.
-   - pos: NOUN, VERB, ADJ, ADV, or PHRASE
-   - zh_def: Traditional Chinese definition, concise (under 15 characters)
-   - en_def: Clear English definition for learners
-   - example: ONE English sentence showing typical usage (DO NOT repeat input examples)
-
-2. confusion_notes (tested tier only, usually empty):
-   Distractors from input are exam design choices, not necessarily confusable words.
-   Only generate when words are genuinely confusable in meaning or spelling:
-   - Similar meaning: affect/effect, principal/principle
-   - Similar spelling: quiet/quite, desert/dessert
-   - Similar usage: borrow/lend, rise/raise
-   Return null in most cases. Only include if confusion is real and common.
-   - confused_with: The genuinely confusable word
-   - distinction: Traditional Chinese explanation of the difference
-   - memory_tip: Traditional Chinese mnemonic or memory aid
-
-3. root_info (level >= 2 only):
-   Provide etymology OR a memory aid to help students remember.
-   - root_breakdown: Component analysis (e.g., "pre- + dict") if applicable. Return null if no clear root.
-   - memory_strategy: Traditional Chinese memory aid. Prioritize explaining how roots combine to form meaning. If no roots, provide a creative mnemonic (e.g. sound-alike) helpful for Taiwanese students.
-   Return null for level 1 words.
-
-4. pattern_info (required for pattern tier):
-   Generate for items in 'pattern' tier or other abstract grammar structures.
-   Do NOT generate for idioms or phrasal verbs (like "gave rise to", "look forward to") - just provide definitions for these.
-   - pattern_type: conditional, subjunctive, relative_clause, passive_voice, inversion, cleft_sentence, participle_construction, emphatic, or other
-   - display_name: Traditional Chinese name (only if pattern_type="other"), otherwise null
-   - structure: English grammar template (common high school textbook style)
-   Return null for idioms, phrases, and normal words.
-</output_requirements>
-
-<chinese_formatting>
-Use Traditional Chinese with full-width punctuation:
-- Punctuation: ，。；：？！
-- Quotation marks: 「」（not ""）
-- Parentheses: （）（not ()）
-</chinese_formatting>
-
-<quality_standards>
-Definitions:
-- zh_def: Precise, under 15 characters, avoid circular definitions
-- en_def: Use simple vocabulary, explain meaning clearly
-
-Example (MUST be in English):
-- Match the word's level: level 1-2 use simple sentences, level 5-6 can use complex structures
-- Show the word's distinctive features: collocations, typical contexts, register (formal/informal)
-- Demonstrate correct usage patterns (prepositions, word order, grammatical structures)
-- Use natural, realistic scenarios a high school student would understand
-- Avoid overly simple sentences like "I like X" or "This is X"
-
-Spacing in Chinese text:
-- Add space between Chinese and English: 「pre- 表示之前」not「pre-表示之前」
-- Add space around symbols: 「ped（foot）+ ian」not「ped（foot）＋ian」
-
-Confusion notes:
-- Only include when words are genuinely confusable
-- Explain semantic or usage differences clearly
-- Provide actionable memory tips
-</quality_standards>
-
-Return valid JSON only.
-"""
+Why "stand by" and "set about": Meanings (袖手旁觀, 著手) not deducible from components.""",
+    "mixed": """{
+  "sections": [{
+    "type": "mixed",
+    "sentences": [
+      {
+        "text": "From Turkey, she boarded a small boat and set sail into the deep waters.",
+        "sentence_role": "passage",
+        "annotations": [
+          {"surface": "set sail", "role": "notable_phrase"}
+        ]
+      },
+      {
+        "text": "Modern zoos serve the purposes of conserving endangered species as well as educating visitors.",
+        "sentence_role": "cloze",
+        "question": 47,
+        "mixed_question_type": "fill_in_word",
+        "annotations": [
+          {"surface": "educating", "role": "correct_answer"}
+        ],
+        "acceptable_answers": ["educating", "entertaining"]
+      },
+      {
+        "text": "asylum",
+        "sentence_role": "cloze",
+        "question": 48,
+        "mixed_question_type": "short_answer"
+      },
+      {
+        "text": "Joining the Olympic Games more than once.",
+        "sentence_role": "option",
+        "question": 49
+      }
+    ]
+  }]
+}""",
+    "translation": """{
+  "translation_items": [
+    {
+      "question": 1,
+      "chinese_prompt": "根據新聞報導，每年全球有超過百萬人在道路事故中喪失性命。",
+      "keywords": ["according", "reports", "million", "accidents", "lives"]
+    }
+  ]
+}""",
+    "essay": """{
+  "essay_topics": [{
+    "description": "提示：不同的公園，可能樣貌不同，特色也不同。請以此為主題，寫一篇英文作文。第一段描述兩張圖片中的公園各有何特色，第二段說明你心目中理想公園的樣貌。",
+    "suggested_words": ["biodiversity", "tranquility", "sustainability", "amenities", "conservation", "landscaping", "serene"]
+  }]
+}""",
+}

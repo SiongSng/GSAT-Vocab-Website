@@ -1,19 +1,35 @@
+import type { PosFilter, VocabTypeFilter, SortOption } from "$lib/types";
 import type {
-  PosFilter,
-  VocabTypeFilter,
-  TierFilter,
-  SortOption,
-} from "$lib/types";
-import type { VocabEntry, VocabIndexItem } from "$lib/types/vocab";
-import { createIndexItem } from "$lib/types/vocab";
+  WordEntry,
+  PhraseEntry,
+  PatternEntry,
+  VocabIndexItem,
+} from "$lib/types/vocab";
+import {
+  createWordIndexItem,
+  createPhraseIndexItem,
+  createPatternIndexItem,
+  isWordIndexItem,
+  isPhraseIndexItem,
+} from "$lib/types/vocab";
 import { getRouterStore, navigate } from "./router.svelte";
 import { openMobileDetail } from "./app.svelte";
-import { initVocabDB, buildIndex, getEntry, getEntriesCount } from "./vocab-db";
-import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
+import {
+  initVocabDB,
+  buildIndex,
+  lookupEntry,
+  getSRSEligibleEntry,
+} from "./vocab-db";
+import { checkForUpdate, loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 import { updateWordStructuredData } from "$lib/utils/seo";
+import { runSRSSenseMigration } from "./srs.svelte";
+
+export type SelectedEntry = WordEntry | PhraseEntry | PatternEntry | null;
+export type SelectedEntryType = "word" | "phrase" | "pattern" | null;
 
 let vocabIndex: VocabIndexItem[] = $state.raw([]);
-let selectedEntry: VocabEntry | null = $state.raw(null);
+let selectedEntry: SelectedEntry = $state.raw(null);
+let selectedEntryType: SelectedEntryType = $state(null);
 let selectedLemma: string | null = $state(null);
 let isLoading = $state(false);
 let isLoadingDetail = $state(false);
@@ -26,7 +42,6 @@ let lemmaSet: Set<string> = $state.raw(new Set());
 let searchTerm = $state("");
 let pos: PosFilter = $state("all");
 let vocabType: VocabTypeFilter = $state("all");
-let tier: TierFilter = $state("all");
 let levels: number[] = $state([]);
 let officialOnly = $state(false);
 let testedOnly = $state(false);
@@ -41,48 +56,80 @@ const filteredWords = $derived.by(() => {
   }
 
   if (pos !== "all") {
-    result = result.filter((w) => w.pos.includes(pos));
+    result = result.filter((w) => {
+      if (isWordIndexItem(w)) {
+        return w.pos.includes(pos);
+      }
+      return false;
+    });
   }
 
   if (vocabType !== "all") {
     result = result.filter((w) => w.type === vocabType);
   }
 
-  if (tier !== "all") {
-    result = result.filter((w) => w.tier === tier);
-  }
-
   if (levels.length > 0) {
-    result = result.filter((w) => w.level !== null && levels.includes(w.level));
+    result = result.filter((w) => {
+      if (isWordIndexItem(w)) {
+        return w.level !== null && levels.includes(w.level);
+      }
+      return false;
+    });
   }
 
   if (officialOnly) {
-    result = result.filter((w) => w.in_official_list);
+    result = result.filter((w) => {
+      if (isWordIndexItem(w)) {
+        return w.in_official_list;
+      }
+      return false;
+    });
   }
 
   if (testedOnly) {
-    result = result.filter((w) => w.tier === "tested");
+    result = result.filter((w) => {
+      if (isWordIndexItem(w) || isPhraseIndexItem(w)) {
+        return w.tested_count > 0;
+      }
+      return false;
+    });
   }
 
   switch (sortBy) {
     case "importance_desc":
-      result = [...result].sort(
-        (a, b) => b.importance_score - a.importance_score,
-      );
+      result = [...result].sort((a, b) => {
+        const aScore = "importance_score" in a ? a.importance_score : 0;
+        const bScore = "importance_score" in b ? b.importance_score : 0;
+        return bScore - aScore;
+      });
       break;
     case "importance_asc":
-      result = [...result].sort(
-        (a, b) => a.importance_score - b.importance_score,
-      );
+      result = [...result].sort((a, b) => {
+        const aScore = "importance_score" in a ? a.importance_score : 0;
+        const bScore = "importance_score" in b ? b.importance_score : 0;
+        return aScore - bScore;
+      });
       break;
     case "count_desc":
-      result = [...result].sort((a, b) => b.count - a.count);
+      result = [...result].sort((a, b) => {
+        const aCount = "total_appearances" in a ? a.total_appearances : 0;
+        const bCount = "total_appearances" in b ? b.total_appearances : 0;
+        return bCount - aCount;
+      });
       break;
     case "count_asc":
-      result = [...result].sort((a, b) => a.count - b.count);
+      result = [...result].sort((a, b) => {
+        const aCount = "total_appearances" in a ? a.total_appearances : 0;
+        const bCount = "total_appearances" in b ? b.total_appearances : 0;
+        return aCount - bCount;
+      });
       break;
     case "year_spread_desc":
-      result = [...result].sort((a, b) => b.year_spread - a.year_spread);
+      result = [...result].sort((a, b) => {
+        const aSpread = "year_spread" in a ? a.year_spread : 0;
+        const bSpread = "year_spread" in b ? b.year_spread : 0;
+        return bSpread - aSpread;
+      });
       break;
     case "alphabetical_asc":
       result = [...result].sort((a, b) => a.lemma.localeCompare(b.lemma));
@@ -91,10 +138,18 @@ const filteredWords = $derived.by(() => {
       result = [...result].sort((a, b) => b.lemma.localeCompare(a.lemma));
       break;
     case "level_asc":
-      result = [...result].sort((a, b) => (a.level ?? 99) - (b.level ?? 99));
+      result = [...result].sort((a, b) => {
+        const aLevel = isWordIndexItem(a) ? (a.level ?? 99) : 99;
+        const bLevel = isWordIndexItem(b) ? (b.level ?? 99) : 99;
+        return aLevel - bLevel;
+      });
       break;
     case "level_desc":
-      result = [...result].sort((a, b) => (b.level ?? 0) - (a.level ?? 0));
+      result = [...result].sort((a, b) => {
+        const aLevel = isWordIndexItem(a) ? (a.level ?? 0) : 0;
+        const bLevel = isWordIndexItem(b) ? (b.level ?? 0) : 0;
+        return bLevel - aLevel;
+      });
       break;
   }
 
@@ -111,6 +166,9 @@ export function getVocabStore() {
     },
     get selectedEntry() {
       return selectedEntry;
+    },
+    get selectedEntryType() {
+      return selectedEntryType;
     },
     get selectedLemma() {
       return selectedLemma;
@@ -153,12 +211,6 @@ export function getFilters() {
     set vocabType(v: VocabTypeFilter) {
       vocabType = v;
     },
-    get tier() {
-      return tier;
-    },
-    set tier(v: TierFilter) {
-      tier = v;
-    },
     get levels() {
       return levels;
     },
@@ -186,23 +238,6 @@ export function getFilters() {
   };
 }
 
-async function tryLoadFromIndexedDB(): Promise<boolean> {
-  try {
-    await initVocabDB();
-    const count = await getEntriesCount();
-
-    if (count > 0) {
-      const index = await buildIndex(createIndexItem);
-      vocabIndex = index;
-      lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
-      return true;
-    }
-  } catch (e) {
-    console.warn("IndexedDB load failed:", e);
-  }
-  return false;
-}
-
 async function downloadAndBuildIndex(): Promise<void> {
   loadProgress = {
     phase: "checking",
@@ -216,7 +251,11 @@ async function downloadAndBuildIndex(): Promise<void> {
       loadProgress = progress;
     });
 
-    const index = await buildIndex(createIndexItem);
+    const index = await buildIndex(
+      createWordIndexItem,
+      createPhraseIndexItem,
+      createPatternIndexItem,
+    );
     vocabIndex = index;
     lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
     loadProgress = null;
@@ -235,11 +274,24 @@ export async function loadVocabData(): Promise<void> {
   document.getElementById("initial-loader")?.remove();
 
   try {
-    const hasLocalData = await tryLoadFromIndexedDB();
+    await initVocabDB();
+    const { needsUpdate } = await checkForUpdate();
 
-    if (!hasLocalData) {
+    if (needsUpdate) {
       await downloadAndBuildIndex();
+    } else {
+      const index = await buildIndex(
+        createWordIndexItem,
+        createPhraseIndexItem,
+        createPatternIndexItem,
+      );
+      vocabIndex = index;
+      lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
     }
+
+    runSRSSenseMigration(getSRSEligibleEntry).catch((e) => {
+      console.warn("SRS sense migration failed:", e);
+    });
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load vocabulary data";
     console.error("Failed to load vocab data:", e);
@@ -263,43 +315,74 @@ export async function forceRefreshData(): Promise<void> {
   }
 }
 
-export async function selectWord(lemma: string): Promise<void> {
+function determineEntryType(
+  entry: WordEntry | PhraseEntry | PatternEntry,
+): SelectedEntryType {
+  if ("pattern_category" in entry && "subtypes" in entry) {
+    return "pattern";
+  }
+  // Words have pos as an array, phrases don't have pos at all
+  if ("pos" in entry && Array.isArray(entry.pos) && "senses" in entry) {
+    return "word";
+  }
+  if ("senses" in entry && !("pos" in entry)) {
+    return "phrase";
+  }
+  return null;
+}
+
+export async function selectWord(
+  lemma: string,
+  typeHint?: "word" | "phrase" | "pattern",
+): Promise<void> {
   if (selectedLemma === lemma) return;
 
   selectedLemma = lemma;
   isLoadingDetail = true;
 
   try {
-    const entry = await getEntry(lemma);
-    selectedEntry = entry ?? null;
-
+    const entry = await lookupEntry(lemma, typeHint);
     if (entry) {
-      const definitions = entry.senses.map((s) => s.zh_def);
-      const examples = entry.senses
-        .flatMap((s) => s.examples?.map((ex) => ex.text) ?? [])
-        .filter((text) => text.length > 0);
+      selectedEntry = entry;
+      selectedEntryType = determineEntryType(entry);
 
-      updateWordStructuredData({
-        lemma: entry.lemma,
-        pos: entry.pos,
-        definitions,
-        examples,
-      });
+      if (selectedEntryType === "word" || selectedEntryType === "phrase") {
+        const wordOrPhrase = entry as WordEntry | PhraseEntry;
+        const definitions = wordOrPhrase.senses.map((s) => s.zh_def);
+        const examples = wordOrPhrase.senses
+          .flatMap((s) => s.examples?.map((ex) => ex.text) ?? [])
+          .filter((text) => text.length > 0);
+
+        updateWordStructuredData({
+          lemma: wordOrPhrase.lemma,
+          pos: selectedEntryType === "word" ? (entry as WordEntry).pos : [],
+          definitions,
+          examples,
+        });
+      } else {
+        updateWordStructuredData(null);
+      }
     } else {
+      selectedEntry = null;
+      selectedEntryType = null;
       updateWordStructuredData(null);
     }
   } catch (e) {
     console.error("Failed to load word detail:", e);
     selectedEntry = null;
+    selectedEntryType = null;
     updateWordStructuredData(null);
   } finally {
     isLoadingDetail = false;
   }
 }
 
-export async function selectWordAndNavigate(lemma: string): Promise<void> {
+export async function selectWordAndNavigate(
+  lemma: string,
+  typeHint?: "word" | "phrase" | "pattern",
+): Promise<void> {
   navigate({ name: "word", params: { lemma } });
-  await selectWord(lemma);
+  await selectWord(lemma, typeHint);
 }
 
 export function syncWordFromRoute(): void {
@@ -315,6 +398,7 @@ export function syncWordFromRoute(): void {
 
 export function clearSelectedWord(): void {
   selectedEntry = null;
+  selectedEntryType = null;
   selectedLemma = null;
   updateWordStructuredData(null);
 }
@@ -329,10 +413,6 @@ export function setPosFilter(p: PosFilter): void {
 
 export function setVocabTypeFilter(t: VocabTypeFilter): void {
   vocabType = t;
-}
-
-export function setTierFilter(t: TierFilter): void {
-  tier = t;
 }
 
 export function setLevels(l: number[]): void {
@@ -363,7 +443,6 @@ export function resetFilters(): void {
   searchTerm = "";
   pos = "all";
   vocabType = "all";
-  tier = "all";
   levels = [];
   officialOnly = false;
   testedOnly = false;

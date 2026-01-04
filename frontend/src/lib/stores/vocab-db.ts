@@ -1,31 +1,39 @@
 import { openDB, type IDBPDatabase, type DBSchema } from "idb";
 import type {
-  VocabEntry,
+  WordEntry,
+  PhraseEntry,
+  PatternEntry,
+  WordIndexItem,
+  PhraseIndexItem,
+  PatternIndexItem,
   VocabIndexItem,
-  DistractorGroup,
   VocabMetadata,
-  createIndexItem,
+  createWordIndexItem,
+  createPhraseIndexItem,
+  createPatternIndexItem,
 } from "$lib/types/vocab";
 
-const DB_NAME = "gsat-vocab-v2";
-const DB_VERSION = 2;
+const DB_NAME = "gsat-vocab-v3";
+const DB_VERSION = 1;
 
 interface VocabDBSchema extends DBSchema {
-  entries: {
+  words: {
     key: string;
-    value: VocabEntry;
+    value: WordEntry;
     indexes: {
       by_level: number;
-      by_tier: string;
-      by_type: string;
+      by_pos: string;
     };
   };
-  distractor_groups: {
-    key: number;
-    value: DistractorGroup & { id: number };
+  phrases: {
+    key: string;
+    value: PhraseEntry;
+  };
+  patterns: {
+    key: string;
+    value: PatternEntry;
     indexes: {
-      by_correct_answer: string;
-      by_year: number;
+      by_category: string;
     };
   };
   metadata: {
@@ -36,34 +44,36 @@ interface VocabDBSchema extends DBSchema {
 
 let db: IDBPDatabase<VocabDBSchema> | null = null;
 let indexCache: VocabIndexItem[] | null = null;
-let entriesCache: Map<string, VocabEntry> = new Map();
-let distractorGroupsCache: DistractorGroup[] | null = null;
+let wordsCache: Map<string, WordEntry> = new Map();
+let phrasesCache: Map<string, PhraseEntry> = new Map();
+let patternsCache: Map<string, PatternEntry> = new Map();
 
 async function getDB(): Promise<IDBPDatabase<VocabDBSchema>> {
   if (db) return db;
 
   db = await openDB<VocabDBSchema>(DB_NAME, DB_VERSION, {
-    upgrade(database, oldVersion) {
-      if (oldVersion < 1) {
-        const entriesStore = database.createObjectStore("entries", {
+    upgrade(database) {
+      if (!database.objectStoreNames.contains("words")) {
+        const wordsStore = database.createObjectStore("words", {
           keyPath: "lemma",
         });
-        entriesStore.createIndex("by_level", "level");
-        entriesStore.createIndex("by_tier", "tier");
-        entriesStore.createIndex("by_type", "type");
-
-        database.createObjectStore("metadata", { keyPath: "key" });
+        wordsStore.createIndex("by_level", "level");
+        wordsStore.createIndex("by_pos", "pos", { multiEntry: true });
       }
 
-      if (oldVersion < 2) {
-        if (!database.objectStoreNames.contains("distractor_groups")) {
-          const distractorStore = database.createObjectStore(
-            "distractor_groups",
-            { keyPath: "id", autoIncrement: true },
-          );
-          distractorStore.createIndex("by_correct_answer", "correct_answer");
-          distractorStore.createIndex("by_year", "source.year");
-        }
+      if (!database.objectStoreNames.contains("phrases")) {
+        database.createObjectStore("phrases", { keyPath: "lemma" });
+      }
+
+      if (!database.objectStoreNames.contains("patterns")) {
+        const patternsStore = database.createObjectStore("patterns", {
+          keyPath: "lemma",
+        });
+        patternsStore.createIndex("by_category", "pattern_category");
+      }
+
+      if (!database.objectStoreNames.contains("metadata")) {
+        database.createObjectStore("metadata", { keyPath: "key" });
       }
     },
   });
@@ -101,29 +111,31 @@ export async function setStoredMetadata(
 
 export async function clearAllStores(): Promise<void> {
   const database = await getDB();
-  await database.clear("entries");
-  await database.clear("distractor_groups");
-  entriesCache.clear();
+  await database.clear("words");
+  await database.clear("phrases");
+  await database.clear("patterns");
+  wordsCache.clear();
+  phrasesCache.clear();
+  patternsCache.clear();
   indexCache = null;
-  distractorGroupsCache = null;
 }
 
-export async function bulkInsertEntries(
-  entries: VocabEntry[],
+export async function bulkInsertWords(
+  words: WordEntry[],
   onProgress?: (current: number, total: number) => void,
 ): Promise<void> {
   const database = await getDB();
   const batchSize = 100;
-  const total = entries.length;
+  const total = words.length;
 
   for (let i = 0; i < total; i += batchSize) {
-    const batch = entries.slice(i, i + batchSize);
-    const tx = database.transaction("entries", "readwrite");
-    const store = tx.objectStore("entries");
+    const batch = words.slice(i, i + batchSize);
+    const tx = database.transaction("words", "readwrite");
+    const store = tx.objectStore("words");
 
-    for (const entry of batch) {
-      store.put(entry);
-      entriesCache.set(entry.lemma, entry);
+    for (const word of batch) {
+      store.put(word);
+      wordsCache.set(word.lemma, word);
     }
 
     await tx.done;
@@ -133,142 +145,179 @@ export async function bulkInsertEntries(
   indexCache = null;
 }
 
-export async function bulkInsertDistractorGroups(
-  groups: DistractorGroup[],
-): Promise<void> {
+export async function bulkInsertPhrases(phrases: PhraseEntry[]): Promise<void> {
   const database = await getDB();
-  const tx = database.transaction("distractor_groups", "readwrite");
-  const store = tx.objectStore("distractor_groups");
+  const tx = database.transaction("phrases", "readwrite");
+  const store = tx.objectStore("phrases");
 
-  for (const group of groups) {
-    store.add(group as DistractorGroup & { id: number });
+  for (const phrase of phrases) {
+    store.put(phrase);
+    phrasesCache.set(phrase.lemma, phrase);
   }
 
   await tx.done;
-  distractorGroupsCache = null;
+  indexCache = null;
 }
 
-export function getEntryCached(lemma: string): VocabEntry | undefined {
-  return entriesCache.get(lemma);
-}
+export async function bulkInsertPatterns(
+  patterns: PatternEntry[],
+): Promise<void> {
+  const database = await getDB();
+  const tx = database.transaction("patterns", "readwrite");
+  const store = tx.objectStore("patterns");
 
-export async function getEntry(lemma: string): Promise<VocabEntry | undefined> {
-  const cached = entriesCache.get(lemma);
-  if (cached) {
-    return cached;
+  for (const pattern of patterns) {
+    store.put(pattern);
+    patternsCache.set(pattern.lemma, pattern);
   }
 
+  await tx.done;
+  indexCache = null;
+}
+
+export function getWordCached(lemma: string): WordEntry | undefined {
+  return wordsCache.get(lemma);
+}
+
+export function getPhraseCached(lemma: string): PhraseEntry | undefined {
+  return phrasesCache.get(lemma);
+}
+
+export function getPatternCached(lemma: string): PatternEntry | undefined {
+  return patternsCache.get(lemma);
+}
+
+export async function getWord(lemma: string): Promise<WordEntry | undefined> {
+  const cached = wordsCache.get(lemma);
+  if (cached) return cached;
+
   const database = await getDB();
-  const entry = await database.get("entries", lemma);
+  const entry = await database.get("words", lemma);
   if (entry) {
-    entriesCache.set(lemma, entry);
+    wordsCache.set(lemma, entry);
   }
   return entry;
 }
 
-export async function getAllEntries(): Promise<VocabEntry[]> {
+export async function getPhrase(
+  lemma: string,
+): Promise<PhraseEntry | undefined> {
+  const cached = phrasesCache.get(lemma);
+  if (cached) return cached;
+
   const database = await getDB();
-  return database.getAll("entries");
+  const entry = await database.get("phrases", lemma);
+  if (entry) {
+    phrasesCache.set(lemma, entry);
+  }
+  return entry;
 }
 
-export async function getEntriesCount(): Promise<number> {
+export async function getPattern(
+  lemma: string,
+): Promise<PatternEntry | undefined> {
+  const cached = patternsCache.get(lemma);
+  if (cached) return cached;
+
   const database = await getDB();
-  return database.count("entries");
+  const entry = await database.get("patterns", lemma);
+  if (entry) {
+    patternsCache.set(lemma, entry);
+  }
+  return entry;
+}
+
+export async function getAllWords(): Promise<WordEntry[]> {
+  const database = await getDB();
+  return database.getAll("words");
+}
+
+export async function getAllPhrases(): Promise<PhraseEntry[]> {
+  const database = await getDB();
+  return database.getAll("phrases");
+}
+
+export async function getAllPatterns(): Promise<PatternEntry[]> {
+  const database = await getDB();
+  return database.getAll("patterns");
+}
+
+export async function getWordsCount(): Promise<number> {
+  const database = await getDB();
+  return database.count("words");
+}
+
+export async function getPhrasesCount(): Promise<number> {
+  const database = await getDB();
+  return database.count("phrases");
+}
+
+export async function getPatternsCount(): Promise<number> {
+  const database = await getDB();
+  return database.count("patterns");
+}
+
+export async function getTotalEntriesCount(): Promise<number> {
+  const [words, phrases, patterns] = await Promise.all([
+    getWordsCount(),
+    getPhrasesCount(),
+    getPatternsCount(),
+  ]);
+  return words + phrases + patterns;
 }
 
 export async function buildIndex(
-  createIndexItemFn: typeof createIndexItem,
+  createWordIndexFn: typeof createWordIndexItem,
+  createPhraseIndexFn: typeof createPhraseIndexItem,
+  createPatternIndexFn: typeof createPatternIndexItem,
 ): Promise<VocabIndexItem[]> {
   if (indexCache) {
     return indexCache;
   }
 
-  const entries = await getAllEntries();
-  const index = entries.map(createIndexItemFn);
+  const [words, phrases, patterns] = await Promise.all([
+    getAllWords(),
+    getAllPhrases(),
+    getAllPatterns(),
+  ]);
 
-  index.sort((a, b) => b.importance_score - a.importance_score);
+  const wordItems: WordIndexItem[] = words.map(createWordIndexFn);
+  const phraseItems: PhraseIndexItem[] = phrases.map(createPhraseIndexFn);
+  const patternItems: PatternIndexItem[] = patterns.map(createPatternIndexFn);
+
+  const index: VocabIndexItem[] = [
+    ...wordItems,
+    ...phraseItems,
+    ...patternItems,
+  ];
+
+  index.sort((a, b) => {
+    if (a.type === "pattern" && b.type !== "pattern") return 1;
+    if (a.type !== "pattern" && b.type === "pattern") return -1;
+
+    const aScore = "importance_score" in a ? a.importance_score : 0;
+    const bScore = "importance_score" in b ? b.importance_score : 0;
+    return bScore - aScore;
+  });
 
   indexCache = index;
   return index;
 }
 
-export async function getEntriesByLevel(level: number): Promise<VocabEntry[]> {
+export async function getWordsByLevel(level: number): Promise<WordEntry[]> {
   const database = await getDB();
-  return database.getAllFromIndex("entries", "by_level", level);
+  return database.getAllFromIndex("words", "by_level", level);
 }
 
-export async function getEntriesByTier(tier: string): Promise<VocabEntry[]> {
+export async function getPatternsByCategory(
+  category: string,
+): Promise<PatternEntry[]> {
   const database = await getDB();
-  return database.getAllFromIndex("entries", "by_tier", tier);
-}
-
-export async function getEntriesByType(type: string): Promise<VocabEntry[]> {
-  const database = await getDB();
-  return database.getAllFromIndex("entries", "by_type", type);
-}
-
-export async function getAllDistractorGroups(): Promise<DistractorGroup[]> {
-  if (distractorGroupsCache) {
-    return distractorGroupsCache;
-  }
-
-  const database = await getDB();
-  const groups = await database.getAll("distractor_groups");
-  distractorGroupsCache = groups;
-  return groups;
-}
-
-export async function getDistractorGroupsByWord(
-  lemma: string,
-): Promise<DistractorGroup[]> {
-  const database = await getDB();
-  const asCorrect = await database.getAllFromIndex(
-    "distractor_groups",
-    "by_correct_answer",
-    lemma,
-  );
-
-  const allGroups = await getAllDistractorGroups();
-  const asDistractor = allGroups.filter((g) => g.distractors.includes(lemma));
-
-  const seen = new Set<string>();
-  const result: DistractorGroup[] = [];
-
-  for (const g of [...asCorrect, ...asDistractor]) {
-    const key = `${g.correct_answer}-${g.question_context}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(g);
-    }
-  }
-
-  return result;
-}
-
-export async function getConfusedWords(lemma: string): Promise<string[]> {
-  const groups = await getDistractorGroupsByWord(lemma);
-  const confused = new Set<string>();
-
-  for (const group of groups) {
-    if (group.correct_answer === lemma) {
-      group.distractors.forEach((d) => confused.add(d));
-    } else {
-      confused.add(group.correct_answer);
-      group.distractors
-        .filter((d) => d !== lemma)
-        .forEach((d) => confused.add(d));
-    }
-  }
-
-  return Array.from(confused);
+  return database.getAllFromIndex("patterns", "by_category", category);
 }
 
 export function clearIndexCache(): void {
   indexCache = null;
-}
-
-export function clearDistractorGroupsCache(): void {
-  distractorGroupsCache = null;
 }
 
 export async function closeDB(): Promise<void> {
@@ -276,7 +325,39 @@ export async function closeDB(): Promise<void> {
     db.close();
     db = null;
   }
-  entriesCache.clear();
+  wordsCache.clear();
+  phrasesCache.clear();
+  patternsCache.clear();
   indexCache = null;
-  distractorGroupsCache = null;
+}
+
+export async function getSRSEligibleEntry(
+  lemma: string,
+): Promise<WordEntry | PhraseEntry | undefined> {
+  const word = await getWord(lemma);
+  if (word) return word;
+  return getPhrase(lemma);
+}
+
+export function getSRSEligibleEntryCached(
+  lemma: string,
+): WordEntry | PhraseEntry | undefined {
+  const word = getWordCached(lemma);
+  if (word) return word;
+  return getPhraseCached(lemma);
+}
+
+export async function lookupEntry(
+  lemma: string,
+  type?: "word" | "phrase" | "pattern",
+): Promise<WordEntry | PhraseEntry | PatternEntry | undefined> {
+  if (type === "word") return getWord(lemma);
+  if (type === "phrase") return getPhrase(lemma);
+  if (type === "pattern") return getPattern(lemma);
+
+  const word = await getWord(lemma);
+  if (word) return word;
+  const phrase = await getPhrase(lemma);
+  if (phrase) return phrase;
+  return getPattern(lemma);
 }

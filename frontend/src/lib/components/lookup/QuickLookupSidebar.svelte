@@ -6,12 +6,37 @@
     } from "$lib/stores/word-lookup.svelte";
     import { selectWordAndNavigate } from "$lib/stores/vocab.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
-    import type { VocabEntry } from "$lib/types/vocab";
+    import type { VocabEntryUnion } from "$lib/types/vocab";
+    import { isWordEntry, isPhraseEntry } from "$lib/types/vocab";
 
     const lookup = getWordLookupStore();
 
-    function getPrimarySense(entry: VocabEntry | null) {
-        return entry?.senses?.[0] ?? null;
+    function getPrimarySense(entry: VocabEntryUnion | null) {
+        if (!entry) return null;
+        if (isWordEntry(entry) || isPhraseEntry(entry)) {
+            return entry.senses?.[0] ?? null;
+        }
+        return null;
+    }
+
+    function getLevel(entry: VocabEntryUnion | null): number | null {
+        if (!entry) return null;
+        if (isWordEntry(entry)) return entry.level;
+        return null;
+    }
+
+    function getIsOfficial(entry: VocabEntryUnion | null): boolean {
+        if (!entry) return false;
+        if (isWordEntry(entry)) return entry.in_official_list;
+        return false;
+    }
+
+    function getSenseCount(entry: VocabEntryUnion | null): number {
+        if (!entry) return 0;
+        if (isWordEntry(entry) || isPhraseEntry(entry)) {
+            return entry.senses?.length ?? 0;
+        }
+        return 0;
     }
 
     function handleWordClick(lemma: string) {
@@ -112,6 +137,9 @@
                             <div class="skeleton-text h-4 w-3/4"></div>
                         </div>
                     {:else if item.entry}
+                        {@const level = getLevel(item.entry)}
+                        {@const isOfficial = getIsOfficial(item.entry)}
+                        {@const senseCount = getSenseCount(item.entry)}
                         <div class="card-body">
                             <div
                                 class="flex items-center gap-1 text-xs text-content-tertiary mb-2"
@@ -119,11 +147,11 @@
                                 {#if primarySense}
                                     <span>{primarySense.pos}</span>
                                 {/if}
-                                {#if item.entry.level !== null}
+                                {#if level !== null}
                                     <span>·</span>
-                                    <span>{formatLevel(item.entry.level)}</span>
+                                    <span>{formatLevel(level)}</span>
                                 {/if}
-                                {#if item.entry.in_official_list}
+                                {#if isOfficial}
                                     <span>·</span>
                                     <span class="text-accent">官方</span>
                                 {/if}
@@ -144,9 +172,9 @@
                                 {/if}
                             {/if}
 
-                            {#if item.entry.senses && item.entry.senses.length > 1}
+                            {#if senseCount > 1}
                                 <p class="text-xs text-content-tertiary mt-2">
-                                    +{item.entry.senses.length - 1} 其他涵義
+                                    +{senseCount - 1} 其他涵義
                                 </p>
                             {/if}
                         </div>
