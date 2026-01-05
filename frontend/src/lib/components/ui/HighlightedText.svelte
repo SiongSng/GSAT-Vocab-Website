@@ -2,14 +2,21 @@
     import nlp from "compromise";
     import { getVocabStore } from "$lib/stores/vocab.svelte";
     import { openLookup } from "$lib/stores/word-lookup.svelte";
+    import QuizBlank from "$lib/components/quiz/QuizBlank.svelte";
 
     interface Props {
         text: string;
-        highlightLemma: string;
+        highlightLemma?: string;
         isPhrase?: boolean;
+        blankMode?: boolean;
     }
 
-    let { text, highlightLemma, isPhrase = false }: Props = $props();
+    let {
+        text,
+        highlightLemma,
+        isPhrase = false,
+        blankMode = false,
+    }: Props = $props();
 
     const vocab = getVocabStore();
 
@@ -158,7 +165,8 @@
             if (
                 "bcdfghlmnprstvwz".includes(lastChar) &&
                 "aeiou".includes(secondLast) &&
-                (lower.length === 3 || !"aeiou".includes(lower[lower.length - 3]))
+                (lower.length === 3 ||
+                    !"aeiou".includes(lower[lower.length - 3]))
             ) {
                 forms.add(lower + lastChar + "ing");
                 forms.add(lower + lastChar + "ed");
@@ -244,20 +252,27 @@
         const normalized = normalizeWord(word);
         if (normalized !== word) forms.push(normalized);
 
-        if (word.endsWith("s") && !word.endsWith("ss")) forms.push(word.slice(0, -1));
+        if (word.endsWith("s") && !word.endsWith("ss"))
+            forms.push(word.slice(0, -1));
         if (word.endsWith("es")) forms.push(word.slice(0, -2));
         if (word.endsWith("ies")) forms.push(word.slice(0, -3) + "y");
         if (word.endsWith("ed")) {
             forms.push(word.slice(0, -2));
             forms.push(word.slice(0, -1));
-            if (word.length > 3 && word[word.length - 3] === word[word.length - 4]) {
+            if (
+                word.length > 3 &&
+                word[word.length - 3] === word[word.length - 4]
+            ) {
                 forms.push(word.slice(0, -3));
             }
         }
         if (word.endsWith("ing")) {
             forms.push(word.slice(0, -3));
             forms.push(word.slice(0, -3) + "e");
-            if (word.length > 4 && word[word.length - 4] === word[word.length - 5]) {
+            if (
+                word.length > 4 &&
+                word[word.length - 4] === word[word.length - 5]
+            ) {
                 forms.push(word.slice(0, -4));
             }
         }
@@ -283,10 +298,17 @@
         const result: TextSegment[] = [];
         const currentLemmaSet = vocab.lemmaSet;
 
+        if (!highlightLemma) {
+            return processNormalText(text, currentLemmaSet);
+        }
+
         if (isPhrase) {
             const variants = generatePhraseVariants(highlightLemma);
             const escapedVariants = variants.map(escapeRegex);
-            const pattern = new RegExp(`(?<![a-zA-Z])(${escapedVariants.join("|")})(?![a-zA-Z])`, "gi");
+            const pattern = new RegExp(
+                `(?<![a-zA-Z])(${escapedVariants.join("|")})(?![a-zA-Z])`,
+                "gi",
+            );
 
             let lastIndex = 0;
             let match: RegExpExecArray | null;
@@ -294,14 +316,21 @@
             while ((match = pattern.exec(text)) !== null) {
                 if (match.index > lastIndex) {
                     const beforeText = text.slice(lastIndex, match.index);
-                    result.push(...processNormalText(beforeText, currentLemmaSet));
+                    result.push(
+                        ...processNormalText(beforeText, currentLemmaSet),
+                    );
                 }
                 result.push({ text: match[1], type: "highlight" });
                 lastIndex = match.index + match[0].length;
             }
 
             if (lastIndex < text.length) {
-                result.push(...processNormalText(text.slice(lastIndex), currentLemmaSet));
+                result.push(
+                    ...processNormalText(
+                        text.slice(lastIndex),
+                        currentLemmaSet,
+                    ),
+                );
             }
         } else {
             const wordVariants = generateWordVariants(highlightLemma);
@@ -319,7 +348,9 @@
 
                 const token = match[1];
                 const normalized = normalizeWord(token);
-                const isHighlighted = wordVariants.has(normalized) || wordVariants.has(token.toLowerCase());
+                const isHighlighted =
+                    wordVariants.has(normalized) ||
+                    wordVariants.has(token.toLowerCase());
 
                 if (isHighlighted) {
                     result.push({ text: token, type: "highlight" });
@@ -335,7 +366,11 @@
                         }
                     }
                     if (foundLemma) {
-                        result.push({ text: token, type: "clickable", lemma: foundLemma });
+                        result.push({
+                            text: token,
+                            type: "clickable",
+                            lemma: foundLemma,
+                        });
                     } else {
                         result.push({ text: token, type: "normal" });
                     }
@@ -352,7 +387,10 @@
         return result;
     });
 
-    function processNormalText(txt: string, lemmaSet: Set<string>): TextSegment[] {
+    function processNormalText(
+        txt: string,
+        lemmaSet: Set<string>,
+    ): TextSegment[] {
         const result: TextSegment[] = [];
         const tokenRegex = /([a-zA-Z]+(?:'[a-zA-Z]+)?)/g;
         let lastIndex = 0;
@@ -360,7 +398,10 @@
 
         while ((match = tokenRegex.exec(txt)) !== null) {
             if (match.index > lastIndex) {
-                result.push({ text: txt.slice(lastIndex, match.index), type: "normal" });
+                result.push({
+                    text: txt.slice(lastIndex, match.index),
+                    type: "normal",
+                });
             }
 
             const token = match[1];
@@ -378,7 +419,11 @@
             }
 
             if (foundLemma) {
-                result.push({ text: token, type: "clickable", lemma: foundLemma });
+                result.push({
+                    text: token,
+                    type: "clickable",
+                    lemma: foundLemma,
+                });
             } else {
                 result.push({ text: token, type: "normal" });
             }
@@ -399,9 +444,11 @@
 </script>
 
 <span class="highlighted-text"
-    >{#each segments as seg}{#if seg.type === "highlight"}<mark class="highlight"
-                >{seg.text}</mark
-            >{:else if seg.type === "clickable" && seg.lemma}<button
+    >{#each segments as seg}{#if seg.type === "highlight"}{#if blankMode}<QuizBlank
+                    length={seg.text.length}
+                    active={true}
+                />{:else}<mark class="highlight">{seg.text}</mark
+                >{/if}{:else if seg.type === "clickable" && seg.lemma && !blankMode}<button
                 type="button"
                 class="clickable-word"
                 onclick={() => handleClick(seg.lemma!)}>{seg.text}</button

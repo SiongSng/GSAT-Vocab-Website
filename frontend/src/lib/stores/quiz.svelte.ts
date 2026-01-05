@@ -15,7 +15,6 @@ export type { QuizQuestion, QuizQuestionType };
 
 interface QuizStore {
   type: QuizQuestionType | "adaptive" | null;
-  source: "srs_due" | "srs_weak" | "today_studied" | "custom";
   questions: QuizQuestion[];
   currentIndex: number;
   results: QuizResult[];
@@ -31,7 +30,6 @@ interface QuizStore {
 
 const store: QuizStore = $state({
   type: null,
-  source: "srs_due",
   questions: [],
   currentIndex: 0,
   results: [],
@@ -45,12 +43,10 @@ const store: QuizStore = $state({
 });
 
 const currentQuestion = $derived(
-  store.questions.length > 0 ? store.questions[store.currentIndex] : null
+  store.questions.length > 0 ? store.questions[store.currentIndex] : null,
 );
 
-const score = $derived(
-  store.results.filter((r) => r.correct).length
-);
+const score = $derived(store.results.filter((r) => r.correct).length);
 
 const progress = $derived({
   current: store.currentIndex + 1,
@@ -62,20 +58,17 @@ const incorrectQuestions = $derived(
   store.questions.filter((_, idx) => {
     const result = store.results[idx];
     return result && !result.correct;
-  })
+  }),
 );
 
 const sessionSummary = $derived<QuizSessionSummary | null>(
-  store.isComplete ? computeSessionSummary(store.results) : null
+  store.isComplete ? computeSessionSummary(store.results) : null,
 );
 
 export function getQuizStore() {
   return {
     get type() {
       return store.type;
-    },
-    get source() {
-      return store.source;
     },
     get questions() {
       return store.questions;
@@ -120,11 +113,8 @@ export function getQuizStore() {
 }
 
 export interface QuizConfig {
-  source?: "srs_due" | "srs_weak" | "today_studied" | "custom";
   count: number;
-  lemmas?: string[];
   entry_type?: "word" | "phrase" | "all";
-  pos_filter?: string[];
   force_type?: QuizQuestionType;
 }
 
@@ -134,24 +124,20 @@ export async function startQuiz(config: QuizConfig): Promise<void> {
 
   try {
     const generatorConfig: GeneratorConfig = {
-      source: config.source ?? "srs_due",
       count: config.count,
-      lemmas: config.lemmas,
       entry_type: config.entry_type,
-      pos_filter: config.pos_filter,
       force_type: config.force_type,
     };
 
     const questions = await generateQuizLocally(generatorConfig);
 
     if (questions.length === 0) {
-      store.error = "沒有可用的題目。請先加入一些單字到學習清單。";
+      store.error = "沒有可用的題目。請先在 Flashcard 學習一些單字。";
       store.isLoading = false;
       return;
     }
 
     store.type = config.force_type ?? "adaptive";
-    store.source = config.source ?? "srs_due";
     store.questions = questions;
     store.currentIndex = 0;
     store.results = [];
@@ -225,7 +211,6 @@ export function goToQuestion(index: number): void {
 
 export function resetQuiz(): void {
   store.type = null;
-  store.source = "srs_due";
   store.questions = [];
   store.currentIndex = 0;
   store.results = [];
@@ -250,21 +235,29 @@ export async function retryIncorrect(): Promise<void> {
   const incorrect = incorrectQuestions;
   if (incorrect.length === 0) return;
 
-  const lemmas = incorrect.map((q) => q.lemma).filter(Boolean) as string[];
-  if (lemmas.length === 0) return;
-
   store.isLoading = true;
   store.error = null;
 
   try {
     const questions = await generateQuizLocally({
-      source: "custom",
-      count: lemmas.length,
-      lemmas,
-      force_type: store.type === "adaptive" ? undefined : (store.type as QuizQuestionType),
+      count: incorrect.length,
+      force_type:
+        store.type === "adaptive"
+          ? undefined
+          : (store.type as QuizQuestionType),
     });
 
-    store.questions = questions;
+    const retryQuestions = questions.filter((q) =>
+      incorrect.some((inc) => inc.lemma === q.lemma),
+    );
+
+    if (retryQuestions.length === 0) {
+      store.error = "無法重新生成題目";
+      store.isLoading = false;
+      return;
+    }
+
+    store.questions = retryQuestions;
     store.currentIndex = 0;
     store.results = [];
     store.isActive = true;

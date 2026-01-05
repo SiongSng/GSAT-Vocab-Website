@@ -166,6 +166,7 @@
     .virtual-scroll-wrapper {
         position: relative;
         width: 100%;
+        padding-bottom: var(--bottom-nav-height);
     }
 
     .word-list {

@@ -198,12 +198,14 @@ export function getWeeklyPattern(dailyStats: DailyStats[]): WeeklyPattern[] {
   return patterns;
 }
 
-export function getHeatmapData(dailyStats: DailyStats[]): HeatmapCell[][] {
+export function getHeatmapData(
+  dailyStats: DailyStats[],
+  months: number = 6,
+): HeatmapCell[][] {
   const statsMap = new Map(
     dailyStats.map((s) => [s.date, s.new_cards + s.reviews]),
   );
 
-  // Last 6 months from today
   const endDate = new Date();
   const endDayOfWeek = endDate.getDay();
   if (endDayOfWeek !== 6) {
@@ -211,7 +213,7 @@ export function getHeatmapData(dailyStats: DailyStats[]): HeatmapCell[][] {
   }
 
   const startDate = new Date(endDate);
-  startDate.setMonth(startDate.getMonth() - 6);
+  startDate.setMonth(startDate.getMonth() - months);
   const startDayOfWeek = startDate.getDay();
   if (startDayOfWeek !== 0) {
     startDate.setDate(startDate.getDate() - startDayOfWeek);

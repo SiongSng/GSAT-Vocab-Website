@@ -513,8 +513,8 @@
                 <div class="stats-item">
                     <span class="stats-dot stats-dot-mastered"></span>
                     <span class="stats-value">{learnedLemmaCount}</span>
-                    <span class="stats-label">已掌握</span>
-                    <HelpTooltip text="累計已學習過的單字總數" />
+                    <span class="stats-label">累計</span>
+                    <HelpTooltip text="曾經學習過的單字總數（包含複習和熟悉中）" />
                 </div>
             </div>
         </div>

@@ -5,13 +5,9 @@ import type {
   ConfusionNote,
 } from "$lib/types/vocab";
 import type { SRSCard } from "$lib/types/srs";
-import {
-  getAllWords,
-  getAllPhrases,
-  getWord,
-  getPhrase,
-} from "./vocab-db";
-import { getAllCards, getDueCards, getCard } from "./srs-storage";
+import { getAllWords, getAllPhrases, getWord, getPhrase } from "./vocab-db";
+import { getAllCards } from "./srs-storage";
+import { State } from "ts-fsrs";
 
 export type QuizQuestionType =
   | "recognition"
@@ -53,15 +49,8 @@ export interface QuizQuestion {
 }
 
 export interface QuizConfig {
-  source: "srs_due" | "srs_weak" | "today_studied" | "custom";
   count: number;
-
-  lemmas?: string[];
-
   entry_type?: "word" | "phrase" | "all";
-  pos_filter?: string[];
-  level_range?: { min: number; max: number };
-
   force_type?: QuizQuestionType;
 }
 
@@ -90,101 +79,53 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   return "distinction";
 }
 
+function isLearned(card: SRSCard): boolean {
+  return card.state !== State.New;
+}
+
 async function getQuizEligibleEntries(
-  config: QuizConfig
+  config: QuizConfig,
 ): Promise<{ entry: VocabEntry; card: SRSCard }[]> {
+  const allCards = getAllCards();
+  if (allCards.length === 0) return [];
+
+  const now = new Date();
+  const dueCards: SRSCard[] = [];
+  const weakCards: SRSCard[] = [];
+  const otherCards: SRSCard[] = [];
+
+  for (const card of allCards) {
+    if (!isLearned(card)) continue;
+
+    if (config.entry_type && config.entry_type !== "all") {
+      if (card.entry_type !== config.entry_type) continue;
+    }
+
+    const isDue = new Date(card.due) <= now;
+    const isWeak = card.lapses >= 2 || card.stability < 3;
+
+    if (isDue) {
+      dueCards.push(card);
+    } else if (isWeak) {
+      weakCards.push(card);
+    } else {
+      otherCards.push(card);
+    }
+  }
+
+  const prioritizedCards = [...dueCards, ...weakCards, ...otherCards];
+
   const results: { entry: VocabEntry; card: SRSCard }[] = [];
-
-  // Custom source: get cards for specific lemmas
-  if (config.source === "custom" && config.lemmas && config.lemmas.length > 0) {
-    for (const lemma of config.lemmas) {
-      const word = await getWord(lemma);
-      if (word && word.senses[0]) {
-        const card = getCard(lemma, word.senses[0].sense_id);
-        if (card) {
-          results.push({ entry: word, card });
-          continue;
-        }
-      }
-      const phrase = await getPhrase(lemma);
-      if (phrase && phrase.senses[0]) {
-        const card = getCard(lemma, phrase.senses[0].sense_id);
-        if (card) {
-          results.push({ entry: phrase, card });
-        }
-      }
+  for (const card of prioritizedCards) {
+    const entry =
+      card.entry_type === "phrase"
+        ? await getPhrase(card.lemma)
+        : await getWord(card.lemma);
+    if (entry) {
+      results.push({ entry, card });
     }
-    return results;
   }
 
-  // SRS due cards: words that need review
-  if (config.source === "srs_due") {
-    const dueCards = getDueCards();
-    for (const card of dueCards) {
-      if (config.entry_type && config.entry_type !== "all") {
-        if (card.entry_type !== config.entry_type) continue;
-      }
-      const entry =
-        card.entry_type === "phrase"
-          ? await getPhrase(card.lemma)
-          : await getWord(card.lemma);
-      if (entry) {
-        results.push({ entry, card });
-      }
-    }
-    return results;
-  }
-
-  // SRS weak cards: words with high lapses or low stability
-  if (config.source === "srs_weak") {
-    const allCards = getAllCards();
-    const weakCards = allCards.filter(
-      (c) => c.lapses >= 2 || c.stability < 3
-    );
-    for (const card of weakCards) {
-      if (config.entry_type && config.entry_type !== "all") {
-        if (card.entry_type !== config.entry_type) continue;
-      }
-      const entry =
-        card.entry_type === "phrase"
-          ? await getPhrase(card.lemma)
-          : await getWord(card.lemma);
-      if (entry) {
-        results.push({ entry, card });
-      }
-    }
-    return results;
-  }
-
-  // Today studied: cards reviewed today
-  if (config.source === "today_studied") {
-    const allCards = getAllCards();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayCards = allCards.filter((c) => {
-      if (!c.last_review) return false;
-      const reviewDate = new Date(c.last_review);
-      reviewDate.setHours(0, 0, 0, 0);
-      return reviewDate.getTime() === today.getTime();
-    });
-    
-    for (const card of todayCards) {
-      if (config.entry_type && config.entry_type !== "all") {
-        if (card.entry_type !== config.entry_type) continue;
-      }
-      const entry =
-        card.entry_type === "phrase"
-          ? await getPhrase(card.lemma)
-          : await getWord(card.lemma);
-      if (entry) {
-        results.push({ entry, card });
-      }
-    }
-    return results;
-  }
-
-  // Default: return empty array (quiz should only use SRS cards)
   return results;
 }
 
@@ -209,14 +150,48 @@ export function clearDistractorCache(): void {
   allPhrasesCache = null;
 }
 
+function getExcludedLemmas(entry: VocabEntry): Set<string> {
+  const excluded = new Set<string>();
+  excluded.add(entry.lemma.toLowerCase());
+
+  if (entry.synonyms) {
+    for (const syn of entry.synonyms) {
+      excluded.add(syn.toLowerCase());
+    }
+  }
+
+  if (entry.derived_forms) {
+    for (const form of entry.derived_forms) {
+      excluded.add(form.toLowerCase());
+    }
+  }
+
+  return excluded;
+}
+
+function getEntryPOS(entry: VocabEntry): string | null {
+  if (isWordEntry(entry)) {
+    return entry.pos?.[0] ?? null;
+  }
+  return null;
+}
+
+function getEntryLevel(entry: VocabEntry): number | null {
+  if (isWordEntry(entry)) {
+    return entry.level;
+  }
+  return null;
+}
+
 async function generateDistractors(
   entry: VocabEntry,
   sense: VocabSense,
   count: number,
-  type: "definition" | "word"
+  type: "definition" | "word",
 ): Promise<string[]> {
   const distractors: string[] = [];
   const usedValues = new Set<string>();
+  const excludedLemmas = getExcludedLemmas(entry);
 
   if (type === "definition") {
     usedValues.add(sense.zh_def.toLowerCase());
@@ -224,53 +199,111 @@ async function generateDistractors(
     usedValues.add(entry.lemma.toLowerCase());
   }
 
-  if (entry.confusion_notes && entry.confusion_notes.length > 0) {
+  const pool = await ensureDistractorPool();
+  const entryIsWord = isWordEntry(entry);
+  const candidates = entryIsWord ? pool.words : pool.phrases;
+  const entryPOS = getEntryPOS(entry);
+  const entryLevel = getEntryLevel(entry);
+
+  if (
+    type === "word" &&
+    entry.confusion_notes &&
+    entry.confusion_notes.length > 0
+  ) {
     for (const note of entry.confusion_notes) {
       if (distractors.length >= count) break;
-      if (type === "word") {
-        const confusedWord = note.confused_with;
-        if (!usedValues.has(confusedWord.toLowerCase())) {
-          distractors.push(confusedWord);
-          usedValues.add(confusedWord.toLowerCase());
+      const confusedWord = note.confused_with.toLowerCase();
+      if (!usedValues.has(confusedWord) && !excludedLemmas.has(confusedWord)) {
+        distractors.push(note.confused_with);
+        usedValues.add(confusedWord);
+      }
+    }
+  }
+
+  if (
+    distractors.length < count &&
+    entryIsWord &&
+    entryPOS &&
+    entryLevel !== null
+  ) {
+    const samePOSAndLevel = candidates.filter((c) => {
+      if (c.lemma === entry.lemma) return false;
+      if (excludedLemmas.has(c.lemma.toLowerCase())) return false;
+      if (!c.senses || c.senses.length === 0) return false;
+      if (!isWordEntry(c)) return false;
+      return c.pos?.[0] === entryPOS && c.level === entryLevel;
+    });
+
+    const shuffled = [...samePOSAndLevel].sort(() => Math.random() - 0.5);
+    for (const candidate of shuffled) {
+      if (distractors.length >= count) break;
+      const candidateSense = candidate.senses[0];
+      if (type === "definition") {
+        const defLower = candidateSense.zh_def.toLowerCase();
+        if (!usedValues.has(defLower)) {
+          distractors.push(candidateSense.zh_def);
+          usedValues.add(defLower);
+        }
+      } else {
+        const lemmaLower = candidate.lemma.toLowerCase();
+        if (!usedValues.has(lemmaLower)) {
+          distractors.push(candidate.lemma);
+          usedValues.add(lemmaLower);
         }
       }
     }
   }
 
-  if (type === "definition" && entry.senses.length > 1) {
-    for (const otherSense of entry.senses) {
+  if (distractors.length < count && entryIsWord && entryPOS) {
+    const samePOS = candidates.filter((c) => {
+      if (c.lemma === entry.lemma) return false;
+      if (excludedLemmas.has(c.lemma.toLowerCase())) return false;
+      if (!c.senses || c.senses.length === 0) return false;
+      if (!isWordEntry(c)) return false;
+      return c.pos?.[0] === entryPOS;
+    });
+
+    const shuffled = [...samePOS].sort(() => Math.random() - 0.5);
+    for (const candidate of shuffled) {
       if (distractors.length >= count) break;
-      if (otherSense.sense_id !== sense.sense_id) {
-        if (!usedValues.has(otherSense.zh_def.toLowerCase())) {
-          distractors.push(otherSense.zh_def);
-          usedValues.add(otherSense.zh_def.toLowerCase());
+      const candidateSense = candidate.senses[0];
+      if (type === "definition") {
+        const defLower = candidateSense.zh_def.toLowerCase();
+        if (!usedValues.has(defLower)) {
+          distractors.push(candidateSense.zh_def);
+          usedValues.add(defLower);
+        }
+      } else {
+        const lemmaLower = candidate.lemma.toLowerCase();
+        if (!usedValues.has(lemmaLower)) {
+          distractors.push(candidate.lemma);
+          usedValues.add(lemmaLower);
         }
       }
     }
   }
 
   if (distractors.length < count) {
-    const pool = await ensureDistractorPool();
-    const isWord = isWordEntry(entry);
-    const candidates = isWord ? pool.words : pool.phrases;
-
     const shuffled = [...candidates].sort(() => Math.random() - 0.5);
 
     for (const candidate of shuffled) {
       if (distractors.length >= count) break;
       if (candidate.lemma === entry.lemma) continue;
+      if (excludedLemmas.has(candidate.lemma.toLowerCase())) continue;
       if (!candidate.senses || candidate.senses.length === 0) continue;
 
       const candidateSense = candidate.senses[0];
       if (type === "definition") {
-        if (!usedValues.has(candidateSense.zh_def.toLowerCase())) {
+        const defLower = candidateSense.zh_def.toLowerCase();
+        if (!usedValues.has(defLower)) {
           distractors.push(candidateSense.zh_def);
-          usedValues.add(candidateSense.zh_def.toLowerCase());
+          usedValues.add(defLower);
         }
       } else {
-        if (!usedValues.has(candidate.lemma.toLowerCase())) {
+        const lemmaLower = candidate.lemma.toLowerCase();
+        if (!usedValues.has(lemmaLower)) {
           distractors.push(candidate.lemma);
-          usedValues.add(candidate.lemma.toLowerCase());
+          usedValues.add(lemmaLower);
         }
       }
     }
@@ -286,7 +319,7 @@ function escapeRegex(str: string): string {
 function blankOutLemma(text: string, lemma: string): string {
   const lemmaPattern = new RegExp(
     `\\b${escapeRegex(lemma)}(s|es|ed|ing|er|est|ies|ied|'s|')?\\b`,
-    "gi"
+    "gi",
   );
   return text.replace(lemmaPattern, "_______");
 }
@@ -294,7 +327,7 @@ function blankOutLemma(text: string, lemma: string): string {
 function generateRecognitionQuestion(
   entry: VocabEntry,
   sense: VocabSense,
-  distractorDefs: string[]
+  distractorDefs: string[],
 ): QuizQuestion {
   const options = [
     { label: sense.zh_def, value: sense.zh_def },
@@ -319,7 +352,7 @@ function generateRecognitionQuestion(
 function generateReverseQuestion(
   entry: VocabEntry,
   sense: VocabSense,
-  distractorWords: string[]
+  distractorWords: string[],
 ): QuizQuestion {
   const options = [
     { label: entry.lemma, value: entry.lemma },
@@ -344,12 +377,10 @@ function generateReverseQuestion(
 function generateFillBlankQuestion(
   entry: VocabEntry,
   sense: VocabSense,
-  distractorWords: string[]
+  distractorWords: string[],
 ): QuizQuestion {
   const example =
-    sense.examples && sense.examples.length > 0
-      ? sense.examples[0]
-      : null;
+    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
 
   const sentenceText = example?.text || sense.generated_example || "";
   const blankedText = blankOutLemma(sentenceText, entry.lemma);
@@ -384,19 +415,35 @@ function generateFillBlankQuestion(
 
 function generateSpellingQuestion(
   entry: VocabEntry,
-  sense: VocabSense
+  sense: VocabSense,
 ): QuizQuestion {
+  const example =
+    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+
+  const sentenceText = example?.text || sense.generated_example || "";
+  const blankedText = sentenceText
+    ? blankOutLemma(sentenceText, entry.lemma)
+    : undefined;
+
   return {
     type: "spelling",
     lemma: entry.lemma,
     sense_id: sense.sense_id,
     entry_type: isWordEntry(entry) ? "word" : "phrase",
     prompt: sense.zh_def,
+    sentence_context: blankedText,
     hint: sense.pos ? `(${sense.pos})` : undefined,
     correct: entry.lemma,
     accept_variants: entry.derived_forms ?? undefined,
+    exam_source: example?.source
+      ? {
+          year: example.source.year,
+          exam_type: example.source.exam_type,
+          section_type: example.source.section_type,
+        }
+      : undefined,
     explanation: {
-      correct_usage: sense.generated_example || sense.en_def,
+      correct_usage: sentenceText || sense.en_def,
     },
   };
 }
@@ -404,7 +451,7 @@ function generateSpellingQuestion(
 function generateDistinctionQuestion(
   entry: VocabEntry,
   sense: VocabSense,
-  distractorWords: string[]
+  distractorWords: string[],
 ): QuizQuestion {
   const confusionNote =
     entry.confusion_notes && entry.confusion_notes.length > 0
@@ -412,9 +459,7 @@ function generateDistinctionQuestion(
       : null;
 
   const example =
-    sense.examples && sense.examples.length > 0
-      ? sense.examples[0]
-      : null;
+    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
 
   const sentenceText = example?.text || sense.generated_example || "";
   const blankedText = blankOutLemma(sentenceText, entry.lemma);
@@ -460,7 +505,7 @@ function generateDistinctionQuestion(
 async function generateQuestion(
   entry: VocabEntry,
   sense: VocabSense,
-  type: QuizQuestionType
+  type: QuizQuestionType,
 ): Promise<QuizQuestion> {
   switch (type) {
     case "recognition": {
@@ -485,7 +530,7 @@ async function generateQuestion(
       return generateRecognitionQuestion(
         entry,
         sense,
-        await generateDistractors(entry, sense, 3, "definition")
+        await generateDistractors(entry, sense, 3, "definition"),
       );
   }
 }
@@ -500,7 +545,7 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 export async function generateQuizLocally(
-  config: QuizConfig
+  config: QuizConfig,
 ): Promise<QuizQuestion[]> {
   const eligibleEntries = await getQuizEligibleEntries(config);
 
@@ -521,36 +566,54 @@ export async function generateQuizLocally(
     const quizType = config.force_type ?? getQuizTypeForCard(card);
 
     const question = await generateQuestion(entry, sense, quizType);
+    question.sense_id = card.sense_id;
     questions.push(question);
   }
 
   return questions;
 }
 
-export async function getDueCount(): Promise<number> {
-  const dueCards = getDueCards();
-  return dueCards.length;
+export function getAvailableCount(): number {
+  const allCards = getAllCards();
+  return allCards.filter(isLearned).length;
 }
 
-export async function getWeakCount(): Promise<number> {
+export function getQuizStats() {
   const allCards = getAllCards();
-  return allCards.filter((c) => c.lapses >= 2 || c.stability < 3).length;
-}
+  const now = new Date();
 
-export async function getAvailableCount(): Promise<number> {
-  const allCards = getAllCards();
-  return allCards.length;
-}
+  const learnedCards = allCards.filter(isLearned);
+  const dueCards = learnedCards.filter((c) => new Date(c.due) <= now);
+  const weakCards = learnedCards.filter(
+    (c) => c.lapses >= 2 || c.stability < 3,
+  );
 
-export async function getTodayStudiedCount(): Promise<number> {
-  const allCards = getAllCards();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  return allCards.filter((c) => {
-    if (!c.last_review) return false;
-    const reviewDate = new Date(c.last_review);
-    reviewDate.setHours(0, 0, 0, 0);
-    return reviewDate.getTime() === today.getTime();
-  }).length;
+  // Combine due and weak, but avoid double-counting
+  const reviewSet = new Set([...dueCards, ...weakCards]);
+  const reviewCards = Array.from(reviewSet);
+
+  const typeDistribution: Record<QuizQuestionType, number> = {
+    recognition: 0,
+    reverse: 0,
+    fill_blank: 0,
+    spelling: 0,
+    distinction: 0,
+  };
+
+  for (const card of learnedCards) {
+    const type = getQuizTypeForCard(card);
+    typeDistribution[type]++;
+  }
+
+  return {
+    total: learnedCards.length,
+    due: dueCards.length,
+    weak: weakCards.length,
+    reviewCount: reviewCards.length,
+    breakdown: {
+      words: reviewCards.filter((c) => c.entry_type === "word").length,
+      phrases: reviewCards.filter((c) => c.entry_type === "phrase").length,
+    },
+    typeDistribution,
+  };
 }

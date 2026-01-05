@@ -31,6 +31,9 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
+from src.models.cleaned import CleanedVocabData
+from src.models.vocab import PhraseEntry, VocabEntry, WordEntry
+
 from .evaluation import EvaluationMetrics, compute_metrics
 from .features import FeatureExtractor, get_feature_names
 from .ranker import VocabRanker
@@ -665,11 +668,11 @@ if __name__ == "__main__":
 
 
 def run_ml_pipeline(
-    cleaned_data,  # type: CleanedVocabData
-    final_entries: list,  # type: list[VocabEntry]
+    cleaned_data: CleanedVocabData,
+    final_entries: list[VocabEntry],
     target_year: int = 115,
     use_modern: bool = False,
-) -> list:
+) -> list[VocabEntry]:
     """
     Run the full ML pipeline: Train -> Predict -> Inject Scores.
     Called by CLI pipeline (Stage 6 -> 7).
@@ -755,7 +758,11 @@ def _run_modern_pipeline(cleaned_data, final_entries: list, target_year: int) ->
     return final_entries
 
 
-def _run_legacy_pipeline(cleaned_data, final_entries: list, target_year: int) -> list:
+def _run_legacy_pipeline(
+    cleaned_data: CleanedVocabData,
+    final_entries: list[VocabEntry],
+    target_year: int,
+) -> list[VocabEntry]:
     """
     Run the full ML pipeline: Train -> Predict -> Inject Scores.
     Called by CLI pipeline (Stage 6 -> 7).
@@ -778,17 +785,18 @@ def _run_legacy_pipeline(cleaned_data, final_entries: list, target_year: int) ->
 
     # 2b. Enrich Cleaned Data with WSD History (for Training)
     # We inject 'senses' from final_entries into cleaned_dicts so the ranker can see WSD features.
-    final_map = {e.lemma: e for e in final_entries if hasattr(e, "lemma")}
+    final_map: dict[str, WordEntry | PhraseEntry] = {
+        e.lemma: e for e in final_entries if isinstance(e, (WordEntry, PhraseEntry))
+    }
     enriched_count = 0
     for d in cleaned_dicts:
         lemma = d.get("lemma") or d.get("word")
         if lemma and lemma in final_map:
             f_entry = final_map[lemma]
-            if hasattr(f_entry, "senses") and f_entry.senses:
-                # Convert senses to dict format
+            if f_entry.senses:
                 d["senses"] = [s.model_dump() for s in f_entry.senses]
                 enriched_count += 1
-    
+
     console.print(f"[cyan]Enriched {enriched_count} training entries with WSD history.[/]")
 
 
@@ -807,37 +815,39 @@ def _run_legacy_pipeline(cleaned_data, final_entries: list, target_year: int) ->
     # 4. Predict & Inject
     pred_extractor = FeatureExtractor(current_year=target_year)
     cleaned_map = {d["lemma"]: d for d in cleaned_dicts}
-    
+
     updated_count = 0
     for entry in final_entries:
-        # entry is Pydantic object
-        if not hasattr(entry, "lemma"): continue
-        
+        # Only process WordEntry and PhraseEntry (PatternEntry doesn't have lemma in same sense)
+        if not isinstance(entry, (WordEntry, PhraseEntry)):
+            continue
+
         # Strategy: Use Final Entry as Primary Source (High Quality)
         # But we need raw historical context (exam roles, prompt types) from Cleaned Data
         c_entry = cleaned_map.get(entry.lemma)
-        
+
         # 1. Start with Cleaned Data for RAW History (Contexts)
         if c_entry:
             wd = pred_extractor.extract_word_data(c_entry)
         else:
             # Fallback if no history (e.g. new word in refined list?)
-            wd = pred_extractor.extract_word_data(entry) 
+            wd = pred_extractor.extract_word_data(entry)
 
         # 2. OVERWRITE/ENRICH with High Quality Data from Final Entry
         # WSD Senses (The refined meaning distribution)
-        if hasattr(entry, "senses"):
-            # Clear old WSD data if any
-            wd.wsd_year_sense_map.clear()
-            for s_idx, sense in enumerate(entry.senses):
-                if hasattr(sense, "examples"):
-                    for ex in sense.examples:
-                        if ex.source and ex.source.year > 0:
-                            wd.wsd_year_sense_map[ex.source.year][s_idx] += 1
-                            
+        wd.wsd_year_sense_map.clear()
+        for s_idx, sense in enumerate(entry.senses):
+            for ex in sense.examples:
+                if ex.source and ex.source.year > 0:
+                    wd.wsd_year_sense_map[ex.source.year][s_idx] += 1
+
         # 3. Use Refined Properties (Level, Official Status) from Final Entry
-        if entry.level: wd.level = entry.level
-        if entry.in_official_list is not None: wd.in_official = entry.in_official_list
+        # Only WordEntry has level/in_official_list; PhraseEntry doesn't
+        if isinstance(entry, WordEntry):
+            if entry.level:
+                wd.level = entry.level
+            if entry.in_official_list is not None:
+                wd.in_official = entry.in_official_list
         
         feats = pred_extractor.extract_feature_vector(wd, target_year=target_year, external_features=None)
         
@@ -873,21 +883,21 @@ def _run_legacy_pipeline(cleaned_data, final_entries: list, target_year: int) ->
             updated_count += 1
             
     # 5. Report Top Predictions
-    top_n = sorted(final_entries, key=lambda x: getattr(x.frequency, "ml_score", 0), reverse=True)[:50]
-    
+    scorable_entries = [e for e in final_entries if isinstance(e, (WordEntry, PhraseEntry))]
+    top_n = sorted(
+        scorable_entries, key=lambda x: x.frequency.ml_score if x.frequency else 0, reverse=True
+    )[:50]
+
     table = Table(title=f"Top 50 Predicted Words for Year {target_year}")
     table.add_column("Rank", justify="right", style="cyan")
     table.add_column("Lemma", style="magenta")
     table.add_column("Level", justify="center")
     table.add_column("Score", justify="right", style="green")
-    
+
     for i, entry in enumerate(top_n):
-        table.add_row(
-            str(i + 1),
-            entry.lemma,
-            str(entry.level or 0),
-            f"{entry.frequency.ml_score:.4f}"
-        )
+        level = entry.level if isinstance(entry, WordEntry) else 0
+        score = entry.frequency.ml_score if entry.frequency else 0.0
+        table.add_row(str(i + 1), entry.lemma, str(level or 0), f"{score:.4f}")
     
     console.print(table)
     

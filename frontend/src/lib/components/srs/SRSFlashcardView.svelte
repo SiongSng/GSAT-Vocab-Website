@@ -64,7 +64,8 @@
     .view-container {
         max-width: 56rem;
         margin: 0 auto;
-        padding: 1.5rem 1rem calc(env(safe-area-inset-bottom, 0px) + 5rem);
+        padding: 1.5rem 1rem;
+        padding-bottom: calc(1.5rem + var(--bottom-nav-height));
     }
 
     @media (min-width: 640px) {

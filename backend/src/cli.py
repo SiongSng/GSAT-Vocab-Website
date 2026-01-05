@@ -191,12 +191,19 @@ async def _run_pipeline(
         if cleaned is not None and cleaned_total > 0:
             stage3 = progress.add_task("[cyan]Stage 3: Build sense inventory", total=cleaned_total)
             registry = Registry()
+            stage3_offset = 0
 
             def on_sense_progress(completed: int, total: int, item_type: str) -> None:
+                nonlocal stage3_offset
+                if item_type == "phrase":
+                    stage3_offset = len(cleaned.words) if cleaned else 0
+                elif item_type == "pattern":
+                    stage3_offset = (
+                        len(cleaned.words) + len(cleaned.phrases) if cleaned else 0
+                    )
                 progress.update(
                     stage3,
-                    completed=completed,
-                    total=total,
+                    completed=stage3_offset + completed,
                     description=f"[cyan]Stage 3: Build sense inventory ({item_type})",
                 )
 
@@ -230,7 +237,6 @@ async def _run_pipeline(
                 progress.update(
                     stage4,
                     completed=processed_count,
-                    total=total_items,
                     description=f"[cyan]Stage 4: Generate ({tier}, {generated_count} senses)",
                 )
 
@@ -243,9 +249,9 @@ async def _run_pipeline(
 
         progress.update(stage4, completed=generation_total or 1)
 
-        # Count entries for WSD progress
-        wsd_entry_count = len([e for e in entries if hasattr(e, "senses")]) if entries else 0
-        stage5 = progress.add_task("[cyan]Stage 5: WSD assignment", total=wsd_entry_count or 1)
+        # WSD progress: total is set on first callback since we don't know upfront
+        stage5 = progress.add_task("[cyan]Stage 5: WSD assignment", total=None)
+        stage5_total_set = False
 
         if entries and sense_assigned:
             # Import here to show loading status
@@ -256,31 +262,41 @@ async def _run_pipeline(
             load_wsd_model()  # Pre-load model
 
             def on_wsd_progress(completed: int, total: int, lemma: str) -> None:
+                nonlocal stage5_total_set
+                if not stage5_total_set:
+                    progress.update(stage5, total=total)
+                    stage5_total_set = True
                 progress.update(
                     stage5,
                     completed=completed,
-                    total=total,
                     description=f"[cyan]Stage 5: WSD ({lemma})",
                 )
 
             entries = await perform_wsd(sense_assigned, entries, progress_callback=on_wsd_progress)
 
-        progress.update(stage5, completed=wsd_entry_count or 1)
+        if not stage5_total_set:
+            progress.update(stage5, total=1, completed=1)
 
-        stage6 = progress.add_task("[cyan]Stage 6: Compute relations", total=100)
+        # Relations progress: total is set on first callback
+        stage6 = progress.add_task("[cyan]Stage 6: Compute relations", total=None)
+        stage6_total_set = False
         if entries:
 
             def on_relations_progress(completed: int, total: int, count: int) -> None:
+                nonlocal stage6_total_set
+                if not stage6_total_set:
+                    progress.update(stage6, total=total)
+                    stage6_total_set = True
                 progress.update(
                     stage6,
                     completed=completed,
-                    total=total,
                     description=f"[cyan]Stage 6: WordNet ({count} words)",
                 )
 
             entries = compute_relations(entries, progress_callback=on_relations_progress)
 
-        progress.update(stage6, completed=100)
+        if not stage6_total_set:
+            progress.update(stage6, total=1, completed=1)
 
         # === Stage 6.5: ML Scoring ===
         if not skip_ml and entries and cleaned:

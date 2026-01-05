@@ -5,174 +5,116 @@
         submitAnswer,
         nextQuestion,
         resetQuiz,
+        exitQuiz,
         retryIncorrect,
         isAnswerCorrect,
-        markHintUsed,
         type QuizConfig,
         type QuizQuestionType,
     } from "$lib/stores/quiz.svelte";
-    import {
-        getDueCount,
-        getWeakCount,
-        getAvailableCount,
-        getTodayStudiedCount,
-    } from "$lib/stores/quiz-generator";
-    import AudioButton from "$lib/components/ui/AudioButton.svelte";
+
+    import QuizStart from "./quiz/QuizStart.svelte";
+    import QuizChoiceQuestion from "./quiz/QuizChoiceQuestion.svelte";
+    import QuizSpellingQuestion from "./quiz/QuizSpellingQuestion.svelte";
+    import QuizResult from "./quiz/QuizResult.svelte";
+    import WordDetailModal from "./srs/WordDetailModal.svelte";
+    import { lookupEntry } from "$lib/stores/vocab-db";
+    import type { VocabEntry } from "$lib/types/vocab";
+    import { isWordEntry, isPhraseEntry } from "$lib/types/vocab";
 
     const quiz = getQuizStore();
 
-    let questionCount = $state(10);
-    let entryType = $state<"word" | "phrase" | "all">("all");
-    let quizSource = $state<"srs_due" | "srs_weak" | "today_studied">("srs_due");
-    let showSettings = $state(false);
     let showFeedback = $state(false);
-    let selectedAnswer = $state<string | null>(null);
-    let showHint = $state(false);
+    let audioContext: AudioContext | null = null;
 
-    let spellingInput = $state("");
-    let shuffledLetters = $state<string[]>([]);
-    let answerSlots = $state<string[]>([]);
-    let usedIndices = $state<Set<number>>(new Set());
-
-    let dueCount = $state(0);
-    let weakCount = $state(0);
-    let todayStudiedCount = $state(0);
-    let availableCount = $state(0);
-
-    $effect(() => {
-        loadCounts();
-    });
-
-    async function loadCounts() {
-        dueCount = await getDueCount();
-        weakCount = await getWeakCount();
-        todayStudiedCount = await getTodayStudiedCount();
-        availableCount = await getAvailableCount();
+    function getAudioContext(): AudioContext {
+        if (!audioContext) {
+            audioContext = new AudioContext();
+        }
+        return audioContext;
     }
 
-    function getProgressPercent(): number {
-        if (quiz.questions.length === 0) return 0;
-        return (quiz.currentIndex / quiz.questions.length) * 100;
+    function playCorrectSound() {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+
+        const frequencies = [523.25, 659.25];
+        const duration = 0.12;
+
+        frequencies.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.value = freq;
+
+            gain.gain.setValueAtTime(0, now + i * duration);
+            gain.gain.linearRampToValueAtTime(0.25, now + i * duration + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + (i + 1) * duration);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now + i * duration);
+            osc.stop(now + (i + 1) * duration + 0.05);
+        });
     }
+    let detailEntry = $state<VocabEntry | null>(null);
+    let isDetailOpen = $state(false);
 
-    async function handleStartQuiz() {
-        const config: QuizConfig = {
-            source: quizSource,
-            count: questionCount,
-            entry_type: entryType === "all" ? undefined : entryType,
-        };
-
-        await startQuiz(config);
-        resetQuestionState();
+    async function handleShowDetail(lemma: string) {
+        try {
+            const entry = await lookupEntry(lemma);
+            if (entry && (isWordEntry(entry) || isPhraseEntry(entry))) {
+                detailEntry = entry;
+                isDetailOpen = true;
+            }
+        } catch (e) {
+            console.error("Failed to load word detail:", e);
+        }
     }
 
     function resetQuestionState() {
         showFeedback = false;
-        selectedAnswer = null;
-        showHint = false;
-        spellingInput = "";
-        shuffledLetters = [];
-        answerSlots = [];
-        usedIndices = new Set();
     }
 
-    $effect(() => {
-        if (quiz.currentQuestion?.type === "spelling" && quiz.isActive) {
-            initSpellingQuestion();
-        }
-    });
+    async function handleStartQuiz(config: {
+        count: number;
+        entry_type?: "word" | "phrase";
+        force_type?: QuizQuestionType;
+    }) {
+        const quizConfig: QuizConfig = {
+            count: config.count,
+            entry_type: config.entry_type,
+            force_type: config.force_type,
+        };
 
-    function initSpellingQuestion() {
-        if (!quiz.currentQuestion) return;
-        const word = quiz.currentQuestion.correct;
-        const letters = word.split("");
-        shuffledLetters = [...letters].sort(() => Math.random() - 0.5);
-        answerSlots = new Array(word.length).fill("");
-        usedIndices = new Set();
+        await startQuiz(quizConfig);
+        resetQuestionState();
     }
 
-    function selectLetter(idx: number) {
-        if (usedIndices.has(idx)) return;
-
-        const emptySlotIdx = answerSlots.findIndex((s) => s === "");
-        if (emptySlotIdx === -1) return;
-
-        answerSlots[emptySlotIdx] = shuffledLetters[idx];
-        usedIndices = new Set([...usedIndices, idx]);
-    }
-
-    function removeLetterAt(slotIdx: number) {
-        if (!answerSlots[slotIdx]) return;
-
-        const letter = answerSlots[slotIdx];
-        const letterIdx = shuffledLetters.findIndex(
-            (l, i) => l === letter && usedIndices.has(i),
-        );
-
-        if (letterIdx !== -1) {
-            const newUsed = new Set(usedIndices);
-            newUsed.delete(letterIdx);
-            usedIndices = newUsed;
-        }
-
-        answerSlots[slotIdx] = "";
-    }
-
-    function isSpellingComplete(): boolean {
-        return answerSlots.every((s) => s !== "");
-    }
-
-    function getSpellingAnswer(): string {
-        return answerSlots.join("");
-    }
-
-    function handleChoiceSelect(value: string) {
+    function handleSelect(value: string) {
         if (showFeedback) return;
-        selectedAnswer = value;
         submitAnswer(value);
         showFeedback = true;
-    }
 
-    function handleSpellingSubmit() {
-        if (showFeedback) return;
-
-        const answer =
-            quiz.currentQuestion?.type === "spelling"
-                ? getSpellingAnswer()
-                : spellingInput.trim();
-
-        if (!answer) return;
-        selectedAnswer = answer;
-        submitAnswer(answer);
-        showFeedback = true;
-    }
-
-    function handleShowHint() {
-        showHint = true;
-        markHintUsed();
-    }
-
-    function handleNextQuestion() {
-        nextQuestion();
-        resetQuestionState();
-        if (quiz.currentQuestion?.type === "spelling") {
-            initSpellingQuestion();
+        if (isAnswerCorrect(quiz.currentIndex)) {
+            playCorrectSound();
         }
     }
 
-    function handleRestart() {
-        resetQuiz();
+    function handleContinue() {
+        nextQuestion();
         resetQuestionState();
     }
 
-    async function handleRetryIncorrect() {
+    function handleExit() {
+        exitQuiz();
+        resetQuestionState();
+    }
+
+    async function handleRetryWrong() {
         await retryIncorrect();
         resetQuestionState();
-    }
-
-    function getScorePercent(): number {
-        if (quiz.questions.length === 0) return 0;
-        return Math.round((quiz.score / quiz.questions.length) * 100);
     }
 
     function getWrongWords() {
@@ -182,7 +124,9 @@
         }));
     }
 
-    function isChoiceQuestion(type: QuizQuestionType | "adaptive" | null): boolean {
+    function isChoiceQuestion(
+        type: QuizQuestionType | "adaptive" | null,
+    ): boolean {
         return (
             type === "recognition" ||
             type === "reverse" ||
@@ -190,920 +134,187 @@
             type === "distinction"
         );
     }
-
-    function isTypingQuestion(type: QuizQuestionType | "adaptive" | null): boolean {
-        return type === "spelling";
-    }
-
-    function handleKeydown(e: KeyboardEvent) {
-        if (!quiz.isActive || !quiz.currentQuestion) return;
-
-        if (e.key === "Enter" && showFeedback) {
-            e.preventDefault();
-            handleNextQuestion();
-            return;
-        }
-
-        if (showFeedback) return;
-
-        if (quiz.currentQuestion.options && e.key >= "1" && e.key <= "4") {
-            const idx = parseInt(e.key) - 1;
-            if (idx < quiz.currentQuestion.options.length) {
-                handleChoiceSelect(quiz.currentQuestion.options[idx].value);
-            }
-        }
-    }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<div class="quiz-view h-full overflow-y-auto bg-surface-page">
+<div class="quiz-view">
     {#if quiz.isLoading}
-        <div class="flex items-center justify-center h-full">
-            <div class="text-center">
-                <svg
-                    class="w-10 h-10 animate-spin text-accent mx-auto mb-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                >
-                    <circle
-                        class="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        stroke-width="4"
-                    ></circle>
-                    <path
-                        class="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                </svg>
-                <p class="text-content-secondary text-sm">正在生成測驗...</p>
+        <div class="state-container">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p class="state-text">準備測驗中...</p>
             </div>
         </div>
     {:else if quiz.error}
-        <div class="flex items-center justify-center h-full p-5">
-            <div
-                class="max-w-md w-full bg-surface-primary border border-srs-again/30 rounded-lg p-6 text-center"
-            >
-                <p class="text-srs-again mb-4">{quiz.error}</p>
-                <button
-                    type="button"
-                    class="px-4 py-2 bg-srs-again text-white rounded-md hover:opacity-90 transition-opacity text-sm font-medium"
-                    onclick={handleRestart}
-                >
-                    返回
+        <div class="state-container">
+            <div class="error-card">
+                <div class="error-icon">
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                </div>
+                <h3>發生錯誤</h3>
+                <p class="error-message">{quiz.error}</p>
+                <button type="button" class="btn-primary" onclick={handleExit}>
+                    返回首頁
                 </button>
             </div>
         </div>
     {:else if quiz.isComplete}
-        <div class="results-page flex flex-col items-center justify-center min-h-full p-5">
-            <div class="max-w-md w-full">
-                <div class="results-hero text-center mb-8">
-                    {#if getScorePercent() >= 80}
-                        <span class="results-emoji text-6xl mb-4 block">🎉</span>
-                        <h1 class="text-2xl font-semibold text-content-primary">
-                            太棒了！
-                        </h1>
-                    {:else if getScorePercent() >= 60}
-                        <span class="results-emoji text-6xl mb-4 block">👍</span>
-                        <h1 class="text-2xl font-semibold text-content-primary">
-                            不錯喔！
-                        </h1>
-                    {:else}
-                        <span class="results-emoji text-6xl mb-4 block">💪</span>
-                        <h1 class="text-2xl font-semibold text-content-primary">
-                            繼續加油！
-                        </h1>
-                    {/if}
-                </div>
-
-                <div class="results-score text-center mb-8">
-                    <span class="text-5xl font-semibold text-accent"
-                        >{quiz.score}</span
-                    >
-                    <span class="text-3xl font-light text-content-tertiary mx-2"
-                        >/</span
-                    >
-                    <span class="text-3xl font-light text-content-tertiary"
-                        >{quiz.questions.length}</span
-                    >
-                </div>
-
-                {#if getWrongWords().length > 0}
-                    <div class="wrong-words-section mb-8">
-                        <h2
-                            class="text-base font-medium text-content-primary mb-3"
-                        >
-                            這些要多練習
-                        </h2>
-                        <div class="space-y-2">
-                            {#each getWrongWords() as word}
-                                <div
-                                    class="wrong-word-item flex items-center justify-between p-3 bg-srs-again/10 rounded-md border border-srs-again/20"
-                                >
-                                    <span
-                                        class="font-medium text-content-primary"
-                                        >{word.lemma}</span
-                                    >
-                                    <span
-                                        class="text-sm text-content-secondary truncate ml-3 max-w-[60%]"
-                                        >{word.definition}</span
-                                    >
-                                </div>
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
-
-                <div class="results-actions flex flex-col gap-3">
-                    {#if getWrongWords().length > 0}
-                        <button
-                            type="button"
-                            class="action-btn px-5 py-3 border border-srs-hard text-srs-hard font-medium rounded-md hover:bg-srs-hard/10 transition-colors"
-                            onclick={handleRetryIncorrect}
-                        >
-                            再練一次答錯的
-                        </button>
-                    {/if}
-                    <button
-                        type="button"
-                        class="action-btn px-5 py-3 bg-accent text-white font-medium rounded-md hover:opacity-90 transition-opacity"
-                        onclick={handleRestart}
-                    >
-                        繼續練習
-                    </button>
-                </div>
-            </div>
-        </div>
+        <QuizResult
+            score={quiz.score}
+            total={quiz.questions.length}
+            wrongWords={getWrongWords()}
+            onRetryWrong={handleRetryWrong}
+            onContinue={handleExit}
+        />
     {:else if quiz.isActive && quiz.currentQuestion}
-        <div class="quiz-session flex flex-col h-full">
-            <div class="progress-bar h-1 bg-surface-secondary">
-                <div
-                    class="progress-fill h-full bg-accent transition-all duration-300"
-                    style="width: {getProgressPercent()}%"
-                ></div>
-            </div>
-
-            <div class="flex-1 flex flex-col max-w-2xl mx-auto w-full p-5">
-                <div class="flex items-center justify-between mb-4">
-                    <span class="text-sm text-content-tertiary hidden sm:block">
-                        {quiz.progress.current} / {quiz.progress.total}
-                    </span>
-                    <button
-                        type="button"
-                        class="text-sm text-content-tertiary hover:text-content-secondary transition-colors"
-                        onclick={handleRestart}
-                    >
-                        退出
-                    </button>
-                </div>
-
-                <div class="question-card flex-1 flex flex-col">
-                    {#if isChoiceQuestion(quiz.currentQuestion.type)}
-                        {#if quiz.currentQuestion.type === "fill_blank" || quiz.currentQuestion.type === "distinction"}
-                            <div
-                                class="sentence-box bg-surface-secondary rounded-lg p-4 mb-4"
-                            >
-                                <p
-                                    class="text-base text-content-primary leading-relaxed"
-                                >
-                                    {quiz.currentQuestion.sentence_context ||
-                                        quiz.currentQuestion.prompt}
-                                </p>
-                                {#if quiz.currentQuestion.exam_source}
-                                    <p
-                                        class="text-xs text-content-tertiary mt-2"
-                                    >
-                                        {quiz.currentQuestion.exam_source.year}{quiz
-                                            .currentQuestion.exam_source
-                                            .exam_type}
-                                    </p>
-                                {/if}
-                            </div>
-
-                            {#if quiz.currentQuestion.hint}
-                                <button
-                                    type="button"
-                                    class="hint-btn text-sm text-accent mb-4 self-start"
-                                    onclick={handleShowHint}
-                                >
-                                    {showHint ? "提示：" : "看提示"}
-                                </button>
-                                {#if showHint}
-                                    <p
-                                        class="hint text-sm text-content-secondary mb-4 -mt-2"
-                                    >
-                                        {quiz.currentQuestion.hint}
-                                    </p>
-                                {/if}
-                            {/if}
-                        {:else}
-                            <div class="word-display text-center mb-6">
-                                {#if quiz.currentQuestion.type === "recognition"}
-                                    <span
-                                        class="word-text text-3xl font-semibold text-content-primary"
-                                    >
-                                        {quiz.currentQuestion.prompt}
-                                    </span>
-                                    <AudioButton
-                                        text={quiz.currentQuestion.lemma}
-                                        size="lg"
-                                        class="ml-3"
-                                    />
-                                {:else}
-                                    <p
-                                        class="text-lg text-content-primary mb-2"
-                                    >
-                                        {quiz.currentQuestion.prompt}
-                                    </p>
-                                    {#if quiz.currentQuestion.hint}
-                                        <p
-                                            class="text-sm text-content-tertiary"
-                                        >
-                                            {quiz.currentQuestion.hint}
-                                        </p>
-                                    {/if}
-                                {/if}
-                            </div>
-
-                            <p class="instruction text-sm text-content-tertiary mb-4 text-center">
-                                {quiz.currentQuestion.type === "recognition"
-                                    ? "選出正確的意思"
-                                    : "選出正確的單字"}
-                            </p>
-                        {/if}
-
-                        <div class="options flex-1 flex flex-col gap-3">
-                            {#each quiz.currentQuestion.options || [] as option, i}
-                                {@const isCorrectOption =
-                                    option.value.toLowerCase() ===
-                                    quiz.currentQuestion.correct.toLowerCase()}
-                                {@const isSelectedOption =
-                                    selectedAnswer?.toLowerCase() ===
-                                    option.value.toLowerCase()}
-                                <button
-                                    type="button"
-                                    class="option p-4 text-left rounded-lg border transition-all min-h-[52px]"
-                                    class:option-correct={showFeedback &&
-                                        isCorrectOption}
-                                    class:option-incorrect={showFeedback &&
-                                        isSelectedOption &&
-                                        !isCorrectOption}
-                                    class:option-selected={!showFeedback &&
-                                        isSelectedOption}
-                                    onclick={() =>
-                                        handleChoiceSelect(option.value)}
-                                    disabled={showFeedback}
-                                >
-                                    <span
-                                        class="hidden sm:inline-block text-xs text-content-tertiary mr-2"
-                                    >
-                                        按 {i + 1}
-                                    </span>
-                                    <span class="text-content-primary"
-                                        >{option.label}</span
-                                    >
-                                </button>
-                            {/each}
-                        </div>
-                    {:else if isTypingQuestion(quiz.currentQuestion.type)}
-                        <div class="spelling-prompt text-center mb-6">
-                            <AudioButton
-                                text={quiz.currentQuestion.lemma}
-                                size="lg"
-                                class="mb-4"
-                            />
-                            <p class="text-lg text-content-primary">
-                                {quiz.currentQuestion.prompt}
-                            </p>
-                            {#if quiz.currentQuestion.hint}
-                                <p class="text-sm text-content-tertiary mt-1">
-                                    {quiz.currentQuestion.hint}
-                                </p>
-                            {/if}
-                        </div>
-
-                        <div class="answer-area flex justify-center gap-2 mb-6">
-                            {#each answerSlots as letter, i}
-                                <button
-                                    type="button"
-                                    class="answer-slot w-10 h-12 border-2 rounded-md flex items-center justify-center text-lg font-medium transition-all"
-                                    class:answer-slot-filled={letter}
-                                    onclick={() => removeLetterAt(i)}
-                                    disabled={showFeedback}
-                                >
-                                    {letter || ""}
-                                </button>
-                            {/each}
-                        </div>
-
-                        <div
-                            class="letter-tiles flex flex-wrap justify-center gap-2 mb-6"
-                        >
-                            {#each shuffledLetters as letter, i}
-                                <button
-                                    type="button"
-                                    class="letter-tile w-10 h-10 rounded-md flex items-center justify-center text-lg font-medium transition-all"
-                                    class:letter-tile-used={usedIndices.has(i)}
-                                    onclick={() => selectLetter(i)}
-                                    disabled={usedIndices.has(i) || showFeedback}
-                                >
-                                    {letter}
-                                </button>
-                            {/each}
-                        </div>
-
-                        {#if !showFeedback}
-                            <button
-                                type="button"
-                                class="check-btn w-full px-4 py-3 bg-accent text-white font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
-                                onclick={handleSpellingSubmit}
-                                disabled={!isSpellingComplete()}
-                            >
-                                確認
-                            </button>
-                        {/if}
-                    {/if}
-                </div>
-
-                {#if showFeedback}
-                    {@const isCorrect = isAnswerCorrect(quiz.currentIndex)}
-                    <div
-                        class="feedback-sheet mt-4 p-4 rounded-lg"
-                        class:feedback-correct={isCorrect}
-                        class:feedback-incorrect={!isCorrect}
-                    >
-                        <div class="feedback-content flex items-center gap-3 mb-3">
-                            <span class="feedback-icon text-2xl">
-                                {isCorrect ? "✓" : "✗"}
-                            </span>
-                            {#if isCorrect}
-                                <span class="feedback-text font-medium"
-                                    >正確！</span
-                                >
-                            {:else}
-                                <div class="feedback-detail">
-                                    <span
-                                        class="feedback-text text-sm text-content-secondary"
-                                        >正確答案</span
-                                    >
-                                    <span
-                                        class="feedback-answer block font-semibold text-lg"
-                                    >
-                                        {quiz.currentQuestion.correct}
-                                    </span>
-                                </div>
-                            {/if}
-                        </div>
-
-                        {#if !isCorrect && quiz.currentQuestion.explanation?.memory_tip}
-                            <p class="feedback-tip text-sm mb-3">
-                                💡 {quiz.currentQuestion.explanation.memory_tip}
-                            </p>
-                        {/if}
-
-                        <button
-                            type="button"
-                            class="continue-btn w-full px-4 py-3 font-medium rounded-md transition-opacity"
-                            onclick={handleNextQuestion}
-                        >
-                            繼續
-                        </button>
-                    </div>
-                {/if}
-            </div>
-        </div>
+        {#if isChoiceQuestion(quiz.currentQuestion.type)}
+            <QuizChoiceQuestion
+                question={quiz.currentQuestion}
+                questionIndex={quiz.currentIndex}
+                totalQuestions={quiz.questions.length}
+                {showFeedback}
+                isCorrect={showFeedback
+                    ? isAnswerCorrect(quiz.currentIndex)
+                    : null}
+                onSelect={handleSelect}
+                onContinue={handleContinue}
+                onExit={handleExit}
+                onShowDetail={handleShowDetail}
+            />
+        {:else}
+            <QuizSpellingQuestion
+                question={quiz.currentQuestion}
+                questionIndex={quiz.currentIndex}
+                totalQuestions={quiz.questions.length}
+                {showFeedback}
+                isCorrect={showFeedback
+                    ? isAnswerCorrect(quiz.currentIndex)
+                    : null}
+                onSubmit={handleSelect}
+                onContinue={handleContinue}
+                onExit={handleExit}
+                onShowDetail={handleShowDetail}
+            />
+        {/if}
     {:else}
-        <div class="quiz-start-page flex flex-col items-center justify-center min-h-full p-5">
-            <div class="max-w-lg w-full bg-surface-primary rounded-lg border border-border shadow-card p-6 lg:p-8">
-                <h2 class="text-xl lg:text-2xl font-semibold tracking-tight text-content-primary mb-6">
-                    單字練習
-                </h2>
+        <QuizStart onStart={handleStartQuiz} />
+    {/if}
 
-                <div class="stats-section mb-6">
-                    <div class="stats-hero">
-                        <div class="stats-hero-number">{availableCount}</div>
-                        <div class="stats-hero-label">張卡片</div>
-                    </div>
-
-                    <div class="stats-row">
-                        <div class="stats-item">
-                            <span class="stats-dot stats-dot-review"></span>
-                            <span class="stats-value">{dueCount}</span>
-                            <span class="stats-label">該複習了</span>
-                        </div>
-                        <div class="stats-item">
-                            <span class="stats-dot stats-dot-learning"></span>
-                            <span class="stats-value">{weakCount}</span>
-                            <span class="stats-label">需要加強</span>
-                        </div>
-                        <div class="stats-item">
-                            <span class="stats-dot stats-dot-new"></span>
-                            <span class="stats-value">{todayStudiedCount}</span>
-                            <span class="stats-label">今日學習</span>
-                        </div>
-                    </div>
-                </div>
-
-                <button
-                    type="button"
-                    class="btn-start"
-                    onclick={handleStartQuiz}
-                    disabled={availableCount === 0}
-                >
-                    {#if availableCount > 0}
-                        開始練習
-                    {:else}
-                        暫無可練習卡片
-                    {/if}
-                </button>
-
-                <button
-                    type="button"
-                    class="settings-toggle"
-                    onclick={() => (showSettings = !showSettings)}
-                >
-                    <span>偏好設定</span>
-                    <svg
-                        class="w-4 h-4 text-content-tertiary transition-transform {showSettings ? 'rotate-180' : ''}"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="m19 9-7 7-7-7"
-                        />
-                    </svg>
-                </button>
-
-                {#if showSettings}
-                    <div class="border-t border-border pt-6 mt-6">
-                        <div class="settings-grid">
-                            <div class="setting-group">
-                                <h4 class="setting-group-title">題目來源</h4>
-                                
-                                <div class="source-radio-group">
-                                    <label class="source-radio-option">
-                                        <input
-                                            type="radio"
-                                            name="quiz-source"
-                                            value="srs_due"
-                                            bind:group={quizSource}
-                                        />
-                                        <div class="source-radio-content">
-                                            <div class="source-radio-title">智慧推薦</div>
-                                            <div class="source-radio-desc">根據遺忘曲線自動選擇需要複習的單字</div>
-                                        </div>
-                                    </label>
-                                    <label class="source-radio-option">
-                                        <input
-                                            type="radio"
-                                            name="quiz-source"
-                                            value="today_studied"
-                                            bind:group={quizSource}
-                                        />
-                                        <div class="source-radio-content">
-                                            <div class="source-radio-title">今日學習</div>
-                                            <div class="source-radio-desc">複習今天在 Flashcard 學過的單字</div>
-                                        </div>
-                                    </label>
-                                    <label class="source-radio-option">
-                                        <input
-                                            type="radio"
-                                            name="quiz-source"
-                                            value="srs_weak"
-                                            bind:group={quizSource}
-                                        />
-                                        <div class="source-radio-content">
-                                            <div class="source-radio-title">困難單字</div>
-                                            <div class="source-radio-desc">按錯次數較多或標記為困難的單字</div>
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div class="setting-group">
-                                <h4 class="setting-group-title">測驗設定</h4>
-
-                                <div class="setting-row">
-                                    <div class="setting-row-label">
-                                        <span>題數</span>
-                                    </div>
-                                    <div class="setting-row-control">
-                                        <div class="chip-group">
-                                            {#each [10, 20, 30] as count}
-                                                <button
-                                                    type="button"
-                                                    class="chip"
-                                                    class:chip-active={questionCount === count}
-                                                    onclick={() => (questionCount = count)}
-                                                >
-                                                    {count}
-                                                </button>
-                                            {/each}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="setting-row">
-                                    <div class="setting-row-label">
-                                        <span>範圍</span>
-                                    </div>
-                                    <div class="setting-row-control">
-                                        <div class="chip-group">
-                                            <button
-                                                type="button"
-                                                class="chip"
-                                                class:chip-active={entryType === "all"}
-                                                onclick={() => (entryType = "all")}
-                                            >
-                                                全部
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="chip"
-                                                class:chip-active={entryType === "word"}
-                                                onclick={() => (entryType = "word")}
-                                            >
-                                                單字
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="chip"
-                                                class:chip-active={entryType === "phrase"}
-                                                onclick={() => (entryType = "phrase")}
-                                            >
-                                                片語
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                {/if}
-            </div>
-        </div>
+    {#if detailEntry}
+        <WordDetailModal
+            entry={detailEntry}
+            isOpen={isDetailOpen}
+            onClose={() => (isDetailOpen = false)}
+        />
     {/if}
 </div>
 
 <style>
-    /* Stats Section - Matching StudyDashboard */
-    .stats-section {
-        margin-bottom: 1.5rem;
-    }
-
-    .stats-hero {
-        display: flex;
-        align-items: baseline;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-    }
-
-    .stats-hero-number {
-        font-size: 3.5rem;
-        font-weight: 600;
-        line-height: 1;
-        letter-spacing: -0.03em;
-        color: var(--color-content-primary);
-    }
-
-    .stats-hero-label {
-        font-size: 1.125rem;
-        color: var(--color-content-tertiary);
-    }
-
-    .stats-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem 1.25rem;
-    }
-
-    .stats-item {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-    }
-
-    .stats-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-
-    .stats-dot-review {
-        background-color: var(--color-srs-again);
-        opacity: 0.7;
-    }
-
-    .stats-dot-learning {
-        background-color: var(--color-srs-hard);
-        opacity: 0.7;
-    }
-
-    .stats-dot-new {
-        background-color: var(--color-srs-easy);
-        opacity: 0.7;
-    }
-
-    .stats-value {
-        font-size: 0.9375rem;
-        font-weight: 600;
-        color: var(--color-content-primary);
-    }
-
-    .stats-label {
-        font-size: 0.8125rem;
-        color: var(--color-content-tertiary);
-    }
-
-    /* Buttons - Matching StudyDashboard */
-    .btn-start {
+    .quiz-view {
+        height: 100%;
         width: 100%;
-        padding: 0.875rem 1.25rem;
-        background-color: var(--color-content-primary);
-        color: white;
-        border-radius: 0.5rem;
-        font-size: 1rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background-color 0.15s ease;
+        overflow-y: auto;
+        background-color: var(--color-surface-page);
+        padding-bottom: var(--bottom-nav-height);
     }
 
-    .btn-start:hover:not(:disabled) {
-        background-color: var(--color-content-primary-hover);
-    }
-
-    .btn-start:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    .settings-toggle {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.625rem 0.25rem;
-        font-size: 0.875rem;
-        color: var(--color-content-secondary);
-        cursor: pointer;
-        transition: color 0.15s ease;
-        margin-top: 1rem;
-    }
-
-    .settings-toggle:hover {
-        color: var(--color-content-primary);
-    }
-
-    /* Settings Grid - Matching StudyDashboard */
-    .settings-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-
-    .setting-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .setting-group:not(:first-child) {
-        padding-top: 1rem;
-        border-top: 1px solid var(--color-border);
-    }
-
-    .setting-group-title {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: var(--color-section-header);
-        margin: 0 0 0.5rem 0;
-    }
-
-    .setting-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        gap: 0.5rem 1rem;
-        padding: 0.5rem 0;
-    }
-
-    .setting-row-label {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-        font-size: 0.875rem;
-        color: var(--color-content-primary);
-    }
-
-    .setting-row-control {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        justify-content: flex-end;
-    }
-
-    /* Chip Group - Matching StudyDashboard */
-    .chip-group {
-        display: flex;
-        gap: 0.25rem;
-    }
-
-    .chip {
-        min-width: 2.5rem;
-        height: 1.75rem;
+    .state-container {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 0 0.625rem;
-        background-color: var(--color-surface-page);
-        border-radius: 4px;
-        font-weight: 500;
-        font-size: 0.75rem;
-        color: var(--color-content-tertiary);
-        transition: all 0.15s ease;
-        cursor: pointer;
-        border: 1px solid transparent;
+        min-height: 100%;
+        padding: 1.5rem;
     }
 
-    .chip:hover {
-        background-color: var(--color-surface-hover);
-        color: var(--color-content-secondary);
-    }
-
-    .chip-active {
-        background-color: var(--color-accent-soft);
-        color: var(--color-accent);
-    }
-
-    .chip-active:hover {
-        background-color: var(--color-accent-soft);
-        color: var(--color-accent);
-    }
-
-    /* Source Radio Options */
-    .source-radio-group {
+    /* Loading State */
+    .loading-content {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        align-items: center;
+        gap: 1rem;
     }
 
-    .source-radio-option {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.75rem;
-        padding: 0.75rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--color-border);
-        background-color: transparent;
-        cursor: pointer;
-        transition: all 0.15s ease;
+    .spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid var(--color-surface-hover);
+        border-top-color: var(--color-accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
     }
 
-    .source-radio-option:hover {
-        background-color: var(--color-surface-hover);
-        border-color: var(--color-border-hover);
-    }
-
-    .source-radio-option:has(input:checked) {
-        background-color: var(--color-accent-soft);
-        border-color: var(--color-accent);
-    }
-
-    .source-radio-option input[type="radio"] {
-        margin-top: 0.125rem;
-        accent-color: var(--color-accent);
-        cursor: pointer;
-    }
-
-    .source-radio-content {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .source-radio-title {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--color-content-primary);
-        margin-bottom: 0.125rem;
-    }
-
-    .source-radio-desc {
-        font-size: 0.75rem;
-        color: var(--color-content-tertiary);
-        line-height: 1.4;
-    }
-
-    /* Question Screen Styles */
-    .option {
-        border-color: var(--color-border);
-        background-color: var(--color-surface-primary);
-    }
-
-    .option:hover:not(:disabled) {
-        border-color: var(--color-border-hover);
-        background-color: var(--color-surface-hover);
-    }
-
-    .option-selected {
-        border-color: var(--color-accent);
-        background-color: var(--color-accent-soft);
-    }
-
-    .option-correct {
-        border-color: var(--color-srs-good);
-        background-color: var(--color-srs-good-soft);
-    }
-
-    .option-incorrect {
-        border-color: var(--color-srs-again);
-        background-color: var(--color-srs-again-soft);
-    }
-
-    .option:disabled {
-        cursor: default;
-    }
-
-    .answer-slot {
-        border-color: var(--color-border);
-        background-color: var(--color-surface-primary);
-    }
-
-    .answer-slot-filled {
-        border-color: var(--color-accent);
-        background-color: var(--color-accent-soft);
-        color: var(--color-accent);
-    }
-
-    .letter-tile {
-        background-color: var(--color-surface-primary);
-        border: 1px solid var(--color-border);
-        color: var(--color-content-primary);
-    }
-
-    .letter-tile:hover:not(:disabled) {
-        background-color: var(--color-surface-hover);
-        border-color: var(--color-border-hover);
-    }
-
-    .letter-tile-used {
-        opacity: 0.3;
-    }
-
-    .feedback-correct {
-        background-color: var(--color-srs-good-soft);
-    }
-
-    .feedback-correct .feedback-icon,
-    .feedback-correct .feedback-text {
-        color: var(--color-srs-good);
-    }
-
-    .feedback-correct .continue-btn {
-        background-color: var(--color-srs-good);
-        color: white;
-    }
-
-    .feedback-correct .continue-btn:hover {
-        opacity: 0.9;
-    }
-
-    .feedback-incorrect {
-        background-color: var(--color-srs-again-soft);
-    }
-
-    .feedback-incorrect .feedback-icon {
-        color: var(--color-srs-again);
-    }
-
-    .feedback-incorrect .feedback-answer {
-        color: var(--color-srs-again);
-    }
-
-    .feedback-incorrect .continue-btn {
-        background-color: var(--color-srs-again);
-        color: white;
-    }
-
-    .feedback-incorrect .continue-btn:hover {
-        opacity: 0.9;
-    }
-
-    .feedback-tip {
-        color: var(--color-content-secondary);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .progress-fill {
-            transition: none;
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
         }
+    }
+
+    .state-text {
+        color: var(--color-content-secondary);
+        font-size: 0.9375rem;
+    }
+
+    /* Error State */
+    .error-card {
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 12px;
+        padding: 2rem;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+
+    .error-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        margin-bottom: 1rem;
+    }
+
+    .error-card h3 {
+        margin: 0 0 0.5rem 0;
+        color: var(--color-content-primary);
+        font-size: 1.125rem;
+    }
+
+    .error-message {
+        color: var(--color-content-secondary);
+        font-size: 0.9375rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+    }
+
+    .btn-primary {
+        width: 100%;
+        padding: 0.75rem;
+        background-color: var(--color-content-primary);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+    .btn-primary:hover {
+        opacity: 0.9;
     }
 </style>

@@ -22,16 +22,18 @@ from ..models.exam import AnnotationRole, ExamType, SectionType
 
 class LearningDimension(Enum):
     """Dimensions of vocabulary learning value"""
-    RECOGNITION = "recognition"      # Reading comprehension
-    PRODUCTION = "production"        # Writing/translation
+
+    RECOGNITION = "recognition"  # Reading comprehension
+    PRODUCTION = "production"  # Writing/translation
     DISCRIMINATION = "discrimination"  # Distinguishing similar words
-    RECENCY = "recency"             # Temporal relevance
+    RECENCY = "recency"  # Temporal relevance
     DIFFICULTY_MATCH = "difficulty"  # Appropriate difficulty level
 
 
 @dataclass
 class DimensionScore:
     """Score for a single learning dimension"""
+
     raw_value: float
     normalized_value: float = 0.0
     weight: float = 1.0
@@ -44,6 +46,7 @@ class DimensionScore:
 @dataclass
 class VocabValue:
     """Comprehensive vocabulary learning value assessment"""
+
     lemma: str
     level: int | None
 
@@ -110,8 +113,7 @@ class VocabValueEstimator:
         AnnotationRole.CORRECT_ANSWER: 2.0,
         AnnotationRole.TESTED_KEYWORD: 3.0,  # Translation keywords are highest
         AnnotationRole.DISTRACTOR: 0.5,
-        AnnotationRole.NOTABLE_PHRASE: 1.5,  # Phrases flagged by exam makers
-        "notable_phrase": 1.5,  # String fallback for by_role dict
+        AnnotationRole.NOTABLE_PHRASE: 0.8,  # Phrases flagged by exam makers
         "none": 0.2,
     }
 
@@ -139,10 +141,7 @@ class VocabValueEstimator:
         level = word_data.get("level") or 0
 
         # Filter contexts to historical data only
-        historical_contexts = [
-            c for c in contexts
-            if self._is_historically_available(c)
-        ]
+        historical_contexts = [c for c in contexts if self._is_historically_available(c)]
 
         scores = {}
 
@@ -150,40 +149,35 @@ class VocabValueEstimator:
         # Words that appear in reading/comprehension contexts
         recognition_value = self._compute_recognition_value(historical_contexts, freq)
         scores[LearningDimension.RECOGNITION] = DimensionScore(
-            raw_value=recognition_value,
-            weight=self.weights[LearningDimension.RECOGNITION]
+            raw_value=recognition_value, weight=self.weights[LearningDimension.RECOGNITION]
         )
 
         # 2. Production Value
         # Words tested as answers or translation keywords
         production_value = self._compute_production_value(historical_contexts, freq)
         scores[LearningDimension.PRODUCTION] = DimensionScore(
-            raw_value=production_value,
-            weight=self.weights[LearningDimension.PRODUCTION]
+            raw_value=production_value, weight=self.weights[LearningDimension.PRODUCTION]
         )
 
         # 3. Discrimination Value
         # Words that appear as both answer and distractor (confusable)
         discrimination_value = self._compute_discrimination_value(freq)
         scores[LearningDimension.DISCRIMINATION] = DimensionScore(
-            raw_value=discrimination_value,
-            weight=self.weights[LearningDimension.DISCRIMINATION]
+            raw_value=discrimination_value, weight=self.weights[LearningDimension.DISCRIMINATION]
         )
 
         # 4. Recency Value
         # Recent appearance weighted exponentially
         recency_value = self._compute_recency_value(historical_contexts, freq)
         scores[LearningDimension.RECENCY] = DimensionScore(
-            raw_value=recency_value,
-            weight=self.weights[LearningDimension.RECENCY]
+            raw_value=recency_value, weight=self.weights[LearningDimension.RECENCY]
         )
 
         # 5. Difficulty Match
         # How well the word matches target student level
         difficulty_value = self._compute_difficulty_match(level)
         scores[LearningDimension.DIFFICULTY_MATCH] = DimensionScore(
-            raw_value=difficulty_value,
-            weight=self.weights[LearningDimension.DIFFICULTY_MATCH]
+            raw_value=difficulty_value, weight=self.weights[LearningDimension.DIFFICULTY_MATCH]
         )
 
         return scores
@@ -207,8 +201,8 @@ class VocabValueEstimator:
         for scenario, prob in self.SCENARIO_PROBS.items():
             abilities = self.SCENARIO_ABILITIES[scenario]
             scenario_value = (
-                abilities["recognition"] * recognition_gain +
-                abilities["production"] * production_gain
+                abilities["recognition"] * recognition_gain
+                + abilities["production"] * production_gain
             )
             evl += prob * scenario_value
 
@@ -218,9 +212,7 @@ class VocabValueEstimator:
         return evl * effort_factor
 
     def compute_topsis(
-        self,
-        all_words: list[dict],
-        dimension_scores: list[dict[LearningDimension, DimensionScore]]
+        self, all_words: list[dict], dimension_scores: list[dict[LearningDimension, DimensionScore]]
     ) -> list[float]:
         """
         Compute TOPSIS scores for all words.
@@ -245,7 +237,7 @@ class VocabValueEstimator:
                     weights[j] = scores[dim].weight
 
         # Handle zero columns
-        col_sums = np.sqrt((matrix ** 2).sum(axis=0))
+        col_sums = np.sqrt((matrix**2).sum(axis=0))
         col_sums[col_sums == 0] = 1.0
 
         # Vector normalization
@@ -292,7 +284,9 @@ class VocabValueEstimator:
             production=dimensions.get(LearningDimension.PRODUCTION, DimensionScore(0.0)),
             discrimination=dimensions.get(LearningDimension.DISCRIMINATION, DimensionScore(0.0)),
             recency=dimensions.get(LearningDimension.RECENCY, DimensionScore(0.0)),
-            difficulty_match=dimensions.get(LearningDimension.DIFFICULTY_MATCH, DimensionScore(0.0)),
+            difficulty_match=dimensions.get(
+                LearningDimension.DIFFICULTY_MATCH, DimensionScore(0.0)
+            ),
             evl_score=evl_score,
             sense_coverage=sense_analysis.get("coverage", 0.0),
             untested_sense_count=sense_analysis.get("untested_count", 0),
@@ -325,9 +319,9 @@ class VocabValueEstimator:
 
             # Final score combines TOPSIS and EVL
             value.final_score = (
-                0.5 * value.topsis_score +
-                0.3 * min(1.0, value.evl_score / 10.0) +  # Normalize EVL
-                0.2 * value.sense_coverage  # Bonus for sense coverage
+                0.5 * value.topsis_score
+                + 0.3 * min(1.0, value.evl_score / 10.0)  # Normalize EVL
+                + 0.2 * value.sense_coverage  # Bonus for sense coverage
             )
 
             results.append(value)
@@ -354,15 +348,16 @@ class VocabValueEstimator:
         section_counts = freq.get("by_section", {})
 
         reading_value = (
-            section_counts.get(SectionType.READING, 0) * 0.5 +
-            section_counts.get(SectionType.CLOZE, 0) * 0.4 +
-            section_counts.get(SectionType.DISCOURSE, 0) * 0.4 +
-            section_counts.get(SectionType.VOCABULARY, 0) * 0.3
+            section_counts.get(SectionType.READING, 0) * 0.5
+            + section_counts.get(SectionType.CLOZE, 0) * 0.4
+            + section_counts.get(SectionType.DISCOURSE, 0) * 0.4
+            + section_counts.get(SectionType.VOCABULARY, 0) * 0.3
         )
 
         # Apply recency decay
         recent_count = sum(
-            1 for c in contexts
+            1
+            for c in contexts
             if (c.get("year") or c.get("source", {}).get("year", 0)) >= self.target_year - 5
         )
         recency_boost = 1.0 + 0.1 * min(recent_count, 5)
@@ -455,9 +450,9 @@ class VocabValueEstimator:
         section_counts = freq.get("by_section", {})
 
         total_reading = (
-            section_counts.get(SectionType.READING, 0) +
-            section_counts.get(SectionType.CLOZE, 0) +
-            section_counts.get(SectionType.DISCOURSE, 0)
+            section_counts.get(SectionType.READING, 0)
+            + section_counts.get(SectionType.CLOZE, 0)
+            + section_counts.get(SectionType.DISCOURSE, 0)
         )
 
         return min(5.0, math.log1p(total_reading) * 1.5)
@@ -472,11 +467,14 @@ class VocabValueEstimator:
         # It has recognition value and potential production value
         notable_count = role_counts.get("notable_phrase", 0)
 
-        return min(5.0, (
-            answer_count * 1.0 +
-            keyword_count * 2.0 +
-            notable_count * 0.5  # Lower than direct testing but still valuable
-        ))
+        return min(
+            5.0,
+            (
+                answer_count * 1.0
+                + keyword_count * 2.0
+                + notable_count * 0.5  # Lower than direct testing but still valuable
+            ),
+        )
 
     def _analyze_senses(self, senses: list[dict]) -> dict:
         """Analyze sense-level coverage and risk"""

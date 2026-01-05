@@ -941,6 +941,47 @@ def _dedupe_pattern_occurrences(occurrences: list[PatternOccurrence]) -> list[Pa
     return result
 
 
+def _is_passage_specific_single_year(contexts: list[ContextSentence]) -> bool:
+    """Check if word only appeared in a single passage (domain-specific vocabulary).
+
+    Goal: Filter out domain-specific vocabulary that only appears in one reading
+    passage and is unlikely to be tested again (e.g., "kale", "pediatric").
+
+    Criteria:
+    - Only appears in a single year
+    - Within that year, only appears in a single question/passage
+
+    Note on gsat_ref: Reference exams may copy content from official GSAT exams,
+    so we exclude gsat_ref when counting distinct questions to avoid double-counting
+    the same passage. However, gsat_trial and other exam types are counted normally
+    as they represent distinct content.
+    """
+    if not contexts:
+        return False
+
+    years = {c.source.year for c in contexts}
+    if len(years) > 1:
+        return False
+
+    # Exclude gsat_ref to avoid double-counting copied content
+    primary_questions = {
+        c.source.question_number
+        for c in contexts
+        if c.source.exam_type != ExamType.GSAT_REF
+    }
+
+    if primary_questions:
+        return len(primary_questions) == 1
+
+    # Only gsat_ref exists, check within gsat_ref
+    return len({c.source.question_number for c in contexts}) == 1
+
+
+def _is_incidental_vocab(freq_counter: FrequencyCounter) -> bool:
+    """Check if word was never tested (only appeared as background context)."""
+    return freq_counter.tested_count == 0
+
+
 def clean_and_aggregate(
     exams: list[StructuredExam],
     official_wordlist: dict[str, OfficialWordEntry],
@@ -1037,6 +1078,7 @@ def clean_and_aggregate(
     words: list[CleanedWordEntry] = []
     phrases: list[CleanedPhraseEntry] = []
     patterns: list[CleanedPatternEntry] = []
+    filtered_passage_specific = 0
 
     # Build word entries
     for lemma, freq_counter in all_frequency.items():
@@ -1045,6 +1087,18 @@ def clean_and_aggregate(
         official = official_wordlist.get(lemma)
         in_official = official is not None
         level = int(official.level) if official and official.level.isdigit() else None
+
+        # Filter out rare passage-specific vocabulary:
+        # - Not in official wordlist
+        # - Never tested (only background context)
+        # - Only appeared in one official exam year (GSAT/AST) in a single question
+        if (
+            not in_official
+            and _is_incidental_vocab(freq_counter)
+            and _is_passage_specific_single_year(contexts)
+        ):
+            filtered_passage_specific += 1
+            continue
 
         if contexts:
             pos = sorted({ctx.pos for ctx in contexts})
@@ -1115,6 +1169,9 @@ def clean_and_aggregate(
                 occurrences=occurrences,
             )
         )
+
+    if filtered_passage_specific > 0:
+        logger.info(f"Filtered {filtered_passage_specific} passage-specific incidental words")
 
     return CleanedVocabData(
         words=words,

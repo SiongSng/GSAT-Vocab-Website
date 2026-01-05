@@ -105,6 +105,16 @@
         min-height: 100dvh;
     }
 
+    :global(:root) {
+        --bottom-nav-height: 0px;
+    }
+
+    @media (max-width: 1023px) {
+        :global(:root) {
+            --bottom-nav-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+        }
+    }
+
     :global(html, body) {
         height: 100%;
         margin: 0;

@@ -285,6 +285,7 @@ export function updateCard(card: SRSCard): void {
   addToLemmaIndex(card);
   setLastUpdated(Date.now());
   scheduleSave();
+  notifyDataChange();
 }
 
 export async function setAllCards(cards: SRSCard[]): Promise<void> {

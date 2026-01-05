@@ -1,11 +1,15 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import type { HeatmapCell } from "$lib/utils/stats";
 
     interface Props {
         data: HeatmapCell[][];
+        isMobile?: boolean | null;
     }
 
-    let { data }: Props = $props();
+    let { data, isMobile = false }: Props = $props();
+
+    let scrollContainer: HTMLDivElement;
 
     const months = [
         "1月",
@@ -70,11 +74,20 @@
         }
         return `${cell.date}: ${cell.count} 張卡片`;
     }
+
+    onMount(() => {
+        if (scrollContainer) {
+            scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+        }
+    });
+
+    const titleText = $derived(isMobile ? "過去 3 個月" : "過去 6 個月");
+    const weeksCount = $derived(data.length || 27);
 </script>
 
-<div class="heatmap-container-outer">
+<div class="heatmap-container-outer" bind:this={scrollContainer}>
     <div class="heatmap-header">
-        <h3 class="chart-title">過去 6 個月</h3>
+        <h3 class="chart-title">{titleText}</h3>
         <div class="legend">
             <span class="legend-text">少</span>
             <div class="legend-cells">
@@ -88,7 +101,10 @@
         </div>
     </div>
 
-    <div class="heatmap-grid">
+    <div
+        class="heatmap-grid"
+        style="grid-template-columns: 1.25rem repeat({weeksCount}, minmax(0, 1fr));"
+    >
         <!-- Month Labels (Row 1) -->
         {#each monthLabels() as label}
             <div
@@ -168,11 +184,9 @@
     /* Grid Layout - GitHub style responsive */
     .heatmap-grid {
         display: grid;
-        grid-template-columns: 1.25rem repeat(27, minmax(0, 1fr));
         grid-template-rows: auto repeat(7, minmax(0, 1fr));
         gap: 2px;
         width: 100%;
-        min-width: 400px;
     }
 
     @media (min-width: 768px) {

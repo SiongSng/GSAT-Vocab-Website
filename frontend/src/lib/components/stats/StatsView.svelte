@@ -14,7 +14,6 @@
         getMultiSenseProgress,
         type StreakInfo,
         type MasteryProgress,
-        type HeatmapCell,
         type MultiSenseProgress,
     } from "$lib/utils/stats";
     import type { DailyStats } from "$lib/types/srs";
@@ -35,9 +34,15 @@
     });
     let last7Days: DailyStats[] = $state([]);
     // Removed unused allCards state
-    let heatmapData: HeatmapCell[][] = $state.raw([]);
+    let heatmapStats: DailyStats[] = $state([]);
     let isLoading = $state(true);
     let showSettings = $state(false);
+
+    // Derive heatmap data based on isMobile - recalculates when isMobile changes
+    const heatmapData = $derived.by(() => {
+        const months = app.isMobile ? 3 : 6;
+        return getHeatmapData(heatmapStats, months);
+    });
 
     // Mastery calculation state
     let masteryProgress: MasteryProgress = $state({
@@ -131,7 +136,7 @@
 
         streakInfo = calculateStreak(stats);
         last7Days = getLast7DaysStats(stats);
-        heatmapData = getHeatmapData(stats);
+        heatmapStats = stats;
 
         // Initial calculation
         if (vocab.index.length > 0) {
@@ -480,7 +485,7 @@
 
             <!-- Heatmap Card -->
             <div class="heatmap-card grid-main-bottom">
-                <YearlyHeatmap data={heatmapData} />
+                <YearlyHeatmap data={heatmapData} isMobile={app.isMobile} />
             </div>
 
             <!-- Notification Settings Card (Desktop Only) -->
@@ -498,19 +503,19 @@
         min-height: 100%;
         background-color: var(--color-surface-page);
         padding: 1rem;
-        padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(1rem + var(--bottom-nav-height));
     }
 
     @media (min-width: 640px) {
         .stats-page {
             padding: 1rem 1.5rem;
+            padding-bottom: calc(1rem + var(--bottom-nav-height));
         }
     }
 
     @media (min-width: 1024px) {
         .stats-page {
             padding: 1.5rem 1rem;
-            padding-bottom: 1.5rem;
             max-width: 1100px;
             margin: 0 auto;
         }

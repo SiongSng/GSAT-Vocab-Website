@@ -243,20 +243,46 @@ function normalizeImportanceScores(
     }
   }
 
-  let minScore = 0;
-  let maxScore = 1;
-  if (allScores.length > 0) {
-    minScore = Math.min(...allScores);
-    maxScore = Math.max(...allScores);
+  if (allScores.length === 0) {
+    for (const word of words) {
+      if (word.frequency) {
+        word.frequency.importance_score = Math.min(
+          word.frequency.total_appearances / 100,
+          1,
+        );
+      }
+    }
+    for (const phrase of phrases) {
+      if (phrase.frequency) {
+        phrase.frequency.importance_score = Math.min(
+          phrase.frequency.total_appearances / 100,
+          1,
+        );
+      }
+    }
+    return;
   }
-  const scoreRange = maxScore - minScore || 1;
+
+  const sortedScores = [...allScores].sort((a, b) => a - b);
+  const n = sortedScores.length;
+
+  const scoreToPercentile = new Map<number, number>();
+  for (let i = 0; i < n; i++) {
+    const score = sortedScores[i];
+    if (!scoreToPercentile.has(score)) {
+      let j = i;
+      while (j < n && sortedScores[j] === score) j++;
+      const avgRank = (i + j - 1) / 2;
+      scoreToPercentile.set(score, n > 1 ? avgRank / (n - 1) : 0.5);
+    }
+  }
 
   for (const word of words) {
     if (word.frequency) {
       word.frequency.importance_score =
         word.frequency.ml_score != null
-          ? (word.frequency.ml_score - minScore) / scoreRange
-          : word.frequency.total_appearances / 100;
+          ? (scoreToPercentile.get(word.frequency.ml_score) ?? 0)
+          : Math.min(word.frequency.total_appearances / 100, 1);
     }
   }
 
@@ -264,8 +290,8 @@ function normalizeImportanceScores(
     if (phrase.frequency) {
       phrase.frequency.importance_score =
         phrase.frequency.ml_score != null
-          ? (phrase.frequency.ml_score - minScore) / scoreRange
-          : phrase.frequency.total_appearances / 100;
+          ? (scoreToPercentile.get(phrase.frequency.ml_score) ?? 0)
+          : Math.min(phrase.frequency.total_appearances / 100, 1);
     }
   }
 }
