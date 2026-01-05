@@ -389,10 +389,12 @@ export function syncWordFromRoute(): void {
   const router = getRouterStore();
   if (router.route.name === "word") {
     const lemma = router.route.params.lemma;
-    if (lemma && lemma !== selectedLemma) {
+    if (!lemma) return;
+
+    if (lemma !== selectedLemma) {
       selectWord(lemma);
-      openMobileDetail();
     }
+    openMobileDetail();
   }
 }
 
