@@ -1,9 +1,10 @@
 import type { VocabDatabase, VersionInfo, WordEntry, PhraseEntry } from "$lib/types/vocab";
 import {
-  getStoredVersion,
   setStoredVersion,
   getStoredMetadata,
   setStoredMetadata,
+  getStoredVersionInfo,
+  setStoredVersionInfo,
   clearAllStores,
   bulkInsertWords,
   bulkInsertPhrases,
@@ -14,6 +15,15 @@ import {
 const VERSION_URL = `${import.meta.env.BASE_URL}data/version.json`;
 const VOCAB_URL = `${import.meta.env.BASE_URL}data/vocab.json.gz`;
 
+function createVersionFingerprint(versionInfo: VersionInfo): string {
+  return [
+    versionInfo.version,
+    versionInfo.vocab_hash,
+    versionInfo.generated_at,
+    versionInfo.entry_count,
+  ].join("|");
+}
+
 export interface LoadProgress {
   phase: "checking" | "downloading" | "decompressing" | "storing" | "ready";
   current: number;
@@ -22,7 +32,7 @@ export interface LoadProgress {
 }
 
 export async function fetchVersionInfo(): Promise<VersionInfo> {
-  const response = await fetch(VERSION_URL, { cache: "no-cache" });
+  const response = await fetch(VERSION_URL, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to fetch version info: ${response.status}`);
   }
@@ -34,15 +44,25 @@ export async function checkForUpdate(): Promise<{
   remoteVersion: VersionInfo;
 }> {
   const remoteVersion = await fetchVersionInfo();
-  const localVersion = await getStoredVersion();
-  const localMetadata = await getStoredMetadata();
+  const [localVersionInfo, localMetadata, totalEntries] = await Promise.all([
+    getStoredVersionInfo(),
+    getStoredMetadata(),
+    getTotalEntriesCount(),
+  ]);
 
-  const needsUpdate =
-    !localVersion ||
-    localVersion !== remoteVersion.version ||
-    (remoteVersion.vocab_hash &&
-      localMetadata?.vocab_hash !== remoteVersion.vocab_hash) ||
-    (await getTotalEntriesCount()) === 0;
+  const remoteFingerprint = createVersionFingerprint(remoteVersion);
+  const localFingerprint = localVersionInfo
+    ? createVersionFingerprint(localVersionInfo)
+    : null;
+
+  const fingerprintChanged =
+    !localFingerprint || localFingerprint !== remoteFingerprint;
+  const hashChanged =
+    localMetadata?.vocab_hash !== remoteVersion.vocab_hash;
+  const entriesMismatch =
+    totalEntries === 0 || totalEntries !== remoteVersion.entry_count;
+
+  const needsUpdate = fingerprintChanged || hashChanged || entriesMismatch;
 
   return { needsUpdate, remoteVersion };
 }
@@ -94,6 +114,8 @@ export async function downloadAndStoreVocab(
   onProgress?: (progress: LoadProgress) => void,
   versionInfo?: VersionInfo,
 ): Promise<void> {
+  const resolvedVersionInfo = versionInfo ?? (await fetchVersionInfo());
+
   onProgress?.({
     phase: "downloading",
     current: 0,
@@ -101,7 +123,7 @@ export async function downloadAndStoreVocab(
     message: "正在下載詞彙資料...",
   });
 
-  const response = await fetch(VOCAB_URL);
+  const response = await fetch(VOCAB_URL, { cache: "no-cache" });
   if (!response.ok) {
     throw new Error(`Failed to download vocab data: ${response.status}`);
   }
@@ -185,10 +207,11 @@ export async function downloadAndStoreVocab(
     processed += patterns.length;
   }
 
-  await setStoredVersion(versionInfo?.version ?? vocabData.version);
+  await setStoredVersion(resolvedVersionInfo.version);
+  await setStoredVersionInfo(resolvedVersionInfo);
   await setStoredMetadata({
     ...vocabData.metadata,
-    vocab_hash: versionInfo?.vocab_hash,
+    vocab_hash: resolvedVersionInfo.vocab_hash,
   });
 
   onProgress?.({

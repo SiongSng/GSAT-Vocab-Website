@@ -8,6 +8,7 @@ import type {
   PatternIndexItem,
   VocabIndexItem,
   VocabMetadata,
+  VersionInfo,
   createWordIndexItem,
   createPhraseIndexItem,
   createPatternIndexItem,
@@ -107,6 +108,19 @@ export async function setStoredMetadata(
 ): Promise<void> {
   const database = await getDB();
   await database.put("metadata", { key: "vocab_metadata", value: metadata });
+}
+
+export async function getStoredVersionInfo(): Promise<VersionInfo | null> {
+  const database = await getDB();
+  const result = await database.get("metadata", "version_info");
+  return result?.value as VersionInfo | null;
+}
+
+export async function setStoredVersionInfo(
+  versionInfo: VersionInfo,
+): Promise<void> {
+  const database = await getDB();
+  await database.put("metadata", { key: "version_info", value: versionInfo });
 }
 
 export async function clearAllStores(): Promise<void> {
