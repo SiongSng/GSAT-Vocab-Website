@@ -22,6 +22,7 @@ export interface QuizResult {
   correct: boolean;
   response_time_ms: number;
   used_hint: boolean;
+  matched_inflected?: boolean;
 }
 
 const FAST_RESPONSE_MS = 5000;
@@ -44,6 +45,10 @@ export function mapQuizResultToRating(result: QuizResult): Rating {
 
   if (result.response_time_ms > SLOW_RESPONSE_MS) {
     return Rating.Hard;
+  }
+
+  if (result.question_type === "spelling" && result.matched_inflected) {
+    return Rating.Easy;
   }
 
   const isHardType = HARD_QUESTION_TYPES.includes(result.question_type);

@@ -10,6 +10,10 @@ import {
   computeSessionSummary,
   type QuizSessionSummary,
 } from "./quiz-srs-bridge";
+import {
+  getAllWordForms,
+  getAllPhraseForms,
+} from "$lib/utils/word-forms";
 
 export type { QuizQuestion, QuizQuestionType };
 
@@ -172,7 +176,26 @@ export function submitAnswer(answer: string): void {
     ? Date.now() - store.questionStartTime.getTime()
     : 0;
 
-  const isCorrect = answer.toLowerCase() === question.correct.toLowerCase();
+  const answerLower = answer.toLowerCase();
+  const correctLower = question.correct.toLowerCase();
+
+  let isCorrect = answerLower === correctLower;
+  let matchedInflected = false;
+
+  if (question.type === "spelling") {
+    const inflectedLower = question.inflected_form?.toLowerCase();
+
+    if (inflectedLower && answerLower === inflectedLower) {
+      isCorrect = true;
+      matchedInflected = true;
+    } else if (!isCorrect) {
+      const validForms =
+        question.entry_type === "phrase"
+          ? getAllPhraseForms(question.lemma)
+          : getAllWordForms(question.lemma);
+      isCorrect = validForms.has(answerLower);
+    }
+  }
 
   const result: QuizResult = {
     lemma: question.lemma,
@@ -182,6 +205,7 @@ export function submitAnswer(answer: string): void {
     correct: isCorrect,
     response_time_ms: responseTime,
     used_hint: store.usedHintForCurrent,
+    matched_inflected: matchedInflected,
   };
 
   store.results[store.currentIndex] = result;
@@ -281,4 +305,9 @@ export function isAnswerCorrect(index: number): boolean | null {
   const result = store.results[index];
   if (!result) return null;
   return result.correct;
+}
+
+export function didMatchInflected(index: number): boolean {
+  const result = store.results[index];
+  return result?.matched_inflected ?? false;
 }

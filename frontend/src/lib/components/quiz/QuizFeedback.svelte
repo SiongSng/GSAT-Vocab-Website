@@ -10,6 +10,7 @@
         onContinue: () => void;
         onShowDetail?: (lemma: string) => void;
         isSentenceDisplayed?: boolean;
+        matchedInflected?: boolean;
     }
 
     let {
@@ -18,10 +19,14 @@
         onContinue,
         onShowDetail,
         isSentenceDisplayed = false,
+        matchedInflected = false,
     }: Props = $props();
 
     const app = getAppStore();
     const statusClass = $derived(isCorrect ? "status-correct" : "status-wrong");
+    const isSpellingWithInflection = $derived(
+        question.type === "spelling" && !!question.inflected_form,
+    );
 </script>
 
 <div class="feedback-container {statusClass}">
@@ -60,8 +65,21 @@
 
                 <div class="status-info">
                     <h3 class="status-title">
-                        {isCorrect ? "答對了！" : "再接再厲"}
+                        {#if isCorrect}
+                            {#if matchedInflected}
+                                完美拼寫！
+                            {:else}
+                                答對了！
+                            {/if}
+                        {:else}
+                            再接再厲
+                        {/if}
                     </h3>
+                    {#if isCorrect && isSpellingWithInflection && !matchedInflected}
+                        <p class="inflection-hint">
+                            句中形態為 <strong>{question.inflected_form}</strong>
+                        </p>
+                    {/if}
                     {#if !isCorrect}
                         <div class="answer-reveal">
                             <span class="label">正確答案：</span>
@@ -254,6 +272,17 @@
     }
     .status-wrong .status-title {
         color: #a8071a;
+    }
+
+    .inflection-hint {
+        font-size: 0.8125rem;
+        color: var(--color-content-secondary);
+        margin: 0.25rem 0 0 0;
+    }
+
+    .inflection-hint strong {
+        color: var(--color-accent);
+        font-weight: 600;
     }
 
     .answer-reveal {

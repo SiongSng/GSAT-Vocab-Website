@@ -7,6 +7,7 @@
         exitQuiz,
         retryIncorrect,
         isAnswerCorrect,
+        didMatchInflected,
         type QuizConfig,
         type QuizQuestionType,
     } from "$lib/stores/quiz.svelte";
@@ -199,6 +200,9 @@
                 isCorrect={showFeedback
                     ? isAnswerCorrect(quiz.currentIndex)
                     : null}
+                matchedInflected={showFeedback
+                    ? didMatchInflected(quiz.currentIndex)
+                    : false}
                 onSubmit={handleSelect}
                 onContinue={handleContinue}
                 onExit={handleExit}

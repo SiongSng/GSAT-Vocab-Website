@@ -10,6 +10,10 @@ import type { SRSCard } from "$lib/types/srs";
 import { getAllWords, getAllPhrases, getWord, getPhrase } from "./vocab-db";
 import { getAllCards } from "./srs-storage";
 import { State } from "ts-fsrs";
+import {
+  getAllWordForms,
+  getAllPhraseForms,
+} from "$lib/utils/word-forms";
 
 export type QuizQuestionType =
   | "recognition"
@@ -35,6 +39,7 @@ export interface QuizQuestion {
   }[];
 
   correct: string;
+  inflected_form?: string;
   accept_variants?: string[];
 
   exam_source?: {
@@ -317,12 +322,27 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function blankOutLemma(text: string, lemma: string): string {
-  const lemmaPattern = new RegExp(
-    `\\b${escapeRegex(lemma)}(s|es|ed|ing|er|est|ies|ied|'s|')?\\b`,
-    "gi",
-  );
-  return text.replace(lemmaPattern, "_______");
+function extractInflectedForm(
+  text: string,
+  lemma: string,
+  isPhrase: boolean,
+): string | null {
+  const forms = isPhrase ? getAllPhraseForms(lemma) : getAllWordForms(lemma);
+  const escapedForms = Array.from(forms).map(escapeRegex);
+  const pattern = new RegExp(`\\b(${escapedForms.join("|")})\\b`, "gi");
+  const match = pattern.exec(text);
+  return match ? match[1] : null;
+}
+
+function blankOutLemma(
+  text: string,
+  lemma: string,
+  isPhrase: boolean,
+): string {
+  const forms = isPhrase ? getAllPhraseForms(lemma) : getAllWordForms(lemma);
+  const escapedForms = Array.from(forms).map(escapeRegex);
+  const pattern = new RegExp(`\\b(${escapedForms.join("|")})\\b`, "gi");
+  return text.replace(pattern, "_______");
 }
 
 function generateRecognitionQuestion(
@@ -382,9 +402,10 @@ function generateFillBlankQuestion(
 ): QuizQuestion {
   const example =
     sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
-  const blankedText = blankOutLemma(sentenceText, entry.lemma);
+  const blankedText = blankOutLemma(sentenceText, entry.lemma, isPhrase);
 
   const options = [
     { label: entry.lemma, value: entry.lemma },
@@ -395,7 +416,7 @@ function generateFillBlankQuestion(
     type: "fill_blank",
     lemma: entry.lemma,
     sense_id: sense.sense_id,
-    entry_type: isWordEntry(entry) ? "word" : "phrase",
+    entry_type: isPhrase ? "phrase" : "word",
     prompt: "填入適當的單字",
     sentence_context: blankedText,
     hint: `(${sense.pos ?? "?"}) ${sense.zh_def}`,
@@ -420,21 +441,26 @@ function generateSpellingQuestion(
 ): QuizQuestion {
   const example =
     sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
+  const inflectedForm = sentenceText
+    ? extractInflectedForm(sentenceText, entry.lemma, isPhrase)
+    : null;
   const blankedText = sentenceText
-    ? blankOutLemma(sentenceText, entry.lemma)
+    ? blankOutLemma(sentenceText, entry.lemma, isPhrase)
     : undefined;
 
   return {
     type: "spelling",
     lemma: entry.lemma,
     sense_id: sense.sense_id,
-    entry_type: isWordEntry(entry) ? "word" : "phrase",
+    entry_type: isPhrase ? "phrase" : "word",
     prompt: sense.zh_def,
     sentence_context: blankedText,
     hint: sense.pos ? `(${sense.pos})` : undefined,
     correct: entry.lemma,
+    inflected_form: inflectedForm ?? undefined,
     accept_variants: entry.derived_forms ?? undefined,
     exam_source: example?.source
       ? {
@@ -461,9 +487,10 @@ function generateDistinctionQuestion(
 
   const example =
     sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
-  const blankedText = blankOutLemma(sentenceText, entry.lemma);
+  const blankedText = blankOutLemma(sentenceText, entry.lemma, isPhrase);
 
   const options = [
     { label: entry.lemma, value: entry.lemma },
@@ -478,7 +505,7 @@ function generateDistinctionQuestion(
     type: "distinction",
     lemma: entry.lemma,
     sense_id: sense.sense_id,
-    entry_type: isWordEntry(entry) ? "word" : "phrase",
+    entry_type: isPhrase ? "phrase" : "word",
     prompt: "選出最適合的字",
     sentence_context: blankedText,
     hint: confusionNote?.distinction,

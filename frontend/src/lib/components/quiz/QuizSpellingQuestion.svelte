@@ -15,6 +15,7 @@
         totalQuestions: number;
         showFeedback: boolean;
         isCorrect: boolean | null;
+        matchedInflected: boolean;
         onSubmit: (answer: string) => void;
         onContinue: () => void;
         onExit: () => void;
@@ -27,6 +28,7 @@
         totalQuestions,
         showFeedback,
         isCorrect,
+        matchedInflected,
         onSubmit,
         onContinue,
         onExit,
@@ -351,6 +353,7 @@
         <QuizFeedback
             {isCorrect}
             {question}
+            {matchedInflected}
             {onContinue}
             onShowDetail={() => onShowDetail(question.lemma)}
             isSentenceDisplayed={!!question.sentence_context}
