@@ -471,7 +471,6 @@ def export(
     output_path = output_dir / "vocab.json.gz"
 
     vocab_content = input_path.read_bytes()
-    vocab_hash = hashlib.sha256(vocab_content).hexdigest()
 
     vocab_data = json.loads(vocab_content)
     entry_count = (
@@ -480,20 +479,38 @@ def export(
         + len(vocab_data.get("patterns", []))
     )
 
+    generated_at_raw = vocab_data.get("generated_at")
+    generated_at_dt = None
+    if isinstance(generated_at_raw, str):
+        try:
+            generated_at_dt = datetime.fromisoformat(generated_at_raw.replace("Z", "+00:00"))
+            if generated_at_dt.tzinfo is None:
+                generated_at_dt = generated_at_dt.replace(tzinfo=timezone.utc)
+            else:
+                generated_at_dt = generated_at_dt.astimezone(timezone.utc)
+        except ValueError:
+            generated_at_dt = None
+
+    if generated_at_dt is None:
+        generated_at_dt = datetime.now(timezone.utc)
+
+    generated_at_iso = generated_at_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    version_label = generated_at_dt.strftime("%Y.%m.%d")
+
     with gzip.open(output_path, "wb", compresslevel=9) as f_out:
         f_out.write(vocab_content)
 
     original_size = input_path.stat().st_size
     compressed_size = output_path.stat().st_size
     ratio = (1 - compressed_size / original_size) * 100
+    gz_hash = hashlib.sha256(output_path.read_bytes()).hexdigest()
 
     version_info: dict[str, str | int] | None = None
     if not skip_version:
-        now = datetime.now(timezone.utc)
         version_info = {
-            "version": now.strftime("%Y.%m.%d"),
-            "vocab_hash": vocab_hash,
-            "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "version": version_label,
+            "vocab_hash": gz_hash,
+            "generated_at": generated_at_iso,
             "entry_count": entry_count,
         }
         version_path = output_dir / "version.json"
@@ -511,7 +528,7 @@ def export(
     if version_info:
         table.add_row("Version", version_info["version"])
         table.add_row("Entry count", str(version_info["entry_count"]))
-        table.add_row("Hash", vocab_hash[:16] + "...")
+        table.add_row("Hash", gz_hash[:16] + "...")
     console.print(Panel(table, border_style="green"))
 
 

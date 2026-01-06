@@ -165,15 +165,15 @@ export type VocabEntry = WordEntry | PhraseEntry;
 export type SRSEligibleEntry = WordEntry | PhraseEntry;
 
 export function isWordEntry(entry: VocabEntryUnion): entry is WordEntry {
-  return "pos" in entry && Array.isArray(entry.pos) && "senses" in entry;
+  return "pos" in entry && Array.isArray(entry.pos);
 }
 
 export function isPhraseEntry(entry: VocabEntryUnion): entry is PhraseEntry {
-  return "senses" in entry && !("pos" in entry) && !("pattern_category" in entry);
+  return "frequency" in entry && !("pos" in entry) && !("pattern_category" in entry);
 }
 
 export function isPatternEntry(entry: VocabEntryUnion): entry is PatternEntry {
-  return "pattern_category" in entry && "subtypes" in entry;
+  return "pattern_category" in entry;
 }
 
 export interface VocabMetadata {

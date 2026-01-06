@@ -686,6 +686,52 @@ export async function exportDatabase(): Promise<DatabaseSnapshot> {
   };
 }
 
+export async function fixCardEntryTypes(
+  getWord: (lemma: string) => Promise<any | undefined>,
+  getPhrase: (lemma: string) => Promise<any | undefined>,
+): Promise<number> {
+  const cards = getAllCards();
+  const cardsToFix: SRSCard[] = [];
+
+  // First pass: check all cards and collect which ones need fixing
+  for (const card of cards) {
+    const word = await getWord(card.lemma);
+    const phrase = await getPhrase(card.lemma);
+
+    let correctType: "word" | "phrase";
+    if (phrase) {
+      correctType = "phrase";
+    } else if (word) {
+      correctType = "word";
+    } else {
+      continue;
+    }
+
+    if (card.entry_type !== correctType) {
+      cardsToFix.push({ ...card, entry_type: correctType });
+    }
+  }
+
+  if (cardsToFix.length === 0) {
+    return 0;
+  }
+
+  // Second pass: update all cards in a single transaction
+  const database = await getDB();
+  const tx = database.transaction(CARDS_STORE, "readwrite");
+  const store = tx.objectStore(CARDS_STORE);
+
+  for (const fixedCard of cardsToFix) {
+    await store.put(fixedCard);
+    cardsCache.set(createCardKey(fixedCard.lemma, fixedCard.sense_id), fixedCard);
+    addToLemmaIndex(fixedCard);
+  }
+
+  await tx.done;
+  notifyDataChange();
+  return cardsToFix.length;
+}
+
 export async function importDatabase(
   snapshot: DatabaseSnapshot,
 ): Promise<void> {

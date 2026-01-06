@@ -17,6 +17,7 @@ import {
   updateDailyStats,
   addSessionLog,
   migratePrimarySenseIds,
+  fixCardEntryTypes,
 } from "./srs-storage";
 import { STORAGE_KEYS } from "$lib/storage-keys";
 import type {
@@ -27,6 +28,7 @@ import type {
   DailyLimits,
   SRSEligibleEntry,
 } from "$lib/types/srs";
+import { isWordEntry } from "$lib/types/vocab";
 import { DEFAULT_DAILY_LIMITS, getPrioritizedSenses } from "$lib/types/srs";
 import { preloadAudio } from "$lib/tts";
 import type { VocabEntry, VocabSense } from "$lib/types/vocab";
@@ -160,6 +162,16 @@ export async function initSRS(): Promise<void> {
   store.initialized = true;
 }
 
+export async function runSRSEntryTypeFix(
+  getWord: (lemma: string) => Promise<any | undefined>,
+  getPhrase: (lemma: string) => Promise<any | undefined>,
+): Promise<number> {
+  if (!store.initialized) {
+    await initSRS();
+  }
+  return fixCardEntryTypes(getWord, getPhrase);
+}
+
 export async function runSRSSenseMigration(
   getEntry: (lemma: string) => Promise<SRSEligibleEntry | undefined>,
 ): Promise<number> {
@@ -217,7 +229,7 @@ export function addWordToSRS(lemma: string, senseId: string): void {
 
 export function addEntryToSRS(entry: SRSEligibleEntry): void {
   const prioritizedSenses = getPrioritizedSenses(entry);
-  const entryType = "pos" in entry ? "word" : "phrase";
+  const entryType = isWordEntry(entry) ? "word" : "phrase";
 
   if (prioritizedSenses.length === 0) {
     return;
@@ -230,7 +242,7 @@ export function addEntryToSRS(entry: SRSEligibleEntry): void {
 
 export function ensureEntryCard(entry: SRSEligibleEntry): SRSCard | null {
   const prioritizedSenses = getPrioritizedSenses(entry);
-  const entryType = "pos" in entry ? "word" : "phrase";
+  const entryType = isWordEntry(entry) ? "word" : "phrase";
 
   if (prioritizedSenses.length === 0) {
     return null;
@@ -248,7 +260,7 @@ export function addEntriesToSRS(entries: SRSEligibleEntry[]): void {
 
 export function addWordWithAllSenses(entry: VocabEntry): void {
   const prioritizedSenses = getPrioritizedSenses(entry);
-  const entryType = "pos" in entry ? "word" : "phrase";
+  const entryType = isWordEntry(entry) ? "word" : "phrase";
 
   if (prioritizedSenses.length === 0) {
     return;

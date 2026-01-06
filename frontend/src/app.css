@@ -3,6 +3,7 @@
 @theme {
     --font-sans: "Inter", "Noto Sans TC", system-ui, -apple-system, sans-serif;
     --font-heading: "Manrope", "Inter", system-ui, sans-serif;
+    --font-serif: "Georgia", "Noto Serif TC", "Times New Roman", serif;
 
     --color-surface-page: #f7f7f7;
     --color-surface-primary: #ffffff;

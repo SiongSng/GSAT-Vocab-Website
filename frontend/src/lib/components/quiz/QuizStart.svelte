@@ -44,14 +44,15 @@
         return { emoji: "✨", text: "快完成了！" };
     });
 
-    onMount(async () => {
-        if (vocab.index.length === 0) {
-            await loadVocabData();
-        }
-        // Artificial delay for smooth transition
-        setTimeout(() => {
-            isInitializing = false;
-        }, 300);
+    onMount(() => {
+        (async () => {
+            if (vocab.index.length === 0) {
+                await loadVocabData();
+            }
+            setTimeout(() => {
+                isInitializing = false;
+            }, 300);
+        })();
 
         const unsubscribe = onDataChange(() => {
             dataVersion++;
@@ -434,7 +435,9 @@
         }
 
         .pill-selector button.active {
-            background: var(--color-surface-secondary);
+            background: var(--color-content-primary);
+            color: var(--color-surface-primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
         }
     }
 </style>

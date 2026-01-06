@@ -15,13 +15,11 @@ import {
 const VERSION_URL = `${import.meta.env.BASE_URL}data/version.json`;
 const VOCAB_URL = `${import.meta.env.BASE_URL}data/vocab.json.gz`;
 
-function createVersionFingerprint(versionInfo: VersionInfo): string {
-  return [
-    versionInfo.version,
-    versionInfo.vocab_hash,
-    versionInfo.generated_at,
-    versionInfo.entry_count,
-  ].join("|");
+function createGenerationFingerprint(versionInfo: VersionInfo): string {
+  const generation = versionInfo.generated_at ?? versionInfo.version;
+  return [generation, versionInfo.vocab_hash, versionInfo.entry_count].join(
+    "|",
+  );
 }
 
 export interface LoadProgress {
@@ -50,10 +48,14 @@ export async function checkForUpdate(): Promise<{
     getTotalEntriesCount(),
   ]);
 
-  const remoteFingerprint = createVersionFingerprint(remoteVersion);
+  const remoteFingerprint = createGenerationFingerprint(remoteVersion);
   const localFingerprint = localVersionInfo
-    ? createVersionFingerprint(localVersionInfo)
+    ? createGenerationFingerprint(localVersionInfo)
     : null;
+
+  const generationChanged =
+    !localVersionInfo ||
+    localVersionInfo.generated_at !== remoteVersion.generated_at;
 
   const fingerprintChanged =
     !localFingerprint || localFingerprint !== remoteFingerprint;
@@ -62,7 +64,8 @@ export async function checkForUpdate(): Promise<{
   const entriesMismatch =
     totalEntries === 0 || totalEntries !== remoteVersion.entry_count;
 
-  const needsUpdate = fingerprintChanged || hashChanged || entriesMismatch;
+  const needsUpdate =
+    generationChanged || fingerprintChanged || hashChanged || entriesMismatch;
 
   return { needsUpdate, remoteVersion };
 }
@@ -207,7 +210,7 @@ export async function downloadAndStoreVocab(
     processed += patterns.length;
   }
 
-  await setStoredVersion(resolvedVersionInfo.version);
+  await setStoredVersion(resolvedVersionInfo.generated_at);
   await setStoredVersionInfo(resolvedVersionInfo);
   await setStoredMetadata({
     ...vocabData.metadata,

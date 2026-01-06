@@ -3,7 +3,9 @@ import type {
   PhraseEntry,
   VocabSense,
   ConfusionNote,
+  VocabEntry,
 } from "$lib/types/vocab";
+import { isWordEntry } from "$lib/types/vocab";
 import type { SRSCard } from "$lib/types/srs";
 import { getAllWords, getAllPhrases, getWord, getPhrase } from "./vocab-db";
 import { getAllCards } from "./srs-storage";
@@ -52,12 +54,7 @@ export interface QuizConfig {
   count: number;
   entry_type?: "word" | "phrase" | "all";
   force_type?: QuizQuestionType;
-}
-
-type VocabEntry = WordEntry | PhraseEntry;
-
-function isWordEntry(entry: VocabEntry): entry is WordEntry {
-  return "pos" in entry && Array.isArray(entry.pos);
+  specific_lemmas?: string[];
 }
 
 export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
@@ -99,6 +96,10 @@ async function getQuizEligibleEntries(
 
     if (config.entry_type && config.entry_type !== "all") {
       if (card.entry_type !== config.entry_type) continue;
+    }
+
+    if (config.specific_lemmas && config.specific_lemmas.length > 0) {
+      if (!config.specific_lemmas.includes(card.lemma)) continue;
     }
 
     const isDue = new Date(card.due) <= now;

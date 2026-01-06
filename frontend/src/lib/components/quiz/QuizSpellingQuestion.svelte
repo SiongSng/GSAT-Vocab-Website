@@ -231,7 +231,9 @@
                                     question.lemma,
                                 )}
                                 highlightLemma={question.lemma}
+                                isPhrase={question.entry_type === "phrase"}
                                 blankMode={!showFeedback}
+                                showHints={!showFeedback}
                             />
                         </p>
                         {#if showFeedback && question.explanation?.correct_usage}

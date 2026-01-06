@@ -4,7 +4,6 @@
         startQuiz,
         submitAnswer,
         nextQuestion,
-        resetQuiz,
         exitQuiz,
         retryIncorrect,
         isAnswerCorrect,
@@ -61,9 +60,9 @@
     let detailEntry = $state<VocabEntry | null>(null);
     let isDetailOpen = $state(false);
 
-    async function handleShowDetail(lemma: string) {
+    async function handleShowDetail(lemma: string, entryType?: "word" | "phrase") {
         try {
-            const entry = await lookupEntry(lemma);
+            const entry = await lookupEntry(lemma, entryType);
             if (entry && (isWordEntry(entry) || isPhraseEntry(entry))) {
                 detailEntry = entry;
                 isDetailOpen = true;
@@ -189,7 +188,7 @@
                 onSelect={handleSelect}
                 onContinue={handleContinue}
                 onExit={handleExit}
-                onShowDetail={handleShowDetail}
+                onShowDetail={(lemma) => handleShowDetail(lemma, quiz.currentQuestion?.entry_type)}
             />
         {:else}
             <QuizSpellingQuestion
@@ -203,7 +202,7 @@
                 onSubmit={handleSelect}
                 onContinue={handleContinue}
                 onExit={handleExit}
-                onShowDetail={handleShowDetail}
+                onShowDetail={(lemma) => handleShowDetail(lemma, quiz.currentQuestion?.entry_type)}
             />
         {/if}
     {:else}

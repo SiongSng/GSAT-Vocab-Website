@@ -941,40 +941,68 @@ def _dedupe_pattern_occurrences(occurrences: list[PatternOccurrence]) -> list[Pa
     return result
 
 
+# Sections that contain full passages/articles where domain-specific vocabulary appears
+PASSAGE_SECTIONS = {
+    SectionType.READING,    # Reading Comprehension
+    SectionType.MIXED,      # Mixed Questions
+    SectionType.CLOZE,      # Cloze Test (綜合測驗)
+    SectionType.DISCOURSE,  # Discourse Cloze (文意選填)
+}
+
+
 def _is_passage_specific_single_year(contexts: list[ContextSentence]) -> bool:
-    """Check if word only appeared in a single passage (domain-specific vocabulary).
+    """Check if word only appears in a single passage section in one year.
 
-    Goal: Filter out domain-specific vocabulary that only appears in one reading
-    passage and is unlikely to be tested again (e.g., "kale", "pediatric").
+    Goal: Filter out domain-specific vocabulary that appears in article-based sections
+    and is unlikely to be tested again (e.g., "kale", "vodka", "pediatric").
 
-    Criteria:
-    - Only appears in a single year
-    - Within that year, only appears in a single question/passage
+    Filtering criteria (all must be true):
+    1. Appears in only one year (excluding gsat_ref to avoid double-counting)
+    2. Appears in only one section type
+    3. That section type must be a passage section (reading/mixed/cloze/discourse)
 
-    Note on gsat_ref: Reference exams may copy content from official GSAT exams,
-    so we exclude gsat_ref when counting distinct questions to avoid double-counting
-    the same passage. However, gsat_trial and other exam types are counted normally
-    as they represent distinct content.
+    Edge cases preserved:
+    - Appears across multiple years → keep (shows recurrence)
+    - Appears in multiple sections (e.g., reading + mixed) → keep (used in different contexts)
+    - Appears in passage + non-passage (e.g., reading + vocabulary) → keep (likely valuable)
+    - Only appears in gsat_ref → filter (no official exam appearance)
+
+    Special handling for gsat_ref:
+    - gsat_ref may copy content from official exams, causing false "multi-year" signals
+    - We exclude gsat_ref when counting years to avoid this issue
+    - If ONLY gsat_ref exists, we still filter it if it meets other criteria
     """
     if not contexts:
         return False
 
-    years = {c.source.year for c in contexts}
-    if len(years) > 1:
+    # Separate gsat_ref from primary exam types to avoid double-counting
+    primary_contexts = [c for c in contexts if c.source.exam_type != ExamType.GSAT_REF]
+
+    if not primary_contexts:
+        # Only gsat_ref exists - check if single year + single passage section
+        years = {c.source.year for c in contexts}
+        sections = {c.source.section_type for c in contexts}
+        return (
+            len(years) == 1
+            and len(sections) == 1
+            and sections.pop() in PASSAGE_SECTIONS
+        )
+
+    # Check primary contexts (non-ref exams)
+    primary_years = {c.source.year for c in primary_contexts}
+    if len(primary_years) > 1:
+        return False  # Multi-year appearance → keep
+
+    primary_sections = {c.source.section_type for c in primary_contexts}
+
+    # If appears in non-passage sections → keep (e.g., vocabulary tests)
+    non_passage = primary_sections - PASSAGE_SECTIONS
+    if non_passage:
         return False
 
-    # Exclude gsat_ref to avoid double-counting copied content
-    primary_questions = {
-        c.source.question_number
-        for c in contexts
-        if c.source.exam_type != ExamType.GSAT_REF
-    }
-
-    if primary_questions:
-        return len(primary_questions) == 1
-
-    # Only gsat_ref exists, check within gsat_ref
-    return len({c.source.question_number for c in contexts}) == 1
+    # Single year + single passage section → filter (return True)
+    # Multiple passage sections → keep (return False)
+    return len(primary_sections) == 1
 
 
 def _is_incidental_vocab(freq_counter: FrequencyCounter) -> bool:
@@ -1091,7 +1119,7 @@ def clean_and_aggregate(
         # Filter out rare passage-specific vocabulary:
         # - Not in official wordlist
         # - Never tested (only background context)
-        # - Only appeared in one official exam year (GSAT/AST) in a single question
+        # - Single year + single passage section (reading/mixed/cloze/discourse)
         if (
             not in_official
             and _is_incidental_vocab(freq_counter)

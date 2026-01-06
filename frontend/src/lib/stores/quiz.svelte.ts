@@ -132,7 +132,13 @@ export async function startQuiz(config: QuizConfig): Promise<void> {
     const questions = await generateQuizLocally(generatorConfig);
 
     if (questions.length === 0) {
-      store.error = "沒有可用的題目。請先在 Flashcard 學習一些單字。";
+      const entryTypeText =
+        config.entry_type === "phrase"
+          ? "片語"
+          : config.entry_type === "word"
+            ? "單字"
+            : "題目";
+      store.error = `沒有可用的${entryTypeText}。請先在 Flashcard 學習一些${config.entry_type === "phrase" ? "片語" : "單字"}。`;
       store.isLoading = false;
       return;
     }
@@ -239,25 +245,23 @@ export async function retryIncorrect(): Promise<void> {
   store.error = null;
 
   try {
+    const lemmas = incorrect.map((q) => q.lemma);
     const questions = await generateQuizLocally({
       count: incorrect.length,
       force_type:
         store.type === "adaptive"
           ? undefined
           : (store.type as QuizQuestionType),
+      specific_lemmas: lemmas,
     });
 
-    const retryQuestions = questions.filter((q) =>
-      incorrect.some((inc) => inc.lemma === q.lemma),
-    );
-
-    if (retryQuestions.length === 0) {
+    if (questions.length === 0) {
       store.error = "無法重新生成題目";
       store.isLoading = false;
       return;
     }
 
-    store.questions = retryQuestions;
+    store.questions = questions;
     store.currentIndex = 0;
     store.results = [];
     store.isActive = true;

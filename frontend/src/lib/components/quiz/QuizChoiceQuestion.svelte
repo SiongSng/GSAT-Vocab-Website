@@ -5,7 +5,6 @@
     import { createAudioController } from "$lib/tts";
     import { STORAGE_KEYS } from "$lib/storage-keys";
     import { formatExamSource } from "$lib/utils/quiz";
-    import { getAppStore } from "$lib/stores/app.svelte";
     import QuizShell from "./QuizShell.svelte";
     import QuizFeedback from "./QuizFeedback.svelte";
 
@@ -34,7 +33,6 @@
     }: Props = $props();
 
     let selectedAnswer = $state<string | null>(null);
-    const app = getAppStore();
 
     const progress = $derived({
         current: questionIndex + 1,
@@ -56,9 +54,7 @@
     }
 
     $effect(() => {
-        // Reset local state when question changes
-        // Use question.lemma as a dependency key
-        const _ = question.lemma;
+        question.lemma;
         selectedAnswer = null;
 
         // Auto-play audio for recognition type
@@ -112,6 +108,7 @@
                                     question.lemma,
                                 ) ?? ""}
                                 highlightLemma={question.lemma}
+                                isPhrase={question.entry_type === "phrase"}
                                 blankMode={!showFeedback}
                             />
                         </p>
@@ -303,6 +300,7 @@
         line-height: 1.7;
         color: var(--color-content-primary);
         margin: 0;
+        font-family: var(--font-serif, serif);
         flex: 1;
     }
 
@@ -474,22 +472,6 @@
     }
     .wrong .status-icon {
         color: #ef4444;
-    }
-
-    /* Footer Hint */
-    .hint-footer {
-        margin-top: 1.5rem;
-        text-align: center;
-        font-size: 0.75rem;
-        color: var(--color-content-tertiary);
-    }
-
-    .kbd {
-        background: rgba(0, 0, 0, 0.06);
-        padding: 0.125rem 0.375rem;
-        border-radius: 4px;
-        font-family: inherit;
-        font-weight: 500;
     }
 
     @media (max-width: 640px) {

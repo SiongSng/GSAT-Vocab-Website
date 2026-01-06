@@ -11,6 +11,9 @@ import {
   createPatternIndexItem,
   isWordIndexItem,
   isPhraseIndexItem,
+  isWordEntry,
+  isPhraseEntry,
+  isPatternEntry,
 } from "$lib/types/vocab";
 import { getRouterStore, navigate } from "./router.svelte";
 import { openMobileDetail } from "./app.svelte";
@@ -19,10 +22,12 @@ import {
   buildIndex,
   lookupEntry,
   getSRSEligibleEntry,
+  getWord,
+  getPhrase,
 } from "./vocab-db";
 import { checkForUpdate, loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 import { updateWordStructuredData } from "$lib/utils/seo";
-import { runSRSSenseMigration } from "./srs.svelte";
+import { runSRSSenseMigration, runSRSEntryTypeFix } from "./srs.svelte";
 
 export type SelectedEntry = WordEntry | PhraseEntry | PatternEntry | null;
 export type SelectedEntryType = "word" | "phrase" | "pattern" | null;
@@ -292,6 +297,14 @@ export async function loadVocabData(): Promise<void> {
     runSRSSenseMigration(getSRSEligibleEntry).catch((e) => {
       console.warn("SRS sense migration failed:", e);
     });
+
+    runSRSEntryTypeFix(getWord, getPhrase).then((fixedCount) => {
+      if (fixedCount > 0) {
+        console.log(`Fixed entry_type for ${fixedCount} cards`);
+      }
+    }).catch((e) => {
+      console.warn("SRS entry type fix failed:", e);
+    });
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load vocabulary data";
     console.error("Failed to load vocab data:", e);
@@ -318,14 +331,13 @@ export async function forceRefreshData(): Promise<void> {
 function determineEntryType(
   entry: WordEntry | PhraseEntry | PatternEntry,
 ): SelectedEntryType {
-  if ("pattern_category" in entry && "subtypes" in entry) {
+  if (isPatternEntry(entry)) {
     return "pattern";
   }
-  // Words have pos as an array, phrases don't have pos at all
-  if ("pos" in entry && Array.isArray(entry.pos) && "senses" in entry) {
+  if (isWordEntry(entry)) {
     return "word";
   }
-  if ("senses" in entry && !("pos" in entry)) {
+  if (isPhraseEntry(entry)) {
     return "phrase";
   }
   return null;
