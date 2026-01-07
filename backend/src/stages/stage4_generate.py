@@ -212,9 +212,13 @@ async def _generate_senses_with_retry(
             logger.info(f"Stage 4: retry attempt {attempt}, waiting {delay:.1f}s...")
             await asyncio.sleep(delay)
 
+        chunks = list(_chunked(pending, batch_size))
+        chunk_results = await asyncio.gather(
+            *(_generate_senses_batch(chunk, llm_client) for chunk in chunks)
+        )
         round_results: dict[str, WordSenseGeneration] = {}
-        for chunk in _chunked(pending, batch_size):
-            round_results.update(await _generate_senses_batch(chunk, llm_client))
+        for result in chunk_results:
+            round_results.update(result)
 
         aggregated.update(round_results)
         pending = [e for e in entries if _normalize_lemma(e.lemma) not in aggregated]
@@ -277,7 +281,7 @@ async def _generate_pattern_category_explanation(
             system=STAGE4_PATTERN_CATEGORY_SYSTEM,
             response_model=PatternCategoryGeneration,
             temperature=0.3,
-            tier=ModelTier.FAST,
+            tier=ModelTier.SMART,
         )
         return response.teaching_explanation
     except Exception as e:
@@ -309,7 +313,7 @@ async def _generate_pattern_subtype_example(
             system=STAGE4_PATTERN_SUBTYPE_SYSTEM,
             response_model=PatternSubtypeGeneration,
             temperature=0.3,
-            tier=ModelTier.FAST,
+            tier=ModelTier.SMART,
         )
         return response.generated_example
     except Exception as e:
@@ -335,7 +339,6 @@ def _build_vocab_entry_from_generation(
     entry: SenseAssignedWordEntry | SenseAssignedPhraseEntry,
     generated: WordSenseGeneration,
 ) -> VocabEntry:
-    is_word = isinstance(entry, SenseAssignedWordEntry)
     vocab_senses: list[VocabSense] = []
 
     sorted_gen_senses = sorted(generated.senses, key=lambda s: s.sense_index)
@@ -437,11 +440,12 @@ async def _process_word_phrase_batch(
 async def _process_pattern_entry(entry: SenseAssignedPatternEntry) -> PatternEntry:
     teaching_explanation = await _generate_pattern_category_explanation(entry)
 
+    subtype_examples = await asyncio.gather(
+        *(_generate_pattern_subtype_example(entry.lemma, sd) for sd in entry.subtypes)
+    )
+
     subtype_outputs: list[PatternSubtypeOutput] = []
-
-    for subtype_data in entry.subtypes:
-        generated_example = await _generate_pattern_subtype_example(entry.lemma, subtype_data)
-
+    for subtype_data, generated_example in zip(entry.subtypes, subtype_examples, strict=True):
         examples = [
             ExamExample(text=occ.sentence, source=occ.source) for occ in subtype_data.occurrences
         ]
@@ -486,11 +490,14 @@ async def generate_all_entries(
         f"Stage 4: {len(word_phrase_entries)} word/phrase entries → {total_batches} batches"
     )
 
+    batch_results = await asyncio.gather(
+        *(_process_word_phrase_batch(batch, registry, llm_client) for batch in all_batches)
+    )
+
     generation_map: dict[str, WordSenseGeneration] = {}
     retry_entries: list[SenseAssignedWordEntry | SenseAssignedPhraseEntry] = []
 
-    for idx, batch in enumerate(all_batches):
-        batch_map, batch_missing = await _process_word_phrase_batch(batch, registry, llm_client)
+    for idx, (batch_map, batch_missing) in enumerate(batch_results):
         generation_map.update(batch_map)
         retry_entries.extend(batch_missing)
 

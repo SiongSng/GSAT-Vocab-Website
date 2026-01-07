@@ -363,6 +363,44 @@ def _clusters_to_result(
     return result
 
 
+async def _process_filter_batch(
+    batch: list[DictionaryCandidate],
+    llm_client: LLMClient,
+) -> dict[str, list[ClusteredSense]]:
+    prompt = _build_filter_batch_prompt(batch)
+    results: dict[str, list[ClusteredSense]] = {}
+
+    try:
+        response = await llm_client.complete(
+            prompt=prompt,
+            system=STAGE3_DICT_FILTER_SYSTEM,
+            response_model=SenseFilterBatchResponse,
+            tier=ModelTier.BALANCED,
+            temperature=0,
+        )
+        batch_items = getattr(response, "items", None) or getattr(response, "__root__", None)
+        if not batch_items:
+            raise ValueError("Empty batch filter response")
+
+        cluster_map = {item.lemma.lower(): item.clusters for item in batch_items}
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Batch sense clustering failed: {e}")
+        return {}
+
+    for candidate in batch:
+        lemma_key = candidate.entry.lemma.lower()
+        clusters = cluster_map.get(lemma_key)
+        if clusters:
+            clustered = _clusters_to_result(clusters, candidate.senses)
+            if clustered:
+                results[lemma_key] = clustered
+                continue
+
+        logger.info(f"Dictionary clustering returned empty for '{candidate.entry.lemma}'")
+
+    return results
+
+
 async def _llm_filter_dictionary_senses_batch(
     items: list[DictionaryCandidate],
     llm_client: LLMClient,
@@ -370,42 +408,17 @@ async def _llm_filter_dictionary_senses_batch(
     if not items:
         return {}
 
+    batches = [
+        items[i : i + BATCH_FILTER_SIZE] for i in range(0, len(items), BATCH_FILTER_SIZE)
+    ]
+
+    batch_results = await asyncio.gather(
+        *(_process_filter_batch(batch, llm_client) for batch in batches)
+    )
+
     results: dict[str, list[ClusteredSense]] = {}
-
-    for i in range(0, len(items), BATCH_FILTER_SIZE):
-        batch = items[i : i + BATCH_FILTER_SIZE]
-        prompt = _build_filter_batch_prompt(batch)
-        cluster_map: dict[str, list[SenseCluster]] = {}
-
-        try:
-            response = await llm_client.complete(
-                prompt=prompt,
-                system=STAGE3_DICT_FILTER_SYSTEM,
-                response_model=SenseFilterBatchResponse,
-                tier=ModelTier.BALANCED,
-                temperature=0,
-            )
-            batch_items = getattr(response, "items", None) or getattr(response, "__root__", None)
-            if not batch_items:
-                raise ValueError("Empty batch filter response")
-            for item in batch_items:
-                cluster_map[item.lemma.lower()] = item.clusters
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"Batch sense clustering failed (batch starting {i}): {e}")
-            # Return empty results for failed batch; caller will use LLM define fallback
-            continue
-
-        for candidate in batch:
-            lemma_key = candidate.entry.lemma.lower()
-            clusters = cluster_map.get(lemma_key)
-            if clusters:
-                clustered = _clusters_to_result(clusters, candidate.senses)
-                if clustered:
-                    results[lemma_key] = clustered
-                    continue
-
-            logger.info(f"Dictionary clustering returned empty for '{candidate.entry.lemma}'")
-            # Leave empty; caller will use _define_senses_with_llm fallback
+    for batch_result in batch_results:
+        results.update(batch_result)
 
     return results
 
