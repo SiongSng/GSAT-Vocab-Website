@@ -490,24 +490,24 @@ async def generate_all_entries(
         f"Stage 4: {len(word_phrase_entries)} word/phrase entries → {total_batches} batches"
     )
 
-    batch_results = await asyncio.gather(
-        *(_process_word_phrase_batch(batch, registry, llm_client) for batch in all_batches)
-    )
-
     generation_map: dict[str, WordSenseGeneration] = {}
     retry_entries: list[SenseAssignedWordEntry | SenseAssignedPhraseEntry] = []
+    processed_entries = 0
 
-    for idx, (batch_map, batch_missing) in enumerate(batch_results):
+    tasks = [_process_word_phrase_batch(batch, registry, llm_client) for batch in all_batches]
+    for completed_batches, coro in enumerate(asyncio.as_completed(tasks), start=1):
+        batch_map, batch_missing = await coro
         generation_map.update(batch_map)
         retry_entries.extend(batch_missing)
+        processed_entries += len(batch_map) + len(batch_missing)
 
         if progress_callback:
             progress_callback(
-                idx + 1,
+                completed_batches,
                 len(all_batches),
                 "word_phrase",
                 len(generation_map),
-                min((idx + 1) * BATCH_SIZE, len(word_phrase_entries)),
+                processed_entries,
                 len(word_phrase_entries),
             )
 
