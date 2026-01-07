@@ -503,7 +503,7 @@ async def _register_clustered_senses(
     # Phrases should always have pos=None
     is_phrase = isinstance(entry, CleanedPhraseEntry)
 
-    for cluster in clustered_senses:
+    for order, cluster in enumerate(clustered_senses):
         primary = cluster.primary_sense
         pos_value = None if is_phrase else primary.pos
 
@@ -512,6 +512,7 @@ async def _register_clustered_senses(
             pos=pos_value,
             definition=cluster.core_meaning,
             source="dictionaryapi",
+            sense_order=order,
         )
 
         all_examples = []
@@ -526,7 +527,6 @@ async def _register_clustered_senses(
                 sense_id=sense_id,
                 source="dictionaryapi",
                 pos=pos_value,
-                # gloss=cluster.core_meaning,
                 definition=cluster.core_meaning,
                 examples=all_examples,
                 merged_definitions=merged_defs,
@@ -554,12 +554,13 @@ async def _register_dictionary_senses(
 ) -> list[AssignedSense]:
     results: list[AssignedSense] = []
 
-    for s in senses:
+    for order, s in enumerate(senses):
         sense_id = await registry.add_sense(
             lemma=entry.lemma,
             pos=s.pos,
             definition=s.definition,
             source="dictionaryapi",
+            sense_order=order,
         )
         results.append(
             AssignedSense(
@@ -596,6 +597,7 @@ async def _register_llm_senses(
             pos=s.pos,
             definition=s.core_meaning,
             source="llm_generated",
+            sense_order=idx,
         )
         results.append(
             AssignedSense(
@@ -624,6 +626,7 @@ async def _register_llm_phrase_senses(
             pos=None,
             definition=s.core_meaning,
             source="llm_generated",
+            sense_order=idx,
         )
         results.append(
             AssignedSense(
@@ -646,11 +649,9 @@ def _load_senses_from_registry(
     cached = registry.get_senses_for_lemma(entry.lemma)
     assigned: list[AssignedSense] = []
     for sense in cached:
-        source: Literal["dictionaryapi", "llm_generated"]
-        if sense.source == "dictionaryapi":
-            source = "dictionaryapi"
-        else:
-            source = "llm_generated"
+        source: Literal["dictionaryapi", "llm_generated"] = (
+            "dictionaryapi" if sense.source == "dictionaryapi" else "llm_generated"
+        )
         assigned.append(
             AssignedSense(
                 sense_id=sense.sense_id,

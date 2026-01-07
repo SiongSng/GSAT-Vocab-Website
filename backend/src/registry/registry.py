@@ -78,6 +78,7 @@ class Registry:
                     pos TEXT,
                     source TEXT NOT NULL,
                     definition TEXT NOT NULL,
+                    sense_order INTEGER,
                     created_at TEXT DEFAULT (datetime('now')),
                     updated_at TEXT DEFAULT (datetime('now'))
                 );
@@ -87,6 +88,7 @@ class Registry:
             self.conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_senses_lemma_source ON senses(lemma, source);"
             )
+            self._migrate_add_sense_order()
             self.conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sense_generation_cache (
@@ -114,6 +116,13 @@ class Registry:
                 """
             )
             self.conn.commit()
+
+    def _migrate_add_sense_order(self) -> None:
+        cursor = self.conn.execute("PRAGMA table_info(senses)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "sense_order" not in columns:
+            self.conn.execute("ALTER TABLE senses ADD COLUMN sense_order INTEGER")
+            logger.info("Migrated senses table: added sense_order column")
 
     def close(self) -> None:
         with self._lock:
@@ -164,14 +173,11 @@ class Registry:
         return f"{lemma_key}.{pos_abbrev}.reg{reg_index}"
 
     def get_senses_for_lemma(self, lemma: str) -> list[RegistrySense]:
-        # NOTE: Ordering relies on created_at + implicit ROWID ordering
-        # When multiple senses have identical created_at (same second), SQLite preserves
-        # insertion order via ROWID. This works currently but is not guaranteed by spec.
-        # Risk scenarios: VACUUM, database migration, INSERT OR REPLACE on existing sense_id
-        # TODO: Consider adding explicit sense_order column for guaranteed stability
         with self._lock:
             rows = self.conn.execute(
-                "SELECT * FROM senses WHERE lemma = ? ORDER BY created_at ASC", (lemma,)
+                """SELECT * FROM senses WHERE lemma = ?
+                   ORDER BY sense_order ASC NULLS LAST, created_at ASC""",
+                (lemma,),
             ).fetchall()
         return [_row_to_sense(r) for r in rows]
 
@@ -191,11 +197,19 @@ class Registry:
         definition: str,
         source: SenseSource = "llm_generated",
         sense_id: str | None = None,
+        sense_order: int | None = None,
     ) -> str:
         lemma = lemma.strip()
         definition = definition.strip()
         existing = self._get_existing_sense(lemma, pos, source, definition)
         if existing:
+            if sense_order is not None:
+                with self._lock:
+                    self.conn.execute(
+                        "UPDATE senses SET sense_order = ? WHERE sense_id = ?",
+                        (sense_order, existing.sense_id),
+                    )
+                    self.conn.commit()
             return existing.sense_id
 
         if sense_id is None:
@@ -213,8 +227,8 @@ class Registry:
             self.conn.execute(
                 """
                 INSERT OR REPLACE INTO senses (
-                    sense_id, lemma, pos, source, definition
-                ) VALUES (?, ?, ?, ?, ?)
+                    sense_id, lemma, pos, source, definition, sense_order
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.sense_id,
@@ -222,11 +236,12 @@ class Registry:
                     payload.pos,
                     payload.source,
                     payload.definition,
+                    sense_order,
                 ),
             )
             self.conn.commit()
 
-        logger.info(f"Added new sense: {sense_id} (source={source})")
+        logger.info(f"Added new sense: {sense_id} (source={source}, order={sense_order})")
         return sense_id
 
     def get_generation_cache(self, lemma: str, cache_key: str) -> str | None:

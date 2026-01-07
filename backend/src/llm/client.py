@@ -44,6 +44,36 @@ def _add_additional_properties(schema: dict) -> dict:
     return schema
 
 
+def _inline_refs(schema: dict, defs: dict | None = None) -> dict:
+    """Inline all $ref references since Claude's tool API doesn't support $defs."""
+    if defs is None:
+        defs = schema.pop("$defs", {})
+
+    if "$ref" in schema:
+        ref_path = schema["$ref"]
+        if ref_path.startswith("#/$defs/"):
+            def_name = ref_path.split("/")[-1]
+            if def_name in defs:
+                inlined = defs[def_name].copy()
+                return _inline_refs(inlined, defs)
+        return schema
+
+    result = {}
+    for key, value in schema.items():
+        if key == "$defs":
+            continue
+        elif isinstance(value, dict):
+            result[key] = _inline_refs(value, defs)
+        elif isinstance(value, list):
+            result[key] = [
+                _inline_refs(item, defs) if isinstance(item, dict) else item for item in value
+            ]
+        else:
+            result[key] = value
+
+    return result
+
+
 def _extract_json_block(content: str) -> Any | None:
     cleaned = content.strip()
     fence_match = re.search(r"```(?:json)?\s*(.*?)```", cleaned, re.S)
@@ -212,6 +242,10 @@ class LLMClient:
 
         prompt_with_cot = prompt
         mode = output_mode or self._get_output_mode(tier)
+
+        # Claude's tool API doesn't support $defs/$ref - inline all references
+        if mode == "tool_call":
+            schema = _inline_refs(schema)
 
         async with self._semaphore:
             await self._dispatch()
