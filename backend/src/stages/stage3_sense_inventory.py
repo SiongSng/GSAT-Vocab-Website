@@ -3,9 +3,9 @@ import contextlib
 import logging
 import random
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeVar
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel, Field
@@ -48,7 +48,6 @@ logger = logging.getLogger(__name__)
 DICTIONARY_API_URL = "https://api.dictionaryapi.dev/api/v2/entries/en/{lemma}"
 MAX_CONTEXTS = 6
 BATCH_FILTER_SIZE = 10
-FETCH_CHUNK_SIZE = 25  # start LLM filtering sooner instead of waiting for huge fetch batches
 DICT_MAX_CONCURRENCY = 1  # keep a single in-flight request to avoid hammering free API
 DICT_BASE_INTERVAL = 0.6  # start conservative to avoid 429s
 DICT_MAX_INTERVAL = 2.5
@@ -757,33 +756,115 @@ def _aggregate_patterns(
     return results
 
 
-T = TypeVar("T")
-
-
-async def _process_entries_in_parallel(
-    entries: list[T],
-    handler: Callable[[T], Awaitable],
-    total_label: str,
-    progress_callback: Callable[[int, int, str], None] | None,
+async def _process_uncached_entries(
+    pending_entries: list[CleanedWordEntry] | list[CleanedPhraseEntry],
+    registry: Registry,
+    llm_client: LLMClient,
     concurrency: int,
-) -> list:
-    if not entries:
+    is_phrase: bool = False,
+) -> list[SenseAssignedWordEntry] | list[SenseAssignedPhraseEntry]:
+    """
+    Process uncached entries using producer-consumer pattern:
+    - Producer: fetch dictionary senses (rate-limited)
+    - Consumer: batch LLM calls as candidates accumulate
+    """
+    if not pending_entries:
         return []
 
-    sem = asyncio.Semaphore(concurrency)
-    completed = 0
-    results: list = []
+    results: list[SenseAssignedWordEntry] | list[SenseAssignedPhraseEntry] = []
+    candidate_queue: asyncio.Queue[DictionaryCandidate | None] = asyncio.Queue()
+    llm_fallback_queue: asyncio.Queue[CleanedWordEntry | CleanedPhraseEntry | None] = (
+        asyncio.Queue()
+    )
 
-    async def run(entry: T) -> None:
-        nonlocal completed
-        async with sem:
-            result = await handler(entry)
-        results.append(result)
-        completed += 1
-        if progress_callback:
-            progress_callback(completed, len(entries), total_label)
+    async def fetch_producer():
+        sem = asyncio.Semaphore(concurrency)
 
-    await asyncio.gather(*(run(e) for e in entries))
+        async def fetch_one(entry):
+            async with sem:
+                return await _prepare_dictionary_candidate(entry)
+
+        tasks = [fetch_one(e) for e in pending_entries]
+        for coro in asyncio.as_completed(tasks):
+            candidate = await coro
+            await candidate_queue.put(candidate)
+        await candidate_queue.put(None)
+
+    async def llm_batch_consumer():
+        batch: list[DictionaryCandidate] = []
+
+        while True:
+            candidate = await candidate_queue.get()
+            if candidate is None:
+                if batch:
+                    await process_batch(batch)
+                await llm_fallback_queue.put(None)
+                break
+
+            if candidate.senses:
+                batch.append(candidate)
+                if len(batch) >= BATCH_FILTER_SIZE:
+                    await process_batch(batch)
+                    batch = []
+            else:
+                await llm_fallback_queue.put(candidate.entry)
+
+    async def process_batch(batch: list[DictionaryCandidate]):
+        clustered_map = await _llm_filter_dictionary_senses_batch(batch, llm_client)
+
+        for candidate in batch:
+            key = candidate.entry.lemma.lower()
+            clustered_senses = clustered_map.get(key, [])
+
+            if clustered_senses:
+                assigned = await _register_clustered_senses(
+                    candidate.entry, clustered_senses, registry, candidate.source_lemma
+                )
+                if is_phrase:
+                    results.append(
+                        SenseAssignedPhraseEntry(
+                            lemma=candidate.entry.lemma,
+                            frequency=candidate.entry.frequency,
+                            senses=assigned,
+                            contexts=candidate.entry.contexts,
+                        )
+                    )
+                else:
+                    entry = candidate.entry
+                    entry_pos = _derive_entry_pos(assigned, entry.pos)
+                    results.append(
+                        SenseAssignedWordEntry(
+                            lemma=entry.lemma,
+                            pos=entry_pos,
+                            level=entry.level,
+                            in_official_list=entry.in_official_list,
+                            frequency=entry.frequency,
+                            senses=assigned,
+                            contexts=entry.contexts,
+                        )
+                    )
+            else:
+                await llm_fallback_queue.put(candidate.entry)
+
+    async def llm_fallback_consumer():
+        while True:
+            entry = await llm_fallback_queue.get()
+            if entry is None:
+                break
+
+            if is_phrase:
+                result = await _process_phrase_entry(entry, registry, llm_client)
+                results.append(result)
+            else:
+                result = await _process_word_entry(entry, registry, llm_client)
+                results.append(result)
+
+    await asyncio.gather(
+        fetch_producer(),
+        llm_batch_consumer(),
+        llm_fallback_consumer(),
+    )
+
     return results
 
 
@@ -802,144 +883,65 @@ async def assign_all_senses(
         f"and {len(cleaned_data.phrases)} phrases"
     )
 
-    # Step 1: fetch dictionary senses in chunks to get LLM filtering started sooner.
     word_results: list[SenseAssignedWordEntry] = []
-    total_words = len(cleaned_data.words)
-    completed_words = 0
+    pending_words: list[CleanedWordEntry] = []
     cached_words = 0
 
-    for start in range(0, total_words, FETCH_CHUNK_SIZE):
-        chunk = cleaned_data.words[start : start + FETCH_CHUNK_SIZE]
-        pending_words: list[CleanedWordEntry] = []
-        for entry in chunk:
-            cached_senses = _load_senses_from_registry(entry, registry)
-            if cached_senses:
-                entry_pos = _derive_entry_pos(cached_senses, entry.pos)
-                word_results.append(
-                    SenseAssignedWordEntry(
-                        lemma=entry.lemma,
-                        pos=entry_pos,
-                        level=entry.level,
-                        in_official_list=entry.in_official_list,
-                        frequency=entry.frequency,
-                        senses=cached_senses,
-                        contexts=entry.contexts,
-                    )
+    for entry in cleaned_data.words:
+        cached_senses = _load_senses_from_registry(entry, registry)
+        if cached_senses:
+            entry_pos = _derive_entry_pos(cached_senses, entry.pos)
+            word_results.append(
+                SenseAssignedWordEntry(
+                    lemma=entry.lemma,
+                    pos=entry_pos,
+                    level=entry.level,
+                    in_official_list=entry.in_official_list,
+                    frequency=entry.frequency,
+                    senses=cached_senses,
+                    contexts=entry.contexts,
                 )
-                completed_words += 1
-                cached_words += 1
-                if progress_callback:
-                    progress_callback(completed_words, total_words, "word")
-            else:
-                pending_words.append(entry)
+            )
+            cached_words += 1
+        else:
+            pending_words.append(entry)
 
-        if not pending_words:
-            continue
-
-        word_candidates = await _process_entries_in_parallel(
-            list(pending_words),  # type: ignore[arg-type]
-            _prepare_dictionary_candidate,
-            "word_fetch",
-            None,
-            concurrency,
+    if pending_words:
+        uncached_results = await _process_uncached_entries(
+            pending_words, registry, llm_client, concurrency, is_phrase=False
         )
+        word_results.extend(uncached_results)
 
-        word_with_dict = [c for c in word_candidates if c.senses]
-        clustered_map = await _llm_filter_dictionary_senses_batch(word_with_dict, llm_client)
-
-        for candidate in word_candidates:
-            key = candidate.entry.lemma.lower()
-            clustered_senses = clustered_map.get(key, [])
-
-            if clustered_senses:
-                assigned = await _register_clustered_senses(
-                    candidate.entry, clustered_senses, registry, candidate.source_lemma
-                )
-                entry_pos = _derive_entry_pos(assigned, candidate.entry.pos)
-                word_results.append(
-                    SenseAssignedWordEntry(
-                        lemma=candidate.entry.lemma,
-                        pos=entry_pos,
-                        level=candidate.entry.level,
-                        in_official_list=candidate.entry.in_official_list,
-                        frequency=candidate.entry.frequency,
-                        senses=assigned,
-                        contexts=candidate.entry.contexts,
-                    )
-                )
-            else:
-                word_results.append(
-                    await _process_word_entry(candidate.entry, registry, llm_client)
-                )
-
-            completed_words += 1
-            if progress_callback:
-                progress_callback(completed_words, total_words, "word")
+    if progress_callback:
+        progress_callback(len(word_results), len(cleaned_data.words), "word")
 
     phrase_results: list[SenseAssignedPhraseEntry] = []
-    total_phrases = len(cleaned_data.phrases)
+    pending_phrases: list[CleanedPhraseEntry] = []
     cached_phrases = 0
 
-    completed_phrases = 0
-    for start in range(0, total_phrases, FETCH_CHUNK_SIZE):
-        chunk = cleaned_data.phrases[start : start + FETCH_CHUNK_SIZE]
-        pending_phrases: list[CleanedPhraseEntry] = []
-        for entry in chunk:
-            cached_senses = _load_senses_from_registry(entry, registry)
-            if cached_senses:
-                phrase_results.append(
-                    SenseAssignedPhraseEntry(
-                        lemma=entry.lemma,
-                        frequency=entry.frequency,
-                        senses=cached_senses,
-                        contexts=entry.contexts,
-                    )
+    for entry in cleaned_data.phrases:
+        cached_senses = _load_senses_from_registry(entry, registry)
+        if cached_senses:
+            phrase_results.append(
+                SenseAssignedPhraseEntry(
+                    lemma=entry.lemma,
+                    frequency=entry.frequency,
+                    senses=cached_senses,
+                    contexts=entry.contexts,
                 )
-                completed_phrases += 1
-                cached_phrases += 1
-                if progress_callback:
-                    progress_callback(completed_phrases, total_phrases, "phrase")
-            else:
-                pending_phrases.append(entry)
+            )
+            cached_phrases += 1
+        else:
+            pending_phrases.append(entry)
 
-        if not pending_phrases:
-            continue
-
-        phrase_candidates = await _process_entries_in_parallel(
-            list(pending_phrases),  # type: ignore[arg-type]
-            _prepare_dictionary_candidate,
-            "phrase_fetch",
-            None,
-            concurrency,
+    if pending_phrases:
+        uncached_results = await _process_uncached_entries(
+            pending_phrases, registry, llm_client, concurrency, is_phrase=True
         )
+        phrase_results.extend(uncached_results)
 
-        phrase_with_dict = [c for c in phrase_candidates if c.senses]
-        clustered_map = await _llm_filter_dictionary_senses_batch(phrase_with_dict, llm_client)
-
-        for candidate in phrase_candidates:
-            key = candidate.entry.lemma.lower()
-            clustered_senses = clustered_map.get(key, [])
-
-            if clustered_senses:
-                assigned = await _register_clustered_senses(
-                    candidate.entry, clustered_senses, registry, candidate.source_lemma
-                )
-                phrase_results.append(
-                    SenseAssignedPhraseEntry(
-                        lemma=candidate.entry.lemma,
-                        frequency=candidate.entry.frequency,
-                        senses=assigned,
-                        contexts=candidate.entry.contexts,
-                    )
-                )
-            else:
-                phrase_results.append(
-                    await _process_phrase_entry(candidate.entry, registry, llm_client)
-                )
-
-            completed_phrases += 1
-            if progress_callback:
-                progress_callback(completed_phrases, total_phrases, "phrase")
+    if progress_callback:
+        progress_callback(len(phrase_results), len(cleaned_data.phrases), "phrase")
 
     pattern_results = _aggregate_patterns(cleaned_data.patterns)
     if progress_callback and pattern_results:
