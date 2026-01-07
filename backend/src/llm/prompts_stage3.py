@@ -1,64 +1,80 @@
-STAGE3_DICT_FILTER_SYSTEM = """You are a bilingual lexicographer specializing in high school English education (GSAT/CEFR A1-B2). Your goal is to create concise, highly relevant vocabulary content with clearly distinguishable sense definitions."""
+STAGE3_DICT_FILTER_SYSTEM = """You are a bilingual lexicographer specializing in Taiwan's GSAT English education (108 curriculum, CEFR A2-B2). Create concise, student-relevant vocabulary content with clearly distinguishable sense definitions."""
 
-STAGE3_DICT_FILTER_BATCH_PROMPT = """You are a bilingual lexicographer creating flashcards for Taiwanese high school students (GSAT Prep).
-Your task is to take raw dictionary data and refine it into high-quality meaning clusters (typically 2-4 total).
+STAGE3_DICT_FILTER_BATCH_PROMPT = """Process dictionary entries into high-quality meaning clusters (1-4 per lemma) for Taiwanese GSAT students.
 
-### Core Principles:
-1. **Preserve POS Diversity**: If a lemma has multiple parts of speech (e.g., both NOUN and VERB), you MUST preserve at least one high-quality cluster for EACH part of speech that appears in the context or is common. Never discard an entire POS category if it's relevant.
-2. **Discard the Noise**: Actively remove senses that are archaic, technical, slang, or too rare for high school (CEFR A1-B2).
-3. **Think in Chinese**: Group English senses based on whether they map to the same Chinese translation concept.
-4. **Merge Similar Senses Aggressively**: If two senses would have nearly identical Chinese translations or only differ in subtle nuance, they MUST be merged into ONE cluster. Each cluster must be clearly distinguishable from others. For example:
-   - "available on the Internet" and "connected to the Internet" → merge into ONE cluster (both = 網路上的)
-   - "coins used to buy things" and "wealth in general" → merge into ONE cluster (both = 金錢)
-   - "deliver a package" vs "deliver a speech" → keep SEPARATE (遞送 vs 發表, clearly different)
-5. **Comprehensive Polysemy (一字多義)**: Ensure senses found in the provided <contexts> are primary, but you MUST also include other common, distinct, and high-frequency senses from the dictionary data, even if they have not appeared in the provided contexts. We want to prepare students for ALL common usages of a word at the GSAT level (CEFR A1-B2), not just past exam occurrences.
+<output_ordering>
+Return clusters ordered by usage frequency for high school students:
+1. First cluster = most common everyday meaning (news, textbooks, daily life)
+2. Subsequent clusters = progressively less common meanings
+3. Last cluster = least frequent among retained senses
 
-### Output Requirements:
-- For each lemma, return 1-4 clusters (prefer fewer, more distinct clusters over many similar ones).
-- Each cluster MUST contain:
-    - "pos": The specific Part of Speech (NOUN, VERB, ADJ, ADV, etc.)
-    - "core_meaning": Format = "繁中定義 (English with distinctive keywords)"
-      - The English part must use different vocabulary for each sense
-      - Include collocations when helpful: "commit a crime" vs "commit to a cause"
-      - Add context clues: "island (land surrounded by water)" vs "island (isolated area, e.g. traffic island)"
+This ordering directly affects flashcard presentation. Students see the first cluster by default, so place the most practical, high-frequency meaning first.
+</output_ordering>
 
-### Input Format:
-The input is an XML block containing multiple <lemma> tags. Each lemma has its own <senses> and <contexts>.
+<sense_selection>
+Retain senses that appear in:
+- News articles and current events coverage
+- Academic and scientific texts (popular science level)
+- Official GSAT/CEEC exam materials
+- Everyday conversation and practical situations
 
-### Example:
-Input XML includes:
+Include common high-frequency senses from dictionary data even if not in the provided contexts. Students need exposure to all typical usages at GSAT level, not just past exam occurrences.
+
+Merge senses that share the same Chinese translation concept (think: would these map to the same 繁中定義?):
+- "available online" + "connected to Internet" → ONE cluster (both = 網路上的)
+- "coins for buying" + "wealth in general" → ONE cluster (both = 金錢)
+
+Keep senses separate when Chinese translations differ:
+- "deliver package" vs "deliver speech" → SEPARATE clusters (遞送 vs 發表)
+
+Exclude archaic, highly technical, or slang senses outside CEFR A2-B2 scope.
+</sense_selection>
+
+<pos_preservation>
+Preserve at least one cluster per part of speech when the word commonly functions as multiple POS. A word appearing as both NOUN and VERB in contexts requires clusters for both.
+</pos_preservation>
+
+<definition_format>
+Format core_meaning as: "繁中定義 (English with distinctive keywords)"
+- Use different English vocabulary for each sense to distinguish them
+- Include typical collocations: "commit a crime" vs "commit to a goal"
+- Add context markers when helpful: "island (land in water)" vs "island (traffic island)"
+</definition_format>
+
+<example>
+Input:
 <lemma name="cook">
-  <contexts>...cooking...</contexts>
+  <contexts>She learned cooking from her grandmother.</contexts>
   <senses>
     <sense id="s0" pos="NOUN">a person who prepares food</sense>
     <sense id="s1" pos="VERB">to prepare food by heating</sense>
   </senses>
 </lemma>
 <lemma name="commit">
-  <contexts>...committed the crime...</contexts>
+  <contexts>He committed a serious crime.</contexts>
   <senses>
     <sense id="s0" pos="VERB">to do something illegal</sense>
     <sense id="s1" pos="VERB">to promise or dedicate</sense>
   </senses>
 </lemma>
 
-Expected JSON Output:
+Output (note: VERB "cook" is more common than NOUN, so it comes first):
 {{
   "items": [
     {{
       "lemma": "cook",
       "clusters": [
         {{
-          "primary_id": "s0",
-          "merged_ids": ["s0"],
-          "pos": "NOUN",
-          "core_meaning": "廚師 (a person who prepares food professionally)"
-        }},
-        {{
           "primary_id": "s1",
           "merged_ids": ["s1"],
           "pos": "VERB",
           "core_meaning": "烹飪 (to prepare food by heating)"
+        }},
+        {{
+          "primary_id": "s0",
+          "merged_ids": ["s0"],
+          "pos": "NOUN",
+          "core_meaning": "廚師 (a person who prepares food professionally)"
         }}
       ]
     }},
@@ -69,7 +85,7 @@ Expected JSON Output:
           "primary_id": "s0",
           "merged_ids": ["s0"],
           "pos": "VERB",
-          "core_meaning": "犯（罪）(to do something illegal, e.g. commit a crime/murder)"
+          "core_meaning": "犯（罪）(to do something illegal, e.g. commit a crime)"
         }},
         {{
           "primary_id": "s1",
@@ -81,43 +97,56 @@ Expected JSON Output:
     }}
   ]
 }}
+</example>
 
-Input XML to process:
-<lemmas>
+<input>
 {lemmas_xml}
-</lemmas>
+</input>
 
-Return JSON only:"""
+Return JSON only."""
 
-STAGE3_LLMS_DEFINE_SYSTEM = """You are a bilingual lexicographer specializing in high school English education (GSAT/CEFR A1-B2). Your goal is to create concise, highly relevant vocabulary content with clearly distinguishable sense definitions."""
+STAGE3_LLMS_DEFINE_SYSTEM = """You are a bilingual lexicographer specializing in Taiwan's GSAT English education (108 curriculum, CEFR A2-B2). Create concise, student-relevant vocabulary content with clearly distinguishable sense definitions."""
 
-STAGE3_LLMS_DEFINE_PROMPT = """You are a bilingual lexicographer creating flashcards for Taiwanese high school students (GSAT Prep).
-Your task is to define the word "{lemma}" with 1-4 high-quality meaning clusters.
+STAGE3_LLMS_DEFINE_PROMPT = """Define the word "{lemma}" with 1-4 meaning clusters for GSAT students.
 
-### Core Principles:
-1. **Preserve POS Diversity**: If this word has multiple parts of speech (e.g., both NOUN and VERB), you MUST provide at least one cluster for EACH common POS. Never omit an entire POS category if it's relevant.
-2. **Discard the Noise**: Do NOT include senses that are archaic, technical, slang, or too rare for high school level (CEFR A1-B2).
-3. **Think in Chinese**: Group English senses based on whether they map to the same Chinese translation concept.
-4. **Merge Similar Senses Aggressively**: If two senses would have nearly identical Chinese translations or only differ in subtle nuance, they MUST be merged into ONE cluster. Each cluster must be clearly distinguishable from others. Prefer fewer, more distinct clusters over many similar ones.
-5. **Comprehensive Polysemy (一字多義)**: Prioritize senses found in the provided <contexts>, but also include other common, high-frequency senses even if not in the contexts. Prepare students for ALL common usages at GSAT level.
+<output_ordering>
+Return clusters ordered by usage frequency for high school students:
+1. First cluster = most common everyday meaning (news, textbooks, daily life)
+2. Subsequent clusters = progressively less common meanings
+3. Last cluster = least frequent among retained senses
 
-### Input:
+This ordering directly affects flashcard presentation. Students see the first cluster by default, so place the most practical, high-frequency meaning first.
+</output_ordering>
+
+<sense_selection>
+Retain senses appearing in: news articles, academic texts (popular science level), GSAT/CEEC materials, everyday conversation.
+
+Include common high-frequency senses even if not in the provided contexts. Students need all typical usages at GSAT level, not just past exam occurrences.
+
+Merge senses sharing the same Chinese translation concept (think: would these map to the same 繁中定義?). Keep separate when Chinese translations clearly differ.
+
+Exclude archaic, highly technical, or slang senses outside CEFR A2-B2 scope.
+</sense_selection>
+
+<pos_preservation>
+Preserve at least one cluster per part of speech when the word commonly functions as multiple POS.
+</pos_preservation>
+
+<definition_format>
+Format core_meaning as: "繁中定義 (English with distinctive keywords)"
+- Use different English vocabulary for each sense
+- Include collocations: "commit a crime" vs "commit to a goal"
+</definition_format>
+
+<input>
 POS hint: {pos}
-
-Exam sentences where this word appeared:
-<contexts>
+Exam contexts:
 {contexts_xml}
-</contexts>
+</input>
 
-### Output Requirements:
-Return 1-4 clusters. Each cluster MUST contain:
-- "pos": The Part of Speech (NOUN, VERB, ADJ, ADV, etc.)
-- "core_meaning": Format = "繁中定義 (English with distinctive keywords)"
-  - Use different vocabulary for each sense
-  - Include collocations: "commit a crime" vs "commit to a cause"
-- "examples": 1-2 example sentences (optional)
-
-### Example Output:
+<example>
+Word: "deliver"
+Output (most common meaning first):
 {{
   "clusters": [
     {{
@@ -128,38 +157,49 @@ Return 1-4 clusters. Each cluster MUST contain:
     {{
       "pos": "VERB",
       "core_meaning": "發表 (to give a speech or presentation)",
-      "examples": ["She delivered an inspiring speech."]
+      "examples": ["She delivered an inspiring speech at the conference."]
     }}
   ]
 }}
+</example>
 
-Return JSON only:"""
+Return JSON only."""
 
-STAGE3_LLMS_DEFINE_PHRASE_PROMPT = """You are a bilingual lexicographer creating flashcards for Taiwanese high school students (GSAT Prep).
-Your task is to define the phrase "{lemma}" with 1-4 high-quality meaning clusters.
+STAGE3_LLMS_DEFINE_PHRASE_PROMPT = """Define the phrase "{lemma}" with 1-4 meaning clusters for GSAT students.
 
-### Core Principles:
-1. **Discard the Noise**: Do NOT include senses that are archaic, technical, slang, or too rare for high school level (CEFR A1-B2).
-2. **Think in Chinese**: Group English senses based on whether they map to the same Chinese translation concept.
-3. **Merge Similar Senses Aggressively**: If two senses would have nearly identical Chinese translations or only differ in subtle nuance, they MUST be merged into ONE cluster. Each cluster must be clearly distinguishable from others. Prefer fewer, more distinct clusters over many similar ones.
-4. **Comprehensive Polysemy (一字多義)**: Prioritize senses found in the provided <contexts>, but also include other common, high-frequency senses even if not in the contexts. Prepare students for ALL common usages at GSAT level.
+<output_ordering>
+Return clusters ordered by usage frequency for high school students:
+1. First cluster = most common everyday meaning (news, textbooks, daily life)
+2. Subsequent clusters = progressively less common meanings
+3. Last cluster = least frequent among retained senses
 
-### Input:
-Exam sentences where this phrase appeared:
-<contexts>
+This ordering directly affects flashcard presentation. Students see the first cluster by default, so place the most practical, high-frequency meaning first.
+</output_ordering>
+
+<sense_selection>
+Retain senses appearing in: news articles, academic texts (popular science level), GSAT/CEEC materials, everyday conversation.
+
+Include common high-frequency senses even if not in the provided contexts. Students need all typical usages at GSAT level, not just past exam occurrences.
+
+Merge senses sharing the same Chinese translation concept (think: would these map to the same 繁中定義?). Keep separate when Chinese translations clearly differ.
+
+Exclude archaic, highly technical, or slang senses outside CEFR A2-B2 scope.
+</sense_selection>
+
+<definition_format>
+Format core_meaning as: "繁中定義 (English with distinctive keywords)"
+- Use different English vocabulary for each sense
+- Include usage context and examples when helpful
+</definition_format>
+
+<input>
+Exam contexts:
 {contexts_xml}
-</contexts>
+</input>
 
-### Output Requirements:
-Return 1-4 clusters. Each cluster MUST contain:
-- "core_meaning": Format = "繁中定義 (English with distinctive keywords)"
-  - Use different vocabulary for each sense
-  - Include usage context and examples when helpful
-- "examples": 1-2 example sentences (optional)
-
-NOTE: Phrases do NOT have a "pos" field since they are multi-word expressions.
-
-### Example Output:
+<example>
+Phrase: "set up"
+Output (most common meaning first):
 {{
   "clusters": [
     {{
@@ -172,5 +212,6 @@ NOTE: Phrases do NOT have a "pos" field since they are multi-word expressions.
     }}
   ]
 }}
+</example>
 
-Return JSON only:"""
+Return JSON only (phrases have no "pos" field)."""

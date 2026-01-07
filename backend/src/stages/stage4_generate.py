@@ -338,7 +338,8 @@ def _build_vocab_entry_from_generation(
     is_word = isinstance(entry, SenseAssignedWordEntry)
     vocab_senses: list[VocabSense] = []
 
-    for gen_sense in generated.senses:
+    sorted_gen_senses = sorted(generated.senses, key=lambda s: s.sense_index)
+    for gen_sense in sorted_gen_senses:
         if gen_sense.sense_index >= len(entry.senses):
             logger.warning(
                 f"{entry.lemma}: generated sense_index {gen_sense.sense_index} out of range"
