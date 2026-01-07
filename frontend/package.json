@@ -24,6 +24,7 @@
   "dependencies": {
     "compromise": "^14.14.5",
     "edge-tts-universal": "^1.3.3",
+    "en-inflectors": "^1.0.12",
     "fflate": "^0.8.2",
     "firebase": "^12.7.0",
     "idb": "^8.0.3",

@@ -1,23 +1,30 @@
 import nlp from "compromise";
+import { Inflectors, infinitives } from "en-inflectors";
+
+function findVerbInfinitive(word: string): string | null {
+  const lower = word.toLowerCase();
+  if (infinitives[lower]) return lower;
+  for (const [base, forms] of Object.entries(infinitives)) {
+    if (forms.includes(lower)) return base;
+  }
+  return null;
+}
 
 export function getAllWordForms(word: string): Set<string> {
   const forms = new Set<string>();
   const lower = word.toLowerCase();
   forms.add(lower);
 
-  const doc = nlp(lower);
-
-  const asVerb = doc.verbs();
-  if (asVerb.found) {
-    const conj = asVerb.conjugate()[0];
-    if (conj) {
-      Object.values(conj).forEach((form) => {
-        if (typeof form === "string") {
-          forms.add(form.toLowerCase());
-        }
-      });
-    }
+  const verbForms = infinitives[lower];
+  if (verbForms) {
+    verbForms.forEach((form) => forms.add(form));
+  } else {
+    const inf = new Inflectors(lower);
+    forms.add(inf.toPast());
+    forms.add(inf.toGerund());
   }
+
+  const doc = nlp(lower);
 
   const asNoun = doc.nouns();
   if (asNoun.found) {
@@ -63,12 +70,11 @@ export function getAllPhraseForms(phrase: string): Set<string> {
 
 export function getBaseForm(word: string): string {
   const lower = word.toLowerCase();
-  const doc = nlp(lower);
 
-  const asVerb = doc.verbs();
-  if (asVerb.found) {
-    return asVerb.toInfinitive().text().toLowerCase();
-  }
+  const infinitive = findVerbInfinitive(lower);
+  if (infinitive) return infinitive;
+
+  const doc = nlp(lower);
 
   const asNoun = doc.nouns();
   if (asNoun.found) {

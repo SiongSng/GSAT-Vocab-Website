@@ -1,4 +1,5 @@
 import nlp from "compromise";
+import { Inflectors, infinitives } from "en-inflectors";
 
 export interface SpellingHint {
   prefix: string;
@@ -11,43 +12,64 @@ export interface PhraseSpellingHint {
   words: string[];
 }
 
+function findVerbInfinitive(word: string): string | null {
+  const lower = word.toLowerCase();
+  if (infinitives[lower]) return lower;
+  for (const [base, forms] of Object.entries(infinitives)) {
+    if (forms.includes(lower)) return base;
+  }
+  return null;
+}
+
 function detectSuffixUsingNLP(word: string, lemma: string): string {
   const wordLower = word.toLowerCase();
   const lemmaLower = lemma.toLowerCase();
 
-  const doc = nlp(wordLower);
+  const infinitive = findVerbInfinitive(wordLower);
+  if (infinitive && infinitive === lemmaLower && wordLower !== lemmaLower) {
+    const inf = new Inflectors(lemmaLower);
+    const gerund = inf.toGerund();
+    const past = inf.toPast();
+    const present = inf.toPresent();
 
-  const asVerb = doc.verbs();
-  if (asVerb.found) {
-    const infinitive = asVerb.toInfinitive().text().toLowerCase();
-    if (infinitive === lemmaLower && wordLower !== lemmaLower) {
-      const conj = asVerb.conjugate()[0] as Record<string, string> | undefined;
-      if (conj) {
-        if (conj["Gerund"]?.toLowerCase() === wordLower) {
-          const stem = wordLower.slice(0, -3);
-          if (stem.length >= 2) {
-            return wordLower.slice(stem.length - 1);
-          }
-          return "ing";
-        }
-        if (conj["PastTense"]?.toLowerCase() === wordLower) {
-          const stem = wordLower.slice(0, -2);
-          if (stem.length >= 2) {
-            return wordLower.slice(stem.length - 1);
-          }
-          return "ed";
-        }
-        if (conj["PresentTense"]?.toLowerCase() === wordLower) {
-          const stem = wordLower.slice(0, -1);
-          if (stem.length >= 2) {
-            return wordLower.slice(stem.length - 1);
-          }
-          return "s";
-        }
+    if (gerund === wordLower) {
+      const stem = wordLower.slice(0, -3);
+      if (stem.length >= 2) {
+        return wordLower.slice(stem.length - 1);
       }
+      return "ing";
+    }
+    if (past === wordLower && wordLower.endsWith("ed")) {
+      const stem = wordLower.slice(0, -2);
+      if (stem.length >= 2) {
+        return wordLower.slice(stem.length - 1);
+      }
+      return "ed";
+    }
+    if (past === wordLower && wordLower.endsWith("d")) {
+      const stem = wordLower.slice(0, -1);
+      if (stem.length >= 2) {
+        return wordLower.slice(stem.length - 1);
+      }
+      return "d";
+    }
+    if (present === wordLower && wordLower.endsWith("es")) {
+      const stem = wordLower.slice(0, -2);
+      if (stem.length >= 2) {
+        return wordLower.slice(stem.length - 1);
+      }
+      return "es";
+    }
+    if (present === wordLower && wordLower.endsWith("s")) {
+      const stem = wordLower.slice(0, -1);
+      if (stem.length >= 2) {
+        return wordLower.slice(stem.length - 1);
+      }
+      return "s";
     }
   }
 
+  const doc = nlp(wordLower);
   const asNoun = doc.nouns();
   if (asNoun.found) {
     const singular = asNoun.toSingular().text().toLowerCase();
@@ -97,12 +119,10 @@ function detectSuffixUsingNLP(word: string, lemma: string): string {
 }
 
 function getRootForm(word: string): string {
-  const doc = nlp(word);
+  const infinitive = findVerbInfinitive(word);
+  if (infinitive) return infinitive;
 
-  const asVerb = doc.verbs();
-  if (asVerb.found) {
-    return asVerb.toInfinitive().text();
-  }
+  const doc = nlp(word);
 
   const asNoun = doc.nouns();
   if (asNoun.found) {
