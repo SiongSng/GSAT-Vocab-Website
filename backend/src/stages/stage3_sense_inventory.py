@@ -762,6 +762,9 @@ async def _process_uncached_entries(
     llm_client: LLMClient,
     concurrency: int,
     is_phrase: bool = False,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    cached_count: int = 0,
+    total_count: int = 0,
 ) -> list[SenseAssignedWordEntry] | list[SenseAssignedPhraseEntry]:
     """
     Process uncached entries using producer-consumer pattern:
@@ -772,10 +775,18 @@ async def _process_uncached_entries(
         return []
 
     results: list[SenseAssignedWordEntry] | list[SenseAssignedPhraseEntry] = []
+    processed_count = cached_count
+    entry_type = "phrase" if is_phrase else "word"
     candidate_queue: asyncio.Queue[DictionaryCandidate | None] = asyncio.Queue()
     llm_fallback_queue: asyncio.Queue[CleanedWordEntry | CleanedPhraseEntry | None] = (
         asyncio.Queue()
     )
+
+    def report_progress():
+        nonlocal processed_count
+        processed_count += 1
+        if progress_callback:
+            progress_callback(processed_count, total_count, entry_type)
 
     async def fetch_producer():
         sem = asyncio.Semaphore(concurrency)
@@ -843,6 +854,7 @@ async def _process_uncached_entries(
                             contexts=entry.contexts,
                         )
                     )
+                report_progress()
             else:
                 await llm_fallback_queue.put(candidate.entry)
 
@@ -858,6 +870,7 @@ async def _process_uncached_entries(
             else:
                 result = await _process_word_entry(entry, registry, llm_client)
                 results.append(result)
+            report_progress()
 
     await asyncio.gather(
         fetch_producer(),
@@ -886,6 +899,7 @@ async def assign_all_senses(
     word_results: list[SenseAssignedWordEntry] = []
     pending_words: list[CleanedWordEntry] = []
     cached_words = 0
+    total_words = len(cleaned_data.words)
 
     for entry in cleaned_data.words:
         cached_senses = _load_senses_from_registry(entry, registry)
@@ -903,21 +917,28 @@ async def assign_all_senses(
                 )
             )
             cached_words += 1
+            if progress_callback:
+                progress_callback(cached_words, total_words, "word")
         else:
             pending_words.append(entry)
 
     if pending_words:
         uncached_results = await _process_uncached_entries(
-            pending_words, registry, llm_client, concurrency, is_phrase=False
+            pending_words,
+            registry,
+            llm_client,
+            concurrency,
+            is_phrase=False,
+            progress_callback=progress_callback,
+            cached_count=cached_words,
+            total_count=total_words,
         )
         word_results.extend(uncached_results)
-
-    if progress_callback:
-        progress_callback(len(word_results), len(cleaned_data.words), "word")
 
     phrase_results: list[SenseAssignedPhraseEntry] = []
     pending_phrases: list[CleanedPhraseEntry] = []
     cached_phrases = 0
+    total_phrases = len(cleaned_data.phrases)
 
     for entry in cleaned_data.phrases:
         cached_senses = _load_senses_from_registry(entry, registry)
@@ -931,17 +952,23 @@ async def assign_all_senses(
                 )
             )
             cached_phrases += 1
+            if progress_callback:
+                progress_callback(cached_phrases, total_phrases, "phrase")
         else:
             pending_phrases.append(entry)
 
     if pending_phrases:
         uncached_results = await _process_uncached_entries(
-            pending_phrases, registry, llm_client, concurrency, is_phrase=True
+            pending_phrases,
+            registry,
+            llm_client,
+            concurrency,
+            is_phrase=True,
+            progress_callback=progress_callback,
+            cached_count=cached_phrases,
+            total_count=total_phrases,
         )
         phrase_results.extend(uncached_results)
-
-    if progress_callback:
-        progress_callback(len(phrase_results), len(cleaned_data.phrases), "phrase")
 
     pattern_results = _aggregate_patterns(cleaned_data.patterns)
     if progress_callback and pattern_results:
