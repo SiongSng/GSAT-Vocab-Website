@@ -260,19 +260,45 @@ def _is_quality_context(text: str, sentence_role: SentenceRole | None = None) ->
     return len(text.split()) >= 5
 
 
-def _find_annotation_role(
-    token_surface: str, token_lemma: str, annotations: list
-) -> AnnotationRole | None:
-    surface_lower = token_surface.lower()
-    lemma_lower = token_lemma.lower()
+def _find_surface_spans(doc: Doc, surface: str) -> list:
+    """Find spans in a sentence doc that correspond to an annotation surface.
 
-    for annotation in annotations:
-        ann_surface_lower = annotation.surface.lower()
-        if surface_lower == ann_surface_lower or lemma_lower == ann_surface_lower:
-            return annotation.role
-        if surface_lower in ann_surface_lower or ann_surface_lower in surface_lower:
-            return annotation.role
-    return None
+    1) Exact char match (case-insensitive) with alignment expansion
+    2) Exact token text/lemma match (single token)
+    3) Exact token span text match for multi-word surfaces
+    """
+    surface_clean = surface.strip()
+    if not surface_clean:
+        return []
+
+    spans = []
+
+    # Char-level search first to preserve original offsets
+    for match in re.finditer(re.escape(surface_clean), doc.text, flags=re.IGNORECASE):
+        span = doc.char_span(match.start(), match.end(), alignment_mode="expand")
+        if span:
+            spans.append(span)
+
+    if spans:
+        return spans
+
+    surface_lower = surface_clean.lower()
+
+    # Single-token fallback (text or lemma match)
+    for token in doc:
+        if token.text.lower() == surface_lower or token.lemma_.lower() == surface_lower:
+            return [doc[token.i : token.i + 1]]
+
+    # Multi-token fallback: contiguous token text match
+    words = surface_lower.split()
+    if len(words) > 1:
+        token_count = len(doc)
+        for i in range(token_count - len(words) + 1):
+            span = doc[i : i + len(words)]
+            if span.text.lower() == surface_lower:
+                return [span]
+
+    return []
 
 
 @dataclass
@@ -286,20 +312,6 @@ class _SentenceTask:
     sentence_role: SentenceRole | None
     text: str
     annotations: list
-
-
-@dataclass
-class _AnnotationTask:
-    """Metadata for an annotation surface to be parsed."""
-
-    exam_year: int
-    exam_type: ExamType
-    section_type: SectionType
-    question: int | None
-    sentence_role: SentenceRole | None
-    sentence_text: str
-    surface: str
-    role: AnnotationRole
 
 
 def _process_sections(
@@ -320,7 +332,6 @@ def _process_sections(
     pattern_map: dict[str, list[PatternOccurrence]] = defaultdict(list)
 
     sentence_tasks: list[_SentenceTask] = []
-    annotation_tasks: list[_AnnotationTask] = []
     phrase_surfaces: list[str] = []
 
     for exam in exams:
@@ -370,24 +381,6 @@ def _process_sections(
                             continue
                         phrase_surfaces.append(ann.surface)
 
-                    elif ann.role in (
-                        AnnotationRole.CORRECT_ANSWER,
-                        AnnotationRole.DISTRACTOR,
-                        AnnotationRole.TESTED_KEYWORD,
-                    ):
-                        annotation_tasks.append(
-                            _AnnotationTask(
-                                exam_year=exam.year,
-                                exam_type=exam.exam_type,
-                                section_type=section.type,
-                                question=sentence.question,
-                                sentence_role=sentence.sentence_role,
-                                sentence_text=sentence.text,
-                                surface=ann.surface,
-                                role=ann.role,
-                            )
-                        )
-
                 if sentence.sentence_role != SentenceRole.QUESTION_PROMPT:
                     sentence_tasks.append(
                         _SentenceTask(
@@ -401,7 +394,7 @@ def _process_sections(
                         )
                     )
 
-    total_tasks = len(sentence_tasks) + len(annotation_tasks) + len(phrase_surfaces)
+    total_tasks = len(sentence_tasks) + len(phrase_surfaces)
     completed = 0
 
     unique_phrases = list(set(phrase_surfaces))
@@ -449,63 +442,6 @@ def _process_sections(
     if progress_callback:
         progress_callback(completed, total_tasks, "phrases")
 
-    annotation_surfaces = [t.surface for t in annotation_tasks]
-    surfaces_to_parse = [s for s in annotation_surfaces if s not in doc_cache]
-    unique_surfaces = list(set(surfaces_to_parse))
-    if unique_surfaces:
-        for doc, surface in zip(
-            nlp.pipe(unique_surfaces, batch_size=BATCH_SIZE_SHORT), unique_surfaces, strict=True
-        ):
-            doc_cache[surface] = doc
-
-    for task in annotation_tasks:
-        doc = doc_cache[task.surface]
-        base_source = SourceInfo(
-            year=task.exam_year,
-            exam_type=task.exam_type,
-            section_type=task.section_type,
-            question_number=task.question,
-            sentence_role=task.sentence_role,
-            role=task.role,
-        )
-
-        for token in doc:
-            pos = _normalize_pos(token.pos_)
-            if pos in STOP_POS:
-                continue
-            if not token.is_alpha or len(token.lemma_) <= 1:
-                continue
-            lemma = token.lemma_.lower()
-            if _is_foreign_word(lemma):
-                continue
-            if pos == "ADV":
-                adv_base = _normalize_adverb_lemma(lemma)
-                if adv_base != lemma and (
-                    adv_base in official_wordlist or adv_base in frequency_counters
-                ):
-                    lemma = adv_base
-
-            frequency_counters[lemma].add(
-                year=task.exam_year,
-                role=task.role,
-                section=task.section_type,
-                exam_type=task.exam_type,
-            )
-
-            if task.role != AnnotationRole.DISTRACTOR:
-                contexts_map[lemma].append(
-                    ContextSentence(
-                        text=task.sentence_text,
-                        source=base_source,
-                        pos=pos,
-                        surface=task.surface,
-                    )
-                )
-
-    completed += len(annotation_tasks)
-    if progress_callback:
-        progress_callback(completed, total_tasks, "annotations")
-
     sentence_texts = [t.text for t in sentence_tasks]
     texts_to_parse = [t for t in sentence_texts if t not in doc_cache]
     unique_texts = list(set(texts_to_parse))
@@ -523,7 +459,70 @@ def _process_sections(
             section_type=task.section_type,
             question_number=task.question,
             sentence_role=task.sentence_role,
+            role=None,
         )
+
+        token_annotations: dict[int, tuple[AnnotationRole, str]] = {}
+        unmatched_annotations: list = []
+        for ann in task.annotations or []:
+            if ann.role not in (
+                AnnotationRole.CORRECT_ANSWER,
+                AnnotationRole.DISTRACTOR,
+                AnnotationRole.TESTED_KEYWORD,
+            ):
+                continue
+            spans = _find_surface_spans(doc, ann.surface)
+            if not spans:
+                logger.warning(
+                    "Annotation surface not aligned to sentence: '%s' (year=%s, q=%s)",
+                    ann.surface,
+                    task.exam_year,
+                    task.question,
+                )
+                unmatched_annotations.append(ann)
+                continue
+            for span in spans:
+                for token in span:
+                    if token.i not in token_annotations:
+                        token_annotations[token.i] = (ann.role, ann.surface)
+        # Handle annotations that do not appear in the sentence (e.g., vocab options)
+        for ann in unmatched_annotations:
+            surface_doc = doc_cache.get(ann.surface)
+            if surface_doc is None:
+                surface_doc = nlp(ann.surface)
+                doc_cache[ann.surface] = surface_doc
+            for token in surface_doc:
+                pos = _normalize_pos(token.pos_)
+                if pos in STOP_POS:
+                    continue
+                if not token.is_alpha or len(token.lemma_) <= 1:
+                    continue
+                lemma = token.lemma_.lower()
+                if _is_foreign_word(lemma):
+                    continue
+                if pos == "ADV":
+                    adv_base = _normalize_adverb_lemma(lemma)
+                    if adv_base != lemma and (
+                        adv_base in official_wordlist or adv_base in frequency_counters
+                    ):
+                        lemma = adv_base
+                frequency_counters[lemma].add(
+                    year=task.exam_year,
+                    role=ann.role,
+                    section=task.section_type,
+                    exam_type=task.exam_type,
+                )
+                if ann.role == AnnotationRole.DISTRACTOR:
+                    continue
+                if _is_quality_context(task.text, task.sentence_role):
+                    contexts_map[lemma].append(
+                        ContextSentence(
+                            text=task.text,
+                            source=base_source.model_copy(update={"role": ann.role}),
+                            pos=pos,
+                            surface=ann.surface,
+                        )
+                    )
 
         for sent in doc.sents:
             sent_text = sent.text.strip()
@@ -538,10 +537,8 @@ def _process_sections(
                 if len(token.lemma_) <= 1:
                     continue
 
-                role = _find_annotation_role(token.text, token.lemma_, task.annotations)
-                if role is not None:
-                    continue
-
+                role_surface = token_annotations.get(token.i)
+                role = role_surface[0] if role_surface else None
                 lemma = token.lemma_.lower()
                 if _is_foreign_word(lemma):
                     continue
@@ -554,18 +551,21 @@ def _process_sections(
 
                 frequency_counters[lemma].add(
                     year=task.exam_year,
-                    role=None,
+                    role=role,
                     section=task.section_type,
                     exam_type=task.exam_type,
                 )
+
+                if role == AnnotationRole.DISTRACTOR:
+                    continue
 
                 if _is_quality_context(sent_text, task.sentence_role):
                     contexts_map[lemma].append(
                         ContextSentence(
                             text=sent_text,
-                            source=base_source.model_copy(update={"role": None}),
+                            source=base_source.model_copy(update={"role": role}),
                             pos=pos,
-                            surface=token.text,
+                            surface=role_surface[1] if role_surface else token.text,
                         )
                     )
 
