@@ -7,6 +7,7 @@
     import { formatExamSource } from "$lib/utils/quiz";
     import { getAppStore } from "$lib/stores/app.svelte";
     import QuizShell from "./QuizShell.svelte";
+    import QuizLayout from "./QuizLayout.svelte";
     import QuizFeedback from "./QuizFeedback.svelte";
 
     interface Props {
@@ -23,7 +24,7 @@
     }
 
     let {
-        question,
+        question: questionData,
         questionIndex,
         totalQuestions,
         showFeedback,
@@ -46,7 +47,7 @@
         current: questionIndex + 1,
         total: totalQuestions,
     });
-    const audioController = createAudioController(() => question.lemma);
+    const audioController = createAudioController(() => questionData.lemma);
 
     function getAutoSpeak(): boolean {
         if (typeof window === "undefined") return false;
@@ -57,25 +58,20 @@
     }
 
     function initQuestion() {
-        const word = question.lemma.toLowerCase();
-        // Filter out spaces/special chars for slots, but keep length correct relative to letters
+        const word = questionData.lemma.toLowerCase();
         const letters = word
             .split("")
             .filter((c) => c.match(/[a-z0-9]/i) || c === " ");
 
-        // Simple shuffle
         const letterPool = letters
             .filter((c) => c !== " ")
             .sort(() => Math.random() - 0.5);
 
         shuffledLetters = letterPool;
-        // Initialize slots with null, but respect spaces in the original phrase if needed
-        // For simplicity, we just make slots for the length of non-space chars
         answerSlots = new Array(letterPool.length).fill(null);
         usedIndices = new Set();
         typedInput = "";
 
-        // Focus input on desktop
         if (window.matchMedia("(min-width: 768px)").matches) {
             setTimeout(() => inputRef?.focus(), 50);
         }
@@ -86,7 +82,7 @@
     }
 
     $effect(() => {
-        void question.lemma;
+        void questionData.lemma;
         initQuestion();
     });
 
@@ -200,165 +196,164 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <QuizShell {progress} {onExit}>
-    <div class="card">
-        <!-- Prompt / Definition -->
-        <div class="prompt-area">
-            <div class="audio-header">
-                <button
-                    type="button"
-                    class="audio-btn"
-                    onclick={playAudio}
-                    aria-label="播放發音"
-                >
-                    <svg
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                    >
-                        <path
-                            d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+    <QuizLayout {showFeedback}>
+        {#snippet question()}
+            <div class="card">
+                <div class="prompt-area">
+                    <div class="audio-header">
+                        <button
+                            type="button"
+                            class="audio-btn"
+                            onclick={playAudio}
+                            aria-label="播放發音"
+                        >
+                            <svg
+                                width="32"
+                                height="32"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                            >
+                                <path
+                                    d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {#if questionData.sentence_context}
+                        <div class="sentence-box">
+                            <div class="sentence-header">
+                                <p class="sentence">
+                                    <HighlightedText
+                                        text={questionData.sentence_context.replace(
+                                            /_+/g,
+                                            questionData.lemma,
+                                        )}
+                                        highlightLemma={questionData.lemma}
+                                        isPhrase={questionData.entry_type === "phrase"}
+                                        blankMode={!showFeedback}
+                                        showHints={!showFeedback}
+                                    />
+                                </p>
+                                {#if showFeedback && questionData.explanation?.correct_usage}
+                                    <AudioButton
+                                        text={questionData.explanation.correct_usage}
+                                        size="sm"
+                                        variant="subtle"
+                                        class="sentence-audio"
+                                    />
+                                {/if}
+                            </div>
+                        </div>
+                    {/if}
+
+                    <p class="definition">{questionData.prompt}</p>
+                    {#if questionData.exam_source}
+                        <div class="source-info">
+                            <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <path
+                                    d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"
+                                ></path>
+                                <path d="M8 7h6"></path>
+                                <path d="M8 11h8"></path>
+                            </svg>
+                            <span class="source-text">
+                                {formatExamSource(questionData.exam_source)}
+                            </span>
+                        </div>
+                    {/if}
+                    {#if showFeedback && questionData.hint}
+                        <p class="hint">{questionData.hint}</p>
+                    {/if}
+                </div>
+
+                <div class="interaction-area">
+                    <div class="input-wrapper">
+                        <input
+                            bind:this={inputRef}
+                            type="text"
+                            class="text-input"
+                            class:input-correct={showFeedback && isCorrect}
+                            class:input-wrong={showFeedback && !isCorrect}
+                            value={typedInput}
+                            oninput={handleInputChange}
+                            placeholder="輸入單字..."
+                            autocomplete="off"
+                            autocorrect="off"
+                            spellcheck="false"
+                            disabled={showFeedback}
                         />
-                    </svg>
-                </button>
-            </div>
-
-            {#if question.sentence_context}
-                <div class="sentence-box">
-                    <div class="sentence-header">
-                        <p class="sentence">
-                            <HighlightedText
-                                text={question.sentence_context.replace(
-                                    /_+/g,
-                                    question.lemma,
-                                )}
-                                highlightLemma={question.lemma}
-                                isPhrase={question.entry_type === "phrase"}
-                                blankMode={!showFeedback}
-                                showHints={!showFeedback}
-                            />
-                        </p>
-                        {#if showFeedback && question.explanation?.correct_usage}
-                            <AudioButton
-                                text={question.explanation.correct_usage}
-                                size="sm"
-                                variant="subtle"
-                                class="sentence-audio"
-                            />
-                        {/if}
                     </div>
-                </div>
-            {/if}
 
-            <p class="definition">{question.prompt}</p>
-            {#if question.exam_source}
-                <div class="source-info">
-                    <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path
-                            d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"
-                        ></path>
-                        <path d="M8 7h6"></path>
-                        <path d="M8 11h8"></path>
-                    </svg>
-                    <span class="source-text">
-                        {formatExamSource(question.exam_source)}
-                    </span>
-                </div>
-            {/if}
-            {#if showFeedback && question.hint}
-                <p class="hint">{question.hint}</p>
-            {/if}
-        </div>
+                    {#if !typedInput && !showFeedback}
+                        <div class="tiles-container">
+                            <div class="slots-row">
+                                {#each answerSlots as letter, i}
+                                    <button
+                                        class="slot"
+                                        class:slot-filled={letter !== null}
+                                        onclick={() => removeLetterAt(i)}
+                                        disabled={letter === null}
+                                    >
+                                        {letter || ""}
+                                    </button>
+                                {/each}
+                            </div>
 
-        <!-- Input Area -->
-        <div class="interaction-area">
-            <!-- Text Input (Primary) -->
-            <div class="input-wrapper">
-                <input
-                    bind:this={inputRef}
-                    type="text"
-                    class="text-input"
-                    class:input-correct={showFeedback && isCorrect}
-                    class:input-wrong={showFeedback && !isCorrect}
-                    value={typedInput}
-                    oninput={handleInputChange}
-                    placeholder="輸入單字..."
-                    autocomplete="off"
-                    autocorrect="off"
-                    spellcheck="false"
-                    disabled={showFeedback}
+                            <div class="letters-grid">
+                                {#each shuffledLetters as letter, i}
+                                    <button
+                                        class="tile"
+                                        class:tile-used={usedIndices.has(i)}
+                                        onclick={() => selectLetter(letter, i)}
+                                        disabled={usedIndices.has(i)}
+                                    >
+                                        {letter}
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
+                    {#if !showFeedback}
+                        <div class="actions">
+                            <button
+                                class="submit-btn"
+                                onclick={handleSubmit}
+                                disabled={!isComplete()}
+                            >
+                                送出答案
+                                {#if !app.isMobile}
+                                    <span class="kbd-hint">Enter</span>
+                                {/if}
+                            </button>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+        {/snippet}
+
+        {#snippet feedback()}
+            {#if showFeedback && isCorrect !== null}
+                <QuizFeedback
+                    {isCorrect}
+                    question={questionData}
+                    {matchedInflected}
+                    {onContinue}
+                    onShowDetail={() => onShowDetail(questionData.lemma)}
                 />
-            </div>
-
-            <!-- Tiles (Alternative/Helper) -->
-            {#if !typedInput && !showFeedback}
-                <div class="tiles-container">
-                    <!-- Answer Slots -->
-                    <div class="slots-row">
-                        {#each answerSlots as letter, i}
-                            <button
-                                class="slot"
-                                class:slot-filled={letter !== null}
-                                onclick={() => removeLetterAt(i)}
-                                disabled={letter === null}
-                            >
-                                {letter || ""}
-                            </button>
-                        {/each}
-                    </div>
-
-                    <!-- Available Letters -->
-                    <div class="letters-grid">
-                        {#each shuffledLetters as letter, i}
-                            <button
-                                class="tile"
-                                class:tile-used={usedIndices.has(i)}
-                                onclick={() => selectLetter(letter, i)}
-                                disabled={usedIndices.has(i)}
-                            >
-                                {letter}
-                            </button>
-                        {/each}
-                    </div>
-                </div>
             {/if}
-
-            {#if !showFeedback}
-                <div class="actions">
-                    <button
-                        class="submit-btn"
-                        onclick={handleSubmit}
-                        disabled={!isComplete()}
-                    >
-                        送出答案
-                        {#if !app.isMobile}
-                            <span class="kbd-hint">Enter</span>
-                        {/if}
-                    </button>
-                </div>
-            {/if}
-        </div>
-    </div>
-
-    {#if showFeedback && isCorrect !== null}
-        <QuizFeedback
-            {isCorrect}
-            {question}
-            {matchedInflected}
-            {onContinue}
-            onShowDetail={() => onShowDetail(question.lemma)}
-            isSentenceDisplayed={!!question.sentence_context}
-        />
-    {/if}
+        {/snippet}
+    </QuizLayout>
 </QuizShell>
 
 <style>

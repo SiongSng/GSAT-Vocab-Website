@@ -190,6 +190,7 @@
                 onContinue={handleContinue}
                 onExit={handleExit}
                 onShowDetail={(lemma) => handleShowDetail(lemma, quiz.currentQuestion?.entry_type)}
+                disableKeyboard={isDetailOpen}
             />
         {:else}
             <QuizSpellingQuestion

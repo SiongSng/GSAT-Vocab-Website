@@ -6,6 +6,7 @@
     import { STORAGE_KEYS } from "$lib/storage-keys";
     import { formatExamSource } from "$lib/utils/quiz";
     import QuizShell from "./QuizShell.svelte";
+    import QuizLayout from "./QuizLayout.svelte";
     import QuizFeedback from "./QuizFeedback.svelte";
 
     interface Props {
@@ -18,10 +19,11 @@
         onContinue: () => void;
         onExit: () => void;
         onShowDetail: (lemma: string) => void;
+        disableKeyboard?: boolean;
     }
 
     let {
-        question,
+        question: questionData,
         questionIndex,
         totalQuestions,
         showFeedback,
@@ -30,6 +32,7 @@
         onContinue,
         onExit,
         onShowDetail,
+        disableKeyboard = false,
     }: Props = $props();
 
     let selectedAnswer = $state<string | null>(null);
@@ -40,10 +43,10 @@
     });
 
     const isFillType = $derived(
-        question.type === "fill_blank" || question.type === "distinction",
+        questionData.type === "fill_blank" || questionData.type === "distinction",
     );
 
-    const audioController = createAudioController(() => question.lemma);
+    const audioController = createAudioController(() => questionData.lemma);
 
     function getAutoSpeak() {
         if (typeof window === "undefined") return false;
@@ -54,12 +57,11 @@
     }
 
     $effect(() => {
-        question.lemma;
+        questionData.lemma;
         selectedAnswer = null;
 
-        // Auto-play audio for recognition type
         if (
-            question.type === "recognition" &&
+            questionData.type === "recognition" &&
             !showFeedback &&
             getAutoSpeak()
         ) {
@@ -74,6 +76,8 @@
     }
 
     function handleKeydown(e: KeyboardEvent) {
+        if (disableKeyboard) return;
+
         if (showFeedback) {
             if (e.key === "Enter") {
                 e.preventDefault();
@@ -83,10 +87,10 @@
         }
 
         const key = parseInt(e.key);
-        if (!isNaN(key) && key >= 1 && key <= 4 && question.options) {
+        if (!isNaN(key) && key >= 1 && key <= 4 && questionData.options) {
             const idx = key - 1;
-            if (idx < question.options.length) {
-                handleSelect(question.options[idx].value);
+            if (idx < questionData.options.length) {
+                handleSelect(questionData.options[idx].value);
             }
         }
     }
@@ -95,171 +99,176 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <QuizShell {progress} {onExit}>
-    <div class="card">
-        <!-- Question Prompt Area -->
-        <div class="prompt-area">
-            {#if isFillType}
-                <div class="sentence-box">
-                    <div class="sentence-header">
-                        <p class="sentence">
-                            <HighlightedText
-                                text={question.sentence_context?.replace(
-                                    /_+/g,
-                                    question.lemma,
-                                ) ?? ""}
-                                highlightLemma={question.lemma}
-                                isPhrase={question.entry_type === "phrase"}
-                                blankMode={!showFeedback}
-                            />
-                        </p>
-                        {#if showFeedback && question.explanation?.correct_usage}
-                            <AudioButton
-                                text={question.explanation.correct_usage}
-                                size="sm"
-                                variant="subtle"
-                                class="sentence-audio"
-                            />
+    <QuizLayout {showFeedback}>
+        {#snippet question()}
+            <div class="card">
+                <!-- Question Prompt Area -->
+                <div class="prompt-area">
+                    {#if isFillType}
+                        <div class="sentence-box">
+                            <div class="sentence-header">
+                                <p class="sentence">
+                                    <HighlightedText
+                                        text={questionData.sentence_context?.replace(
+                                            /_+/g,
+                                            questionData.lemma,
+                                        ) ?? ""}
+                                        highlightLemma={questionData.lemma}
+                                        isPhrase={questionData.entry_type === "phrase"}
+                                        blankMode={!showFeedback}
+                                    />
+                                </p>
+                                {#if showFeedback && questionData.explanation?.correct_usage}
+                                    <AudioButton
+                                        text={questionData.explanation.correct_usage}
+                                        size="sm"
+                                        variant="subtle"
+                                        class="sentence-audio"
+                                    />
+                                {/if}
+                            </div>
+                            {#if questionData.exam_source}
+                                <div class="source-info">
+                                    <svg
+                                        width="12"
+                                        height="12"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2.5"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path
+                                            d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"
+                                        ></path>
+                                        <path d="M8 7h6"></path>
+                                        <path d="M8 11h8"></path>
+                                    </svg>
+                                    <span class="source-text">
+                                        {formatExamSource(questionData.exam_source)}
+                                    </span>
+                                </div>
+                            {/if}
+                        </div>
+                        {#if showFeedback && questionData.hint}
+                            <p class="hint-text">{questionData.hint}</p>
+                        {:else if questionData.type === "recognition"}
+                            <div class="word-display">
+                                <div class="ghost-spacer"></div>
+                                <span class="word">{questionData.lemma}</span>
+                                <div class="audio-wrapper">
+                                    <AudioButton text={questionData.lemma} size="lg" />
+                                </div>
+                            </div>
+                            <p class="instruction">選擇正確的中文意思</p>
+                        {:else if questionData.type === "reverse"}
+                            <div class="def-display">
+                                <p class="definition">{questionData.prompt}</p>
+                                {#if showFeedback && questionData.hint}
+                                    <p class="pos-hint">{questionData.hint}</p>
+                                {/if}
+                            </div>
+                            <p class="instruction">選擇對應的單字</p>
                         {/if}
-                    </div>
-                    {#if question.exam_source}
-                        <div class="source-info">
-                            <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2.5"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path
-                                    d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"
-                                ></path>
-                                <path d="M8 7h6"></path>
-                                <path d="M8 11h8"></path>
-                            </svg>
-                            <span class="source-text">
-                                {formatExamSource(question.exam_source)}
+                    {:else if questionData.type === "recognition"}
+                        <div class="word-display">
+                            <span class="word">{questionData.lemma}</span>
+                            <AudioButton text={questionData.lemma} size="lg" />
+                        </div>
+                        <p class="instruction">選擇正確的中文意思</p>
+                    {:else if questionData.type === "reverse"}
+                        <div class="def-display">
+                            <p class="definition">{questionData.prompt}</p>
+                            {#if showFeedback && questionData.hint}
+                                <p class="pos-hint">{questionData.hint}</p>
+                            {/if}
+                        </div>
+                        <p class="instruction">選擇對應的英文單字</p>
+                    {/if}
+                </div>
+
+                <!-- Options Area -->
+                <div class="options-list">
+                    {#each questionData.options || [] as option, i}
+                        {@const isCorrectOpt =
+                            option.value.toLowerCase() ===
+                            questionData.correct.toLowerCase()}
+                        {@const isSelectedOpt =
+                            selectedAnswer?.toLowerCase() ===
+                            option.value.toLowerCase()}
+
+                        <svelte:element
+                            this={showFeedback ? "div" : "button"}
+                            class="option-btn"
+                            class:correct={showFeedback && isCorrectOpt}
+                            class:wrong={showFeedback && isSelectedOpt && !isCorrectOpt}
+                            class:faded={showFeedback &&
+                                !isCorrectOpt &&
+                                !isSelectedOpt}
+                            onclick={() => handleSelect(option.value)}
+                            disabled={showFeedback ? undefined : showFeedback}
+                            role={showFeedback ? "group" : undefined}
+                        >
+                            <span class="key-indicator">{i + 1}</span>
+                            <span class="option-label">
+                                {#if showFeedback && questionData.type !== "recognition"}
+                                    <HighlightedText text={option.label} />
+                                {:else}
+                                    {option.label}
+                                {/if}
                             </span>
-                        </div>
-                    {/if}
+
+                            {#if showFeedback && isCorrectOpt}
+                                <span class="status-icon">
+                                    <svg
+                                        width="20"
+                                        height="20"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="3"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </span>
+                            {/if}
+                            {#if showFeedback && isSelectedOpt && !isCorrectOpt}
+                                <span class="status-icon">
+                                    <svg
+                                        width="20"
+                                        height="20"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="3"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </span>
+                            {/if}
+                        </svelte:element>
+                    {/each}
                 </div>
-                {#if showFeedback && question.hint}
-                    <p class="hint-text">{question.hint}</p>
-                {:else if question.type === "recognition"}
-                    <div class="word-display">
-                        <div class="ghost-spacer"></div>
-                        <span class="word">{question.lemma}</span>
-                        <div class="audio-wrapper">
-                            <AudioButton text={question.lemma} size="lg" />
-                        </div>
-                    </div>
-                    <p class="instruction">選擇正確的中文意思</p>
-                {:else if question.type === "reverse"}
-                    <div class="def-display">
-                        <p class="definition">{question.prompt}</p>
-                        {#if showFeedback && question.hint}
-                            <p class="pos-hint">{question.hint}</p>
-                        {/if}
-                    </div>
-                    <p class="instruction">選擇對應的單字</p>
-                {/if}
-            {:else if question.type === "recognition"}
-                <div class="word-display">
-                    <span class="word">{question.lemma}</span>
-                    <AudioButton text={question.lemma} size="lg" />
-                </div>
-                <p class="instruction">選擇正確的中文意思</p>
-            {:else if question.type === "reverse"}
-                <div class="def-display">
-                    <p class="definition">{question.prompt}</p>
-                    {#if showFeedback && question.hint}
-                        <p class="pos-hint">{question.hint}</p>
-                    {/if}
-                </div>
-                <p class="instruction">選擇對應的英文單字</p>
+            </div>
+        {/snippet}
+
+        {#snippet feedback()}
+            {#if showFeedback && isCorrect !== null}
+                <QuizFeedback
+                    {isCorrect}
+                    question={questionData}
+                    {onContinue}
+                    onShowDetail={() => onShowDetail(questionData.lemma)}
+                />
             {/if}
-        </div>
-
-        <!-- Options Area -->
-        <div class="options-list">
-            {#each question.options || [] as option, i}
-                {@const isCorrectOpt =
-                    option.value.toLowerCase() ===
-                    question.correct.toLowerCase()}
-                {@const isSelectedOpt =
-                    selectedAnswer?.toLowerCase() ===
-                    option.value.toLowerCase()}
-
-                <svelte:element
-                    this={showFeedback ? "div" : "button"}
-                    class="option-btn"
-                    class:correct={showFeedback && isCorrectOpt}
-                    class:wrong={showFeedback && isSelectedOpt && !isCorrectOpt}
-                    class:faded={showFeedback &&
-                        !isCorrectOpt &&
-                        !isSelectedOpt}
-                    onclick={() => handleSelect(option.value)}
-                    disabled={showFeedback ? undefined : showFeedback}
-                    role={showFeedback ? "group" : undefined}
-                >
-                    <span class="key-indicator">{i + 1}</span>
-                    <span class="option-label">
-                        {#if showFeedback && question.type !== "recognition"}
-                            <HighlightedText text={option.label} />
-                        {:else}
-                            {option.label}
-                        {/if}
-                    </span>
-
-                    {#if showFeedback && isCorrectOpt}
-                        <span class="status-icon">
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="3"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <polyline points="20 6 9 17 4 12"></polyline>
-                            </svg>
-                        </span>
-                    {/if}
-                    {#if showFeedback && isSelectedOpt && !isCorrectOpt}
-                        <span class="status-icon">
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="3"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </span>
-                    {/if}
-                </svelte:element>
-            {/each}
-        </div>
-    </div>
-
-    {#if showFeedback && isCorrect !== null}
-        <QuizFeedback
-            {isCorrect}
-            {question}
-            {onContinue}
-            onShowDetail={() => onShowDetail(question.lemma)}
-            isSentenceDisplayed={isFillType}
-        />
-    {/if}
+        {/snippet}
+    </QuizLayout>
 </QuizShell>
 
 <style>

@@ -48,10 +48,16 @@
         display: flex;
         flex-direction: column;
         width: 100%;
-        max-width: 640px; /* Notion-like reading width */
+        max-width: 640px;
         margin: 0 auto;
         padding: 1rem;
         min-height: 100%;
+    }
+
+    @media (min-width: 1024px) {
+        .quiz-shell {
+            max-width: 960px;
+        }
     }
 
     .header {

@@ -9,7 +9,6 @@
         question: QuizQuestion;
         onContinue: () => void;
         onShowDetail?: (lemma: string) => void;
-        isSentenceDisplayed?: boolean;
         matchedInflected?: boolean;
     }
 
@@ -18,130 +17,141 @@
         question,
         onContinue,
         onShowDetail,
-        isSentenceDisplayed = false,
         matchedInflected = false,
     }: Props = $props();
 
     const app = getAppStore();
     const statusClass = $derived(isCorrect ? "status-correct" : "status-wrong");
-    const isSpellingWithInflection = $derived(
-        question.type === "spelling" && !!question.inflected_form,
+    const type = $derived(question.type);
+
+    const needsSentence = $derived(type === "recognition" || type === "reverse");
+    const showSentence = $derived(
+        needsSentence && !!question.explanation?.correct_usage,
+    );
+    const showConfusion = $derived(
+        type === "distinction" &&
+            !isCorrect &&
+            !!question.explanation?.confusion_note,
+    );
+    const showMemoryTip = $derived(
+        !isCorrect &&
+            !needsSentence &&
+            !showConfusion &&
+            !!question.explanation?.memory_tip,
+    );
+    const showInflection = $derived(
+        type === "spelling" &&
+            isCorrect &&
+            !matchedInflected &&
+            !!question.inflected_form,
     );
 </script>
 
 <div class="feedback-container {statusClass}">
     <div class="feedback-layout">
-        <div class="feedback-content">
-            <div class="header-row">
-                <div class="icon-indicator">
-                    {#if isCorrect}
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="3.5"
-                        >
-                            <path
-                                d="M20 6L9 17l-5-5"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            />
-                        </svg>
-                    {:else}
-                        <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="3.5"
-                        >
-                            <path
-                                d="M18 6L6 18M6 6l12 12"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            />
-                        </svg>
-                    {/if}
-                </div>
-
-                <div class="status-info">
-                    <h3 class="status-title">
-                        {#if isCorrect}
-                            {#if matchedInflected}
-                                完美拼寫！
-                            {:else}
-                                答對了！
-                            {/if}
-                        {:else}
-                            再接再厲
-                        {/if}
-                    </h3>
-                    {#if isCorrect && isSpellingWithInflection && !matchedInflected}
-                        <p class="inflection-hint">
-                            句中形態為 <strong>{question.inflected_form}</strong>
-                        </p>
-                    {/if}
-                    {#if !isCorrect}
-                        <div class="answer-reveal">
-                            <span class="label">正確答案：</span>
-                            <span class="lemma">{question.lemma}</span>
-                            <div class="audio-group">
-                                <AudioButton text={question.lemma} size="sm" />
-                            </div>
-                        </div>
-                    {/if}
-                </div>
+        <div class="header-row">
+            <div class="icon-indicator">
+                {#if isCorrect}
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3.5"
+                    >
+                        <path
+                            d="M20 6L9 17l-5-5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                {:else}
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3.5"
+                    >
+                        <path
+                            d="M18 6L6 18M6 6l12 12"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        />
+                    </svg>
+                {/if}
             </div>
 
-            <div class="details-grid">
-                {#if question.explanation?.correct_usage && !isSentenceDisplayed}
-                    <div class="detail-section">
-                        <div class="section-header">
-                            <span class="section-label">情境例句</span>
+            <div class="status-info">
+                <h3 class="status-title">
+                    {#if isCorrect}
+                        {#if type === "spelling" && matchedInflected}
+                            完美拼寫！
+                        {:else}
+                            答對了！
+                        {/if}
+                    {:else}
+                        再接再厲
+                    {/if}
+                </h3>
+
+                {#if showInflection}
+                    <p class="inflection-hint">
+                        句中形態為 <strong>{question.inflected_form}</strong>
+                    </p>
+                {/if}
+
+                {#if !isCorrect}
+                    <div class="answer-reveal">
+                        <span class="label">正確答案：</span>
+                        <span class="lemma">{question.correct}</span>
+                        <AudioButton text={question.lemma} size="sm" />
+                    </div>
+                {/if}
+            </div>
+        </div>
+
+        {#if showSentence || showConfusion || showMemoryTip}
+            <div class="details-section">
+                {#if showSentence}
+                    <div class="detail-item">
+                        <div class="detail-header">
+                            <span class="detail-label">情境例句</span>
                             <AudioButton
-                                text={question.explanation.correct_usage}
+                                text={question.explanation?.correct_usage ?? ""}
                                 size="md"
                                 variant="subtle"
                             />
                         </div>
                         <p class="example-text">
                             <HighlightedText
-                                text={question.explanation.correct_usage}
+                                text={question.explanation?.correct_usage ?? ""}
                                 highlightLemma={question.lemma}
                             />
                         </p>
                     </div>
                 {/if}
 
-                {#if !isCorrect && (question.explanation?.memory_tip || question.explanation?.confusion_note)}
-                    <div class="insights-row">
-                        {#if question.explanation?.memory_tip}
-                            <div class="insight-pill tip">
-                                <span class="pill-icon">💡</span>
-                                <span class="pill-text"
-                                    >{question.explanation.memory_tip}</span
-                                >
-                            </div>
-                        {/if}
+                {#if showConfusion && question.explanation?.confusion_note}
+                    <div class="insight-pill">
+                        <span class="pill-icon">⚠️</span>
+                        <div class="confusion-content">
+                            <span class="confused-with">
+                                與 {question.explanation.confusion_note.confused_with} 區分：
+                            </span>
+                            <span class="pill-text">
+                                {question.explanation.confusion_note.distinction}
+                            </span>
+                        </div>
+                    </div>
+                {/if}
 
-                        {#if question.explanation?.confusion_note}
-                            <div class="insight-pill confusion">
-                                <span class="pill-icon">⚠️</span>
-                                <div class="confusion-content">
-                                    <span class="confused-with"
-                                        >與 {question.explanation.confusion_note
-                                            .confused_with} 區分：</span
-                                    >
-                                    <span class="pill-text"
-                                        >{question.explanation.confusion_note
-                                            .distinction}</span
-                                    >
-                                </div>
-                            </div>
-                        {/if}
+                {#if showMemoryTip}
+                    <div class="insight-pill">
+                        <span class="pill-icon">💡</span>
+                        <span class="pill-text">{question.explanation?.memory_tip}</span>
                     </div>
                 {/if}
             </div>
-        </div>
+        {/if}
 
         <div class="feedback-actions">
             {#if onShowDetail}
@@ -168,7 +178,7 @@
                 </button>
             {/if}
             <button
-                class="action-btn primary continue-btn"
+                class="action-btn primary"
                 onclick={onContinue}
             >
                 <span>繼續</span>
@@ -182,96 +192,59 @@
 
 <style>
     .feedback-container {
-        margin-top: 1.5rem;
-        padding: 1.5rem 2rem;
-        border-radius: 16px;
-        border: 1px solid var(--color-border);
-        animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        position: relative;
-        overflow: hidden;
+        animation: fadeIn 0.2s ease-out;
     }
 
-    @keyframes slideIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
     }
 
-    /* Status Colors */
     .status-correct {
-        background-color: #f6ffed;
-        border-color: #b7eb8f;
+        --feedback-accent: var(--color-srs-good, #52c41a);
+        --feedback-accent-dark: #389e0d;
+        --feedback-title: #237804;
     }
     .status-wrong {
-        background-color: #fff2f0;
-        border-color: #ffccc7;
+        --feedback-accent: var(--color-srs-again, #ff4d4f);
+        --feedback-accent-dark: #cf1322;
+        --feedback-title: #a8071a;
     }
 
     .feedback-layout {
         display: flex;
-        align-items: center;
-        gap: 2rem;
-        justify-content: space-between;
+        flex-direction: column;
+        gap: 1rem;
     }
 
-    .feedback-content {
-        flex: 1;
-        min-width: 0;
-    }
-
-    /* Header Row */
     .header-row {
         display: flex;
         align-items: center;
-        gap: 1.25rem;
-        margin-bottom: 1rem;
+        gap: 1rem;
     }
 
     .icon-indicator {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-
-    .status-correct .icon-indicator {
-        background: #52c41a;
-        color: white;
-    }
-    .status-wrong .icon-indicator {
-        background: #ff4d4f;
+        background: var(--feedback-accent);
         color: white;
     }
     .icon-indicator svg {
-        width: 24px;
-        height: 24px;
-    }
-
-    .status-info {
-        display: flex;
-        flex-direction: column;
+        width: 22px;
+        height: 22px;
     }
 
     .status-title {
-        font-size: 1.25rem;
+        font-size: 1.125rem;
         font-weight: 700;
         margin: 0;
         line-height: 1.2;
-    }
-    .status-correct .status-title {
-        color: #237804;
-    }
-    .status-wrong .status-title {
-        color: #a8071a;
+        color: var(--feedback-title);
     }
 
     .inflection-hint {
@@ -279,7 +252,6 @@
         color: var(--color-content-secondary);
         margin: 0.25rem 0 0 0;
     }
-
     .inflection-hint strong {
         color: var(--color-accent);
         font-weight: 600;
@@ -291,139 +263,101 @@
         gap: 0.5rem;
         margin-top: 0.25rem;
     }
-
-    .audio-group {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
     .answer-reveal .label {
         font-size: 0.8125rem;
         color: var(--color-content-tertiary);
-        font-weight: 500;
     }
-
     .lemma {
-        font-size: 1.375rem;
+        font-size: 1.25rem;
         font-weight: 700;
         color: var(--color-content-primary);
-        letter-spacing: -0.01em;
     }
 
-    /* Details */
-    .details-grid {
+    .details-section {
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
     }
 
-    .section-header {
+    .detail-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 0.25rem;
     }
-
-    .section-label {
+    .detail-label {
         font-size: 0.75rem;
-        font-weight: 700;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--color-content-tertiary);
-        display: block;
     }
 
     .example-text {
-        font-size: 1rem;
+        font-size: 0.9375rem;
         line-height: 1.6;
         color: var(--color-content-secondary);
         font-family: var(--font-serif, serif);
         margin: 0;
-    }
-
-    /* Insight Pills */
-    .insights-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        margin-top: 0.5rem;
+        word-break: break-word;
     }
 
     .insight-pill {
         display: flex;
         align-items: flex-start;
-        gap: 0.625rem;
-        padding: 0.625rem 0.875rem;
-        background: rgba(255, 255, 255, 0.6);
-        border: 1px solid rgba(0, 0, 0, 0.06);
-        border-radius: 10px;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--color-surface-hover);
+        border-radius: 8px;
         font-size: 0.875rem;
         line-height: 1.4;
     }
-
     .pill-icon {
-        font-size: 1.125rem;
+        font-size: 1rem;
         line-height: 1;
-        margin-top: 1px;
     }
-
     .confusion-content {
         display: flex;
         flex-direction: column;
     }
-
     .confused-with {
-        font-weight: 700;
+        font-weight: 600;
         font-size: 0.75rem;
         color: var(--color-content-primary);
         margin-bottom: 0.125rem;
     }
 
-    /* Actions */
     .feedback-actions {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        flex-shrink: 0;
+        margin-top: 0.5rem;
     }
 
     .action-btn {
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 52px;
-        border-radius: 12px;
+        height: 48px;
+        border-radius: 10px;
         cursor: pointer;
         transition: all 0.2s;
         font-weight: 600;
         border: 1px solid transparent;
     }
-
     .action-btn.primary {
-        min-width: 140px;
-        gap: 0.75rem;
-        font-size: 1.0625rem;
-    }
-
-    .status-correct .action-btn.primary {
-        background: #52c41a;
+        flex: 1;
+        gap: 0.5rem;
+        font-size: 1rem;
+        background: var(--feedback-accent);
         color: white;
     }
-    .status-correct .action-btn.primary:hover {
-        background: #389e0d;
-    }
-
-    .status-wrong .action-btn.primary {
-        background: var(--color-content-primary);
-        color: var(--color-surface-primary);
-    }
-    .status-wrong .action-btn.primary:hover {
-        opacity: 0.9;
+    .action-btn.primary:hover {
+        background: var(--feedback-accent-dark);
     }
 
     .action-btn.secondary {
-        width: 52px;
+        width: 48px;
         background: var(--color-surface-primary);
         border-color: var(--color-border);
         color: var(--color-content-secondary);
@@ -434,36 +368,10 @@
     }
 
     .kbd {
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         background: rgba(255, 255, 255, 0.2);
-        padding: 2px 6px;
+        padding: 2px 5px;
         border-radius: 4px;
-        font-weight: 500;
-    }
-
-    .status-wrong .kbd {
-        background: rgba(255, 255, 255, 0.15);
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-        .feedback-layout {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 1.5rem;
-        }
-
-        .feedback-container {
-            padding: 1.5rem;
-        }
-
-        .feedback-actions {
-            flex-direction: row;
-        }
-
-        .action-btn.primary {
-            flex: 1;
-        }
     }
 
     @media (max-width: 480px) {
@@ -472,17 +380,13 @@
             height: 36px;
         }
         .status-title {
-            font-size: 1.125rem;
+            font-size: 1rem;
         }
         .lemma {
-            font-size: 1.25rem;
+            font-size: 1.125rem;
         }
         .action-btn {
-            height: 48px;
+            height: 44px;
         }
-    }
-
-    :global(.dark) .insight-pill {
-        background: rgba(0, 0, 0, 0.2);
     }
 </style>

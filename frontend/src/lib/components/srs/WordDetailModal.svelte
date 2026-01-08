@@ -20,7 +20,10 @@
     }
 
     function handleKeydown(e: KeyboardEvent) {
+        if (!isOpen) return;
         if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
             onClose();
         }
     }
