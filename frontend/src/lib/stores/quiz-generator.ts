@@ -93,6 +93,15 @@ export function quizTypeToSkillType(quizType: QuizQuestionType): SkillType | nul
   return quizType as SkillType;
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 function isLearned(card: SRSCard): boolean {
   return card.state !== State.New;
 }
@@ -108,7 +117,7 @@ interface QuizEligibleEntry {
 async function getQuizEligibleEntries(
   config: QuizConfig,
 ): Promise<QuizEligibleEntry[]> {
-  const allCards = getAllCards();
+  const allCards = shuffleArray(getAllCards());
   if (allCards.length === 0) return [];
 
   const now = new Date();
@@ -157,18 +166,19 @@ async function getQuizEligibleEntries(
     }
 
     const newSkills = getNewSkillsForCard(card);
-    for (const skillType of newSkills) {
-      const key = `${card.lemma}::${card.sense_id}::${skillType}`;
-      if (seenKeys.has(key)) continue;
-      seenKeys.add(key);
-
-      newSkillEntries.push({
-        entry,
-        card,
-        skillType,
-        skillState: null,
-        priority: "new_skill",
-      });
+    if (newSkills.length > 0) {
+      const randomSkill = newSkills[Math.floor(Math.random() * newSkills.length)];
+      const key = `${card.lemma}::${card.sense_id}::${randomSkill}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        newSkillEntries.push({
+          entry,
+          card,
+          skillType: randomSkill,
+          skillState: null,
+          priority: "new_skill",
+        });
+      }
     }
 
     const mainKey = `${card.lemma}::${card.sense_id}::main`;
@@ -199,10 +209,10 @@ async function getQuizEligibleEntries(
   }
 
   return [
-    ...dueSkillEntries,
-    ...newSkillEntries,
-    ...dueMainEntries,
-    ...weakEntries,
+    ...shuffleArray(dueSkillEntries),
+    ...shuffleArray(newSkillEntries),
+    ...shuffleArray(dueMainEntries),
+    ...shuffleArray(weakEntries),
   ];
 }
 
@@ -632,15 +642,6 @@ async function generateQuestion(
         await generateDistractors(entry, sense, 3, "definition"),
       );
   }
-}
-
-function shuffleArray<T>(array: T[]): T[] {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
 }
 
 export async function generateQuizLocally(
