@@ -652,7 +652,17 @@ export async function generateQuizLocally(
     return [];
   }
 
-  const selected = eligibleEntries.slice(0, config.count);
+  const selected: QuizEligibleEntry[] = [];
+  const seenLemmas = new Set<string>();
+
+  for (const entry of eligibleEntries) {
+    if (selected.length >= config.count) break;
+    if (seenLemmas.has(entry.card.lemma)) continue;
+
+    seenLemmas.add(entry.card.lemma);
+    selected.push(entry);
+  }
+
   const shuffledSelected = shuffleArray(selected);
 
   const questions: QuizQuestion[] = [];
