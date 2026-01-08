@@ -13,10 +13,60 @@ export type SRSEntryType = "word" | "phrase";
 
 export type SRSEligibleEntry = WordEntry | PhraseEntry;
 
+export type SkillType = "reverse" | "fill_blank" | "spelling" | "distinction";
+
+export interface SkillState {
+  due: Date;
+  stability: number;
+  difficulty: number;
+  reps: number;
+  lapses: number;
+  state: State;
+  last_review?: Date;
+}
+
+export type SkillStates = Partial<Record<SkillType, SkillState>>;
+
 export interface SRSCard extends FSRSCard {
   lemma: string;
   sense_id: string;
   entry_type: SRSEntryType;
+  skills?: SkillStates;
+}
+
+export const SKILL_UNLOCK_THRESHOLDS: Record<SkillType, number> = {
+  reverse: 1,
+  fill_blank: 3,
+  spelling: 7,
+  distinction: 21,
+};
+
+export const SKILL_INFLUENCE_ON_MAIN: Record<SkillType, number> = {
+  reverse: 0.3,
+  fill_blank: 0.5,
+  spelling: 0.7,
+  distinction: 0.8,
+};
+
+export function getUnlockedSkills(mainStability: number): SkillType[] {
+  const skills: SkillType[] = [];
+  for (const [skill, threshold] of Object.entries(SKILL_UNLOCK_THRESHOLDS)) {
+    if (mainStability >= threshold) {
+      skills.push(skill as SkillType);
+    }
+  }
+  return skills;
+}
+
+export function createEmptySkillState(): SkillState {
+  return {
+    due: new Date(),
+    stability: 0,
+    difficulty: 0,
+    reps: 0,
+    lapses: 0,
+    state: State.New,
+  };
 }
 
 export interface SRSReviewLog extends FSRSReviewLog {

@@ -5,8 +5,10 @@ import type {
   DailyStats,
   SessionLog,
   SRSEligibleEntry,
+  SkillType,
+  SkillState,
 } from "$lib/types/srs";
-import { createCardKey, getPrimarySenseId } from "$lib/types/srs";
+import { createCardKey, getPrimarySenseId, getUnlockedSkills } from "$lib/types/srs";
 import { createEmptyCard, State, Rating } from "ts-fsrs";
 
 const DB_NAME = "gsat-vocab-srs-v2";
@@ -410,6 +412,68 @@ export function shouldUnlockSecondarySenses(lemma: string): boolean {
   const primaryCard = getPrimaryCard(lemma);
   if (!primaryCard) return false;
   return primaryCard.reps >= 3;
+}
+
+export function getSkillState(
+  lemma: string,
+  senseId: string,
+  skillType: SkillType,
+): SkillState | undefined {
+  const card = getCard(lemma, senseId);
+  return card?.skills?.[skillType];
+}
+
+export function updateSkillState(
+  lemma: string,
+  senseId: string,
+  skillType: SkillType,
+  skillState: SkillState,
+): void {
+  const card = getCard(lemma, senseId);
+  if (!card) return;
+
+  const updatedCard: SRSCard = {
+    ...card,
+    skills: {
+      ...card.skills,
+      [skillType]: skillState,
+    },
+  };
+
+  updateCard(updatedCard);
+}
+
+export function getCardsWithDueSkills(now: Date = new Date()): {
+  card: SRSCard;
+  skillType: SkillType;
+  skillState: SkillState;
+}[] {
+  const results: { card: SRSCard; skillType: SkillType; skillState: SkillState }[] = [];
+
+  for (const card of getAllCards()) {
+    if (!card.skills) continue;
+
+    for (const [skill, state] of Object.entries(card.skills)) {
+      if (state && new Date(state.due) <= now) {
+        results.push({
+          card,
+          skillType: skill as SkillType,
+          skillState: state,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+export function getNewSkillsForCard(card: SRSCard): SkillType[] {
+  const unlockedSkills = getUnlockedSkills(card.stability);
+  const existingSkills = card.skills ? Object.keys(card.skills) : [];
+
+  return unlockedSkills.filter(
+    (skill) => !existingSkills.includes(skill),
+  );
 }
 
 export async function migratePrimarySenseIds(

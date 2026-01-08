@@ -1,5 +1,6 @@
 import { Rating, State } from "ts-fsrs";
 import type { QuizQuestionType } from "./quiz-generator";
+import { quizTypeToSkillType } from "./quiz-generator";
 import {
   getCard,
   ensureCard,
@@ -7,7 +8,11 @@ import {
   addReviewLog,
   updateDailyStats,
 } from "./srs-storage";
-import type { SRSCard, SRSReviewLog } from "$lib/types/srs";
+import type { SRSCard, SRSReviewLog, SkillState } from "$lib/types/srs";
+import {
+  SKILL_INFLUENCE_ON_MAIN,
+  createEmptySkillState,
+} from "$lib/types/srs";
 import { FSRS } from "ts-fsrs";
 
 export { Rating };
@@ -60,6 +65,48 @@ export function mapQuizResultToRating(result: QuizResult): Rating {
   return Rating.Good;
 }
 
+function blendRatingForMain(
+  skillRating: Rating,
+  influence: number,
+): Rating {
+  if (skillRating === Rating.Again) {
+    return influence >= 0.5 ? Rating.Again : Rating.Hard;
+  }
+  if (skillRating === Rating.Hard) {
+    return influence >= 0.7 ? Rating.Hard : Rating.Good;
+  }
+  if (skillRating === Rating.Easy) {
+    return influence >= 0.5 ? Rating.Easy : Rating.Good;
+  }
+  return Rating.Good;
+}
+
+function createFSRSCompatibleCard(state: SkillState): any {
+  return {
+    due: new Date(state.due),
+    stability: state.stability,
+    difficulty: state.difficulty,
+    elapsed_days: 0,
+    scheduled_days: 0,
+    reps: state.reps,
+    lapses: state.lapses,
+    state: state.state,
+    last_review: state.last_review ? new Date(state.last_review) : undefined,
+  };
+}
+
+function extractSkillStateFromFSRS(fsrsCard: any): SkillState {
+  return {
+    due: fsrsCard.due,
+    stability: fsrsCard.stability,
+    difficulty: fsrsCard.difficulty,
+    reps: fsrsCard.reps,
+    lapses: fsrsCard.lapses,
+    state: fsrsCard.state,
+    last_review: fsrsCard.last_review,
+  };
+}
+
 export function recordQuizResult(result: QuizResult): void {
   let card = getCard(result.lemma, result.sense_id);
 
@@ -71,18 +118,41 @@ export function recordQuizResult(result: QuizResult): void {
   const now = new Date();
   const wasNew = card.state === State.New;
 
-  const scheduling = fsrs.repeat(card, now);
-  const recordLog = scheduling[rating as Exclude<Rating, Rating.Manual>];
+  const skillType = quizTypeToSkillType(result.question_type);
 
-  if (!recordLog) return;
+  let updatedSkills = card.skills ? { ...card.skills } : {};
+  let mainRating = rating;
 
-  const { card: newCard, log } = recordLog;
+  if (skillType) {
+    const existingSkillState = card.skills?.[skillType];
+    const skillState = existingSkillState ?? createEmptySkillState();
+
+    const fsrsSkillCard = createFSRSCompatibleCard(skillState);
+    const skillScheduling = fsrs.repeat(fsrsSkillCard, now);
+    const skillRecordLog = skillScheduling[rating as Exclude<Rating, Rating.Manual>];
+
+    if (skillRecordLog) {
+      const newSkillState = extractSkillStateFromFSRS(skillRecordLog.card);
+      updatedSkills[skillType] = newSkillState;
+    }
+
+    const influence = SKILL_INFLUENCE_ON_MAIN[skillType];
+    mainRating = blendRatingForMain(rating, influence);
+  }
+
+  const mainScheduling = fsrs.repeat(card, now);
+  const mainRecordLog = mainScheduling[mainRating as Exclude<Rating, Rating.Manual>];
+
+  if (!mainRecordLog) return;
+
+  const { card: newMainCard, log } = mainRecordLog;
 
   const updatedCard: SRSCard = {
-    ...newCard,
+    ...newMainCard,
     lemma: card.lemma,
     sense_id: card.sense_id,
     entry_type: card.entry_type,
+    skills: updatedSkills,
   };
 
   updateCard(updatedCard);

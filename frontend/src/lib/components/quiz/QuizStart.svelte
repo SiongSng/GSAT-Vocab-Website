@@ -36,7 +36,21 @@
         dataVersion;
         return getQuizStats();
     });
-    const totalReviewCount = $derived(stats.reviewCount);
+    const totalReviewCount = $derived(
+        stats.dueSkillCount + stats.newSkillCount + stats.reviewCount,
+    );
+
+    const detailText = $derived.by(() => {
+        const parts: string[] = [];
+        if (stats.breakdown.words > 0) parts.push(`${stats.breakdown.words} 單字`);
+        if (stats.breakdown.phrases > 0) parts.push(`${stats.breakdown.phrases} 片語`);
+
+        const hasAdvanced = stats.dueSkillCount + stats.newSkillCount > 0;
+        if (hasAdvanced) {
+            parts.push("含拼寫填空");
+        }
+        return parts.join(" · ");
+    });
 
     const greeting = $derived.by(() => {
         if (totalReviewCount > 30) return { emoji: "🔥", text: "挑戰時刻！" };
@@ -106,7 +120,7 @@
                     </div>
 
                     <p class="detail">
-                        {stats.breakdown.words} 單字 · {stats.breakdown.phrases} 片語
+                        {detailText}
                     </p>
                 </div>
 

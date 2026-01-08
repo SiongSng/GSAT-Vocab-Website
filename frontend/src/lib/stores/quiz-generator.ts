@@ -6,10 +6,13 @@ import type {
   VocabEntry,
 } from "$lib/types/vocab";
 import { isWordEntry } from "$lib/types/vocab";
-import type { SRSCard } from "$lib/types/srs";
+import type { SRSCard, SkillType, SkillState } from "$lib/types/srs";
+import { State } from "$lib/types/srs";
 import { getAllWords, getAllPhrases, getWord, getPhrase } from "./vocab-db";
-import { getAllCards } from "./srs-storage";
-import { State } from "ts-fsrs";
+import {
+  getAllCards,
+  getNewSkillsForCard,
+} from "./srs-storage";
 import {
   getAllWordForms,
   getAllPhraseForms,
@@ -81,20 +84,40 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   return "distinction";
 }
 
+export function skillTypeToQuizType(skillType: SkillType): QuizQuestionType {
+  return skillType as QuizQuestionType;
+}
+
+export function quizTypeToSkillType(quizType: QuizQuestionType): SkillType | null {
+  if (quizType === "recognition") return null;
+  return quizType as SkillType;
+}
+
 function isLearned(card: SRSCard): boolean {
   return card.state !== State.New;
 }
 
+interface QuizEligibleEntry {
+  entry: VocabEntry;
+  card: SRSCard;
+  skillType: SkillType | null;
+  skillState: SkillState | null;
+  priority: "due_skill" | "new_skill" | "due_main" | "weak" | "other";
+}
+
 async function getQuizEligibleEntries(
   config: QuizConfig,
-): Promise<{ entry: VocabEntry; card: SRSCard }[]> {
+): Promise<QuizEligibleEntry[]> {
   const allCards = getAllCards();
   if (allCards.length === 0) return [];
 
   const now = new Date();
-  const dueCards: SRSCard[] = [];
-  const weakCards: SRSCard[] = [];
-  const otherCards: SRSCard[] = [];
+  const dueSkillEntries: QuizEligibleEntry[] = [];
+  const newSkillEntries: QuizEligibleEntry[] = [];
+  const dueMainEntries: QuizEligibleEntry[] = [];
+  const weakEntries: QuizEligibleEntry[] = [];
+
+  const seenKeys = new Set<string>();
 
   for (const card of allCards) {
     if (!isLearned(card)) continue;
@@ -107,32 +130,80 @@ async function getQuizEligibleEntries(
       if (!config.specific_lemmas.includes(card.lemma)) continue;
     }
 
-    const isDue = new Date(card.due) <= now;
-    const isWeak = card.lapses >= 2 || card.stability < 3;
-
-    if (isDue) {
-      dueCards.push(card);
-    } else if (isWeak) {
-      weakCards.push(card);
-    } else {
-      otherCards.push(card);
-    }
-  }
-
-  const prioritizedCards = [...dueCards, ...weakCards, ...otherCards];
-
-  const results: { entry: VocabEntry; card: SRSCard }[] = [];
-  for (const card of prioritizedCards) {
     const entry =
       card.entry_type === "phrase"
         ? await getPhrase(card.lemma)
         : await getWord(card.lemma);
-    if (entry) {
-      results.push({ entry, card });
+    if (!entry) continue;
+
+    if (card.skills) {
+      for (const [skill, state] of Object.entries(card.skills)) {
+        if (!state) continue;
+        const skillType = skill as SkillType;
+        const key = `${card.lemma}::${card.sense_id}::${skillType}`;
+        if (seenKeys.has(key)) continue;
+
+        if (new Date(state.due) <= now) {
+          seenKeys.add(key);
+          dueSkillEntries.push({
+            entry,
+            card,
+            skillType,
+            skillState: state,
+            priority: "due_skill",
+          });
+        }
+      }
+    }
+
+    const newSkills = getNewSkillsForCard(card);
+    for (const skillType of newSkills) {
+      const key = `${card.lemma}::${card.sense_id}::${skillType}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      newSkillEntries.push({
+        entry,
+        card,
+        skillType,
+        skillState: null,
+        priority: "new_skill",
+      });
+    }
+
+    const mainKey = `${card.lemma}::${card.sense_id}::main`;
+    if (!seenKeys.has(mainKey)) {
+      const isDue = new Date(card.due) <= now;
+      const isWeak = card.lapses >= 2 || card.stability < 3;
+
+      if (isDue) {
+        seenKeys.add(mainKey);
+        dueMainEntries.push({
+          entry,
+          card,
+          skillType: null,
+          skillState: null,
+          priority: "due_main",
+        });
+      } else if (isWeak) {
+        seenKeys.add(mainKey);
+        weakEntries.push({
+          entry,
+          card,
+          skillType: null,
+          skillState: null,
+          priority: "weak",
+        });
+      }
     }
   }
 
-  return results;
+  return [
+    ...dueSkillEntries,
+    ...newSkillEntries,
+    ...dueMainEntries,
+    ...weakEntries,
+  ];
 }
 
 let allWordsCache: WordEntry[] | null = null;
@@ -581,17 +652,24 @@ export async function generateQuizLocally(
     return [];
   }
 
-  const shuffled = shuffleArray(eligibleEntries);
-  const selected = shuffled.slice(0, config.count);
+  const selected = eligibleEntries.slice(0, config.count);
+  const shuffledSelected = shuffleArray(selected);
 
   const questions: QuizQuestion[] = [];
 
-  for (const { entry, card } of selected) {
+  for (const { entry, card, skillType } of shuffledSelected) {
     if (!entry.senses || entry.senses.length === 0) continue;
 
     const sense = entry.senses[0];
-    // Use adaptive quiz type based on SRS card state, unless force_type is specified
-    const quizType = config.force_type ?? getQuizTypeForCard(card);
+
+    let quizType: QuizQuestionType;
+    if (config.force_type) {
+      quizType = config.force_type;
+    } else if (skillType) {
+      quizType = skillTypeToQuizType(skillType);
+    } else {
+      quizType = getQuizTypeForCard(card);
+    }
 
     const question = await generateQuestion(entry, sense, quizType);
     question.sense_id = card.sense_id;
@@ -616,9 +694,22 @@ export function getQuizStats() {
     (c) => c.lapses >= 2 || c.stability < 3,
   );
 
-  // Combine due and weak, but avoid double-counting
   const reviewSet = new Set([...dueCards, ...weakCards]);
   const reviewCards = Array.from(reviewSet);
+
+  let dueSkillCount = 0;
+  let newSkillCount = 0;
+  for (const card of learnedCards) {
+    if (card.skills) {
+      for (const [, state] of Object.entries(card.skills)) {
+        if (state && new Date(state.due) <= now) {
+          dueSkillCount++;
+        }
+      }
+    }
+    const newSkills = getNewSkillsForCard(card);
+    newSkillCount += newSkills.length;
+  }
 
   const typeDistribution: Record<QuizQuestionType, number> = {
     recognition: 0,
@@ -638,6 +729,8 @@ export function getQuizStats() {
     due: dueCards.length,
     weak: weakCards.length,
     reviewCount: reviewCards.length,
+    dueSkillCount,
+    newSkillCount,
     breakdown: {
       words: reviewCards.filter((c) => c.entry_type === "word").length,
       phrases: reviewCards.filter((c) => c.entry_type === "phrase").length,
