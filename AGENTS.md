@@ -146,6 +146,7 @@ The word list contains 5000+ items. Key optimizations:
 3. **TDD principles** - Write meaningful tests, not tests for coverage
 4. **Type checking: `uvx ty check` FIRST** - Always use ty as the primary type checker for Python (10-100x faster than mypy/Pyright). Only fall back to mypy/Pyright if ty doesn't catch specific issues.
 5. **Prefer IDE diagnostics** - For other languages, use built-in IDE diagnostics over CLI tools like `cargo check`
+6. **Conventional Commits** - Follow `<type>(scope): <description>` format
 
 ## CSS Notes
 
