@@ -133,14 +133,18 @@
         </div>
     {/if}
 
-    {#if isKokoroReady && ttsSettings.engine !== "kokoro"}
+    {#if isKokoroReady || isKokoroError}
         <button
             type="button"
             class="delete-btn"
             onclick={handleDeleteModel}
             disabled={isDeleting}
         >
-            {isDeleting ? "刪除中..." : "刪除離線模型"}
+            {isDeleting
+                ? "刪除中..."
+                : isKokoroError
+                  ? "清除並重試"
+                  : "刪除離線模型"}
         </button>
     {/if}
 </div>

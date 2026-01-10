@@ -9,8 +9,9 @@
     import QuickLookupSidebar from "$lib/components/lookup/QuickLookupSidebar.svelte";
     import QuickLookupSheet from "$lib/components/lookup/QuickLookupSheet.svelte";
     import PWAInstallPrompt from "$lib/components/PWAInstallPrompt.svelte";
-    import { getAppStore, setMobile, setMode } from "$lib/stores/app.svelte";
+    import { setMobile, setMode } from "$lib/stores/app.svelte";
     import { loadVocabData, getVocabStore } from "$lib/stores/vocab.svelte";
+    import { initTTSSettings } from "$lib/stores/tts-settings.svelte";
     import "../app.css";
 
     let { children } = $props();
@@ -63,6 +64,8 @@
     });
 
     onMount(() => {
+        initTTSSettings();
+
         const mediaQuery = window.matchMedia("(max-width: 1023px)");
         setMobile(mediaQuery.matches);
 
