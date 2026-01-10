@@ -6,7 +6,7 @@
     let { data }: { data: PageData } = $props();
 
     const canonicalUrl = $derived(`${$page.url.origin}${base}/blog`);
-    const title = "學習資源 | 學測高頻單字";
+    const title = "學測英文學習資源";
     const description = "學測英文準備攻略、背單字方法、混淆詞比較等實用文章。";
 
     const categoryLabels: Record<string, string> = {
@@ -31,7 +31,7 @@
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Blog",
-        name: "學測高頻單字 - 學習資源",
+        name: "學測英文學習資源",
         url: canonicalUrl,
         description: description,
         inLanguage: "zh-TW",

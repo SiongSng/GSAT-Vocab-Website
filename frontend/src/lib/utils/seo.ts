@@ -1,5 +1,4 @@
-const BASE_TITLE = "學測高頻單字";
-const TITLE_SUFFIX = " | 數據分析 · 科學備考";
+const BASE_TITLE = "學測英文高頻單字";
 const BASE_URL = "https://siongsng.github.io/GSAT-Vocab-Website";
 
 interface SEOConfig {
@@ -17,9 +16,9 @@ interface WordStructuredData {
 
 const routeTitles: Record<string, SEOConfig> = {
   browse: {
-    title: BASE_TITLE + TITLE_SUFFIX,
+    title: BASE_TITLE,
     description:
-      "從歷屆學測試題萃取 5000+ 高頻單字，智慧複習排程搭配詞頻統計與字根拆解，備考效率大提升。",
+      "從歷屆學測試題萃取 5000+ 高頻單字，提供智慧複習、詞頻統計與字根拆解功能。",
     canonical: BASE_URL + "/",
   },
   flashcard: {

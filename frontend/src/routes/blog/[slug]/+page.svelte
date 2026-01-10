@@ -11,30 +11,38 @@
     const metadata = $derived(data.metadata);
     const Content = $derived(data.content as Component);
     const canonicalUrl = $derived(`${$page.url.origin}${base}/blog/${metadata.slug}`);
+    const ogImage = $derived(metadata.image ? `${$page.url.origin}${base}${metadata.image}` : `${$page.url.origin}${base}/og-image.png`);
 
     let showMobileToc = $state(false);
 </script>
 
 <svelte:head>
-    <title>{metadata.title} | 學測高頻單字</title>
-    <meta name="title" content="{metadata.title} | 學測高頻單字" />
+    <title>{metadata.title}</title>
+    <meta name="title" content={metadata.title} />
     <meta name="description" content={metadata.description} />
     <link rel="canonical" href={canonicalUrl} />
 
-    <meta property="og:title" content="{metadata.title} | 學測高頻單字" />
+    <meta property="og:title" content={metadata.title} />
     <meta property="og:description" content={metadata.description} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:type" content="article" />
+    <meta property="og:image" content={ogImage} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={metadata.title} />
+    <meta name="twitter:description" content={metadata.description} />
+    <meta name="twitter:image" content={ogImage} />
 
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Article",
         headline: metadata.title,
         description: metadata.description,
+        image: ogImage,
         datePublished: metadata.date,
         dateModified: metadata.updated || metadata.date,
-        author: { "@type": "Organization", name: "學測高頻單字" },
-        publisher: { "@type": "Organization", name: "學測高頻單字" },
+        author: { "@type": "Organization", name: "學測英文高頻單字" },
+        publisher: { "@type": "Organization", name: "學測英文高頻單字" },
         mainEntityOfPage: {
             "@type": "WebPage",
             "@id": canonicalUrl,

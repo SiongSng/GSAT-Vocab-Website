@@ -2,8 +2,8 @@
     import BrowseView from "$lib/components/BrowseView.svelte";
 
     const BASE_URL = "https://siongsng.github.io/GSAT-Vocab-Website";
-    const title = "學測高頻單字 | 數據分析 · 科學備考";
-    const description = "從歷屆學測試題萃取 5000+ 高頻單字，智慧複習排程搭配詞頻統計與字根拆解，備考效率大提升。";
+    const title = "學測英文高頻單字";
+    const description = "從歷屆學測試題萃取 5000+ 高頻單字，提供智慧複習、詞頻統計與字根拆解功能。";
 </script>
 
 <svelte:head>
@@ -15,7 +15,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_TW" />
-    <meta property="og:site_name" content="學測高頻單字" />
+    <meta property="og:site_name" content="學測英文高頻單字" />
     <meta property="og:url" content="{BASE_URL}/" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -33,10 +33,10 @@
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "學測高頻單字",
-        "alternateName": ["GSAT Vocab", "學測單字"],
+        "name": "學測英文高頻單字",
+        "alternateName": ["GSAT Vocab", "學測單字", "學測高頻單字"],
         "url": BASE_URL + "/",
-        "description": "從歷屆學測試題萃取 5000+ 高頻單字，智慧複習排程搭配詞頻統計與字根拆解",
+        "description": description,
         "inLanguage": "zh-TW",
         "potentialAction": {
             "@type": "SearchAction",
@@ -51,7 +51,7 @@
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "WebApplication",
-        "name": "學測高頻單字",
+        "name": "學測英文高頻單字",
         "url": BASE_URL + "/",
         "description": description,
         "applicationCategory": "EducationalApplication",
@@ -95,7 +95,7 @@
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Organization",
-        "name": "學測高頻單字",
+        "name": "學測英文高頻單字",
         "url": BASE_URL + "/",
         "logo": BASE_URL + "/pwa-512x512.png",
         "description": description,
