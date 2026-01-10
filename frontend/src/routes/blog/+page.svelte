@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { PageData } from "./$types";
-    import { base } from "$app/paths";
 
     let { data }: { data: PageData } = $props();
 
@@ -13,7 +12,7 @@
         vocabulary: "單字學習",
         "exam-strategy": "考試策略",
         "study-plan": "讀書計畫",
-        parents: "家長專區"
+        parents: "家長專區",
     };
 </script>
 
@@ -33,7 +32,7 @@
         name: "學測高頻單字 - 學習資源",
         url: BASE_URL + "/blog",
         description: description,
-        inLanguage: "zh-TW"
+        inLanguage: "zh-TW",
     })}</script>`}
 </svelte:head>
 
@@ -54,16 +53,29 @@
             {:else}
                 <div class="posts-grid">
                     {#each data.posts as post, i}
-                        <a href="/blog/{post.slug}" class="post-card" class:featured={i === 0}>
+                        <a
+                            href="{BASE_URL}/blog/{post.slug}"
+                            class="post-card"
+                            class:featured={i === 0}
+                        >
                             {#if post.image}
                                 <div class="card-image">
-                                    <img src="{base}{post.image}" alt="" loading="lazy" />
+                                    <img
+                                        src="{BASE_URL}{post.image}"
+                                        alt=""
+                                        loading="lazy"
+                                    />
                                 </div>
                             {/if}
                             <div class="card-content">
                                 <div class="card-meta">
-                                    <span class="category">{categoryLabels[post.category] || post.category}</span>
-                                    <span class="reading-time">{post.reading_time} 分鐘</span>
+                                    <span class="category"
+                                        >{categoryLabels[post.category] ||
+                                            post.category}</span
+                                    >
+                                    <span class="reading-time"
+                                        >{post.reading_time} 分鐘</span
+                                    >
                                 </div>
                                 <h2 class="card-title">{post.title}</h2>
                                 <p class="card-desc">{post.description}</p>

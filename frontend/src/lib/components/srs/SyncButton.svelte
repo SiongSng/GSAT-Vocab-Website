@@ -3,6 +3,7 @@
     import { getSyncStore } from "$lib/stores/sync.svelte";
     import Portal from "$lib/components/Portal.svelte";
     import { onDestroy } from "svelte";
+    import { base } from "$app/paths";
 
     const auth = getAuthStore();
     const sync = getSyncStore();
@@ -106,8 +107,7 @@
     }
 
     function getAuthUrl() {
-        const base = import.meta.env.BASE_URL || "/";
-        return `${window.location.origin}${base}auth-callback.html`;
+        return `${window.location.origin}${base}/auth-callback.html`;
     }
 
     async function copyAuthUrl() {

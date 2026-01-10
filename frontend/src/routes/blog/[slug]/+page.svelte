@@ -27,13 +27,16 @@
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Article",
-        "headline": metadata.title,
-        "description": metadata.description,
-        "datePublished": metadata.date,
-        "dateModified": metadata.updated || metadata.date,
-        "author": { "@type": "Organization", "name": "學測高頻單字" },
-        "publisher": { "@type": "Organization", "name": "學測高頻單字" },
-        "mainEntityOfPage": { "@type": "WebPage", "@id": BASE_URL + "/blog/" + metadata.slug }
+        headline: metadata.title,
+        description: metadata.description,
+        datePublished: metadata.date,
+        dateModified: metadata.updated || metadata.date,
+        author: { "@type": "Organization", name: "學測高頻單字" },
+        publisher: { "@type": "Organization", name: "學測高頻單字" },
+        mainEntityOfPage: {
+            "@type": "WebPage",
+            "@id": BASE_URL + "/blog/" + metadata.slug,
+        },
     })}</script>`}
 </svelte:head>
 
@@ -45,7 +48,11 @@
                 <h1>{metadata.title}</h1>
                 <div class="meta">
                     <time datetime={metadata.date}>
-                        {new Date(metadata.date).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        {new Date(metadata.date).toLocaleDateString("zh-TW", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                        })}
                     </time>
                     {#if metadata.reading_time}
                         <span>·</span>
@@ -65,14 +72,21 @@
                         <p>用科學方法背單字，免費、不收集資料</p>
                     </div>
                     <div class="cta-buttons">
-                        <a href="/flashcard" class="cta-btn primary">字卡複習</a>
+                        <a href="/flashcard" class="cta-btn primary">字卡複習</a
+                        >
                         <a href="/quiz" class="cta-btn secondary">單字測驗</a>
                     </div>
                 </div>
             </div>
 
             <footer class="footer">
-                <p class="image-credit">本文圖片來源：<a href="https://unsplash.com" target="_blank" rel="noopener">Unsplash</a></p>
+                <p class="image-credit">
+                    本文圖片來源：<a
+                        href="https://unsplash.com"
+                        target="_blank"
+                        rel="noopener">Unsplash</a
+                    >
+                </p>
                 <a href="/blog" class="back-btn">← 返回文章列表</a>
             </footer>
         </article>
@@ -88,26 +102,59 @@
     {#if browser}
         <button
             class="mobile-toc-btn"
-            onclick={() => showMobileToc = !showMobileToc}
+            onclick={() => (showMobileToc = !showMobileToc)}
             aria-label="目錄"
         >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+                class="icon"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"
+                />
             </svg>
         </button>
 
         {#if showMobileToc}
-            <div class="mobile-toc-overlay" onclick={() => showMobileToc = false} role="presentation"></div>
+            <div
+                class="mobile-toc-overlay"
+                onclick={() => (showMobileToc = false)}
+                role="presentation"
+            ></div>
             <div class="mobile-toc-sheet">
                 <div class="mobile-toc-header">
                     <span>目錄</span>
-                    <button onclick={() => showMobileToc = false} aria-label="關閉">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    <button
+                        onclick={() => (showMobileToc = false)}
+                        aria-label="關閉"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="icon"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M6 18 18 6M6 6l12 12"
+                            />
                         </svg>
                     </button>
                 </div>
-                <div class="mobile-toc-content" onclick={() => showMobileToc = false} role="presentation">
+                <div
+                    class="mobile-toc-content"
+                    onclick={() => (showMobileToc = false)}
+                    role="presentation"
+                >
                     <TableOfContents />
                 </div>
             </div>
@@ -271,7 +318,8 @@
     }
 
     .content :global(code) {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-family:
+            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 0.875em;
         padding: 0.125rem 0.375rem;
         background: var(--color-surface-secondary);
