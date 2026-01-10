@@ -129,22 +129,26 @@
 
     {#if isKokoroError}
         <div class="notice notice-error">
-            <span>下載失敗：{ttsSettings.kokoro.error}</span>
+            <div class="error-content">
+                <span>下載失敗：{ttsSettings.kokoro.error}</span>
+                <button
+                    type="button"
+                    class="retry-btn"
+                    onclick={handleDeleteModel}
+                    disabled={isDeleting}
+                >
+                    {isDeleting ? "刪除中..." : "清除並重試"}
+                </button>
+            </div>
         </div>
-    {/if}
-
-    {#if isKokoroReady || isKokoroError}
+    {:else if isKokoroReady}
         <button
             type="button"
             class="delete-btn"
             onclick={handleDeleteModel}
             disabled={isDeleting}
         >
-            {isDeleting
-                ? "刪除中..."
-                : isKokoroError
-                  ? "清除並重試"
-                  : "刪除離線模型"}
+            {isDeleting ? "刪除中..." : "刪除離線模型"}
         </button>
     {/if}
 </div>
@@ -279,6 +283,35 @@
     .notice-error {
         background-color: var(--color-srs-again-soft);
         color: var(--color-srs-again);
+    }
+
+    .error-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .retry-btn {
+        padding: 0.375rem 0.625rem;
+        background-color: var(--color-srs-again);
+        border: none;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: white;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        align-self: flex-start;
+    }
+
+    .retry-btn:hover:not(:disabled) {
+        background-color: var(--color-srs-again);
+        opacity: 0.9;
+    }
+
+    .retry-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .delete-btn {
