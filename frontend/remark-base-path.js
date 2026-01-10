@@ -1,4 +1,4 @@
-import { visit } from 'unist-util-visit';
+import visit from 'unist-util-visit';
 
 const BASE_PATH = process.env.GITHUB_ACTIONS ? '/GSAT-Vocab-Website' : '';
 
