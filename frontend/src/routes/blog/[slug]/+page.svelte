@@ -2,13 +2,15 @@
     import type { PageData } from "./$types";
     import type { Component } from "svelte";
     import { browser } from "$app/environment";
+    import { base } from "$app/paths";
+    import { page } from "$app/stores";
     import TableOfContents from "$lib/components/blog/TableOfContents.svelte";
 
     let { data }: { data: PageData } = $props();
 
-    const BASE_URL = "https://siongsng.github.io/GSAT-Vocab-Website";
     const metadata = $derived(data.metadata);
     const Content = $derived(data.content as Component);
+    const canonicalUrl = $derived(`${$page.url.origin}${base}/blog/${metadata.slug}`);
 
     let showMobileToc = $state(false);
 </script>
@@ -17,11 +19,11 @@
     <title>{metadata.title} | 學測高頻單字</title>
     <meta name="title" content="{metadata.title} | 學測高頻單字" />
     <meta name="description" content={metadata.description} />
-    <link rel="canonical" href="{BASE_URL}/blog/{metadata.slug}" />
+    <link rel="canonical" href={canonicalUrl} />
 
     <meta property="og:title" content="{metadata.title} | 學測高頻單字" />
     <meta property="og:description" content={metadata.description} />
-    <meta property="og:url" content="{BASE_URL}/blog/{metadata.slug}" />
+    <meta property="og:url" content={canonicalUrl} />
     <meta property="og:type" content="article" />
 
     {@html `<script type="application/ld+json">${JSON.stringify({
@@ -35,7 +37,7 @@
         publisher: { "@type": "Organization", name: "學測高頻單字" },
         mainEntityOfPage: {
             "@type": "WebPage",
-            "@id": BASE_URL + "/blog/" + metadata.slug,
+            "@id": canonicalUrl,
         },
     })}</script>`}
 </svelte:head>
@@ -44,7 +46,7 @@
     <div class="layout">
         <article class="article">
             <header class="header">
-                <a href="{BASE_URL}/blog" class="back">← 學習資源</a>
+                <a href="{base}/blog" class="back">← 學習資源</a>
                 <h1>{metadata.title}</h1>
                 <div class="meta">
                     <time datetime={metadata.date}>
@@ -72,9 +74,9 @@
                         <p>用科學方法背單字，免費、不收集資料</p>
                     </div>
                     <div class="cta-buttons">
-                        <a href="/flashcard" class="cta-btn primary">字卡複習</a
+                        <a href="{base}/flashcard" class="cta-btn primary">字卡複習</a
                         >
-                        <a href="/quiz" class="cta-btn secondary">單字測驗</a>
+                        <a href="{base}/quiz" class="cta-btn secondary">單字測驗</a>
                     </div>
                 </div>
             </div>
@@ -87,7 +89,7 @@
                         rel="noopener">Unsplash</a
                     >
                 </p>
-                <a href="{BASE_URL}/blog" class="back-btn">← 返回文章列表</a>
+                <a href="{base}/blog" class="back-btn">← 返回文章列表</a>
             </footer>
         </article>
 

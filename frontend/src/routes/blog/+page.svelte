@@ -1,9 +1,11 @@
 <script lang="ts">
     import type { PageData } from "./$types";
+    import { base } from "$app/paths";
+    import { page } from "$app/stores";
 
     let { data }: { data: PageData } = $props();
 
-    const BASE_URL = "https://siongsng.github.io/GSAT-Vocab-Website";
+    const canonicalUrl = $derived(`${$page.url.origin}${base}/blog`);
     const title = "學習資源 | 學測高頻單字";
     const description = "學測英文準備攻略、背單字方法、混淆詞比較等實用文章。";
 
@@ -20,17 +22,17 @@
     <title>{title}</title>
     <meta name="title" content={title} />
     <meta name="description" content={description} />
-    <link rel="canonical" href="{BASE_URL}/blog" />
+    <link rel="canonical" href={canonicalUrl} />
 
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content="{BASE_URL}/blog" />
+    <meta property="og:url" content={canonicalUrl} />
 
     {@html `<script type="application/ld+json">${JSON.stringify({
         "@context": "https://schema.org",
         "@type": "Blog",
         name: "學測高頻單字 - 學習資源",
-        url: BASE_URL + "/blog",
+        url: canonicalUrl,
         description: description,
         inLanguage: "zh-TW",
     })}</script>`}
@@ -54,14 +56,14 @@
                 <div class="posts-grid">
                     {#each data.posts as post, i}
                         <a
-                            href="{BASE_URL}/blog/{post.slug}"
+                            href="{base}/blog/{post.slug}"
                             class="post-card"
                             class:featured={i === 0}
                         >
                             {#if post.image}
                                 <div class="card-image">
                                     <img
-                                        src="{BASE_URL}{post.image}"
+                                        src="{base}{post.image}"
                                         alt=""
                                         loading="lazy"
                                     />
