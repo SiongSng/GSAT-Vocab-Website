@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+        <!-- Primary Meta Tags (defaults, can be overridden by pages) -->
+        <meta name="keywords" content="學測,英文,單字,高頻詞彙,背單字,學測英文,大考,指考,統測,單字卡,間隔複習,數據分析,GSAT" />
+        <meta name="author" content="GSAT Vocab" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="googlebot" content="index, follow" />
+
+        <!-- PWA Meta Tags -->
+        <meta name="theme-color" content="#f7f7f7" />
+        <meta name="color-scheme" content="light" />
+        <meta name="application-name" content="學測單字" />
+        <meta name="mobile-web-app-capable" content="yes" />
+
+        <!-- iOS PWA Meta Tags -->
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="學測單字" />
+        <meta name="format-detection" content="telephone=no" />
+
+        <!-- Favicons -->
+        <link rel="icon" type="image/svg+xml" href="%sveltekit.assets%/favicon.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="%sveltekit.assets%/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="%sveltekit.assets%/favicon-16x16.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="%sveltekit.assets%/apple-touch-icon.png" />
+        <link rel="manifest" href="%sveltekit.assets%/manifest.json" />
+
+        <!-- Preconnect: Critical origins for faster resource loading -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+        <!-- Fonts: Non-blocking load with print media trick -->
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600&family=Noto+Sans+TC:wght@400;500;600&display=swap"
+            rel="stylesheet"
+            media="print"
+            onload="this.media = 'all'"
+        />
+        <noscript>
+            <link
+                href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@600&family=Noto+Sans+TC:wght@400;500;600&display=swap"
+                rel="stylesheet"
+            />
+        </noscript>
+
+        %sveltekit.head%
+
+        <style>
+            @keyframes indeterminate {
+                0% {
+                    transform: translateX(-100%);
+                }
+                100% {
+                    transform: translateX(433%);
+                }
+            }
+        </style>
+    </head>
+    <body data-sveltekit-preload-data="hover">
+        <div id="initial-loader" style="position: fixed; inset: 0; background: #fafafa; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 24px; max-width: 28rem; width: 100%; padding: 0 32px;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" style="width: 64px; height: 64px">
+                    <rect x="4" y="6" width="18" height="14" rx="2" fill="#3b82f640" />
+                    <rect x="7" y="9" width="18" height="14" rx="2" fill="#3b82f680" />
+                    <rect x="10" y="12" width="18" height="14" rx="2" fill="#3b82f6" />
+                </svg>
+                <h1 style="margin: 0; font-family: system-ui, -apple-system, sans-serif; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; color: #1f2937; text-align: center;">
+                    正在載入...
+                </h1>
+                <div style="width: 100%">
+                    <div style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;">
+                        <div style="width: 30%; height: 100%; background: #3b82f6; border-radius: 9999px; animation: indeterminate 1.5s ease-in-out infinite;"></div>
+                    </div>
+                </div>
+                <p style="margin: 0; font-family: system-ui, -apple-system, sans-serif; font-size: 0.75rem; color: #9ca3af; text-align: center;">
+                    首次載入需要約 10-15 秒，之後將即時啟動
+                </p>
+            </div>
+        </div>
+        <div style="display: contents">%sveltekit.body%</div>
+        <script>
+            // Remove initial loader when app is ready
+            window.addEventListener('load', () => {
+                const loader = document.getElementById('initial-loader');
+                if (loader) {
+                    setTimeout(() => {
+                        loader.style.opacity = '0';
+                        loader.style.transition = 'opacity 0.3s ease-out';
+                        setTimeout(() => loader.remove(), 300);
+                    }, 100);
+                }
+            });
+        </script>
+    </body>
+</html>

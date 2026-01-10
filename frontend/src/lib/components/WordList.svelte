@@ -5,7 +5,6 @@
         isPhraseIndexItem,
         isPatternIndexItem,
     } from "$lib/types/vocab";
-    import { getAppStore, openMobileDetail } from "$lib/stores/app.svelte";
     import {
         selectWordAndNavigate,
         getVocabStore,
@@ -22,7 +21,6 @@
 
     let { words, isGridMode = false }: Props = $props();
 
-    const app = getAppStore();
     const vocab = getVocabStore();
 
     let scrollTop = $state(0);
@@ -30,9 +28,6 @@
 
     async function handleWordClick(word: VocabIndexItem) {
         await selectWordAndNavigate(word.lemma, word.type);
-        if (app.isMobile) {
-            openMobileDetail();
-        }
     }
 
     function handleScroll(e: Event) {

@@ -97,8 +97,7 @@ PDF files → Markdown → Structured Exams → Extracted Vocab → Sense Invent
 ```bash
 cd frontend
 bun install        # Install dependencies
-bun run build      # Production build
-bun run preview    # Preview production build
+bun run check    # Type check with Bun
 ```
 
 ### Backend
@@ -110,8 +109,6 @@ uv sync --dev      # Install with dev dependencies
 
 # Pipeline commands
 uv run gsat-pipeline run              # Run full pipeline
-uv run gsat-pipeline run --skip-ml    # Skip ML training stage
-uv run gsat-pipeline run --exam-only  # Only include exam words
 uv run gsat-pipeline scrape           # Scrape CEEC papers
 uv run gsat-pipeline train-ml         # Train ML model separately
 uv run gsat-pipeline export           # Export vocab.json.gz to frontend

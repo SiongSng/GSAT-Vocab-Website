@@ -1,3 +1,5 @@
+import { browser } from '$app/environment';
+import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
 import { db } from "$lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { getAuthStore } from "./auth.svelte";
@@ -23,15 +25,24 @@ interface SyncState {
 const state = $state<SyncState>({
   status: "idle",
   lastSyncError: null,
-  lastSyncTime: Number(localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME)) || 0,
+  lastSyncTime: 0,
 });
+
+let initialized = false;
+
+function initSyncState(): void {
+  if (!browser || initialized) return;
+  initialized = true;
+  const saved = safeGetItem(STORAGE_KEYS.LAST_SYNC_TIME);
+  state.lastSyncTime = saved ? Number(saved) : 0;
+}
 
 const auth = getAuthStore();
 const SYNC_COOLDOWN_MS = 30000;
 
 function updateLastSyncTime(ts: number) {
   state.lastSyncTime = ts;
-  localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, String(ts));
+  safeSetItem(STORAGE_KEYS.LAST_SYNC_TIME, String(ts));
 }
 
 interface SyncPayload {
@@ -63,8 +74,9 @@ function decompress(base64: string): SyncPayload {
 }
 
 function getLocalDecks(): unknown[] {
+  if (!browser) return [];
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_DECKS);
+    const saved = safeGetItem(STORAGE_KEYS.CUSTOM_DECKS);
     return saved ? JSON.parse(saved) : [];
   } catch {
     return [];
@@ -72,12 +84,14 @@ function getLocalDecks(): unknown[] {
 }
 
 function setLocalDecks(decks: unknown[]): void {
-  localStorage.setItem(STORAGE_KEYS.CUSTOM_DECKS, JSON.stringify(decks));
+  if (!browser) return;
+  safeSetItem(STORAGE_KEYS.CUSTOM_DECKS, JSON.stringify(decks));
 }
 
 function getLocalSettings(): unknown | null {
+  if (!browser) return null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+    const saved = safeGetItem(STORAGE_KEYS.STUDY_SETTINGS);
     return saved ? JSON.parse(saved) : null;
   } catch {
     return null;
@@ -85,14 +99,14 @@ function getLocalSettings(): unknown | null {
 }
 
 function setLocalSettings(settings: unknown | null): void {
-  if (settings) {
-    localStorage.setItem(STORAGE_KEYS.STUDY_SETTINGS, JSON.stringify(settings));
-  }
+  if (!browser || !settings) return;
+  safeSetItem(STORAGE_KEYS.STUDY_SETTINGS, JSON.stringify(settings));
 }
 
 function getLocalLimits(): unknown | null {
+  if (!browser) return null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_LIMITS);
+    const saved = safeGetItem(STORAGE_KEYS.DAILY_LIMITS);
     return saved ? JSON.parse(saved) : null;
   } catch {
     return null;
@@ -100,12 +114,12 @@ function getLocalLimits(): unknown | null {
 }
 
 function setLocalLimits(limits: unknown | null): void {
-  if (limits) {
-    localStorage.setItem(STORAGE_KEYS.DAILY_LIMITS, JSON.stringify(limits));
-  }
+  if (!browser || !limits) return;
+  safeSetItem(STORAGE_KEYS.DAILY_LIMITS, JSON.stringify(limits));
 }
 
 export function getSyncStore() {
+  initSyncState();
   return {
     get status() {
       return state.status;

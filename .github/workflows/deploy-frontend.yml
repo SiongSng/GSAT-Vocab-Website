@@ -34,13 +34,9 @@ jobs:
         working-directory: frontend
         run: bun install
 
-      - name: Build
+      - name: Build (includes word data generation)
         working-directory: frontend
         run: bun run build
-
-      - name: Create 404.html for SPA routing
-        working-directory: frontend
-        run: cp dist/index.html dist/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

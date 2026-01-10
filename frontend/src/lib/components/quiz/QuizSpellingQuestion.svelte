@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { browser } from '$app/environment';
+    import { safeGetItem } from '$lib/utils/safe-storage';
     import type { QuizQuestion } from "$lib/stores/quiz-generator";
     import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
@@ -50,8 +52,8 @@
     const audioController = createAudioController(() => questionData.lemma);
 
     function getAutoSpeak(): boolean {
-        if (typeof window === "undefined") return false;
-        const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+        if (!browser) return false;
+        const saved = safeGetItem(STORAGE_KEYS.STUDY_SETTINGS);
         if (!saved) return false;
         const settings = JSON.parse(saved);
         return settings.autoSpeak ?? true;
@@ -93,7 +95,6 @@
         if (emptySlotIdx !== -1) {
             answerSlots[emptySlotIdx] = letter;
             usedIndices.add(index);
-            // trigger reactivity
             usedIndices = new Set(usedIndices);
         }
     }
@@ -103,28 +104,10 @@
         const letter = answerSlots[slotIndex];
         if (!letter) return;
 
-        // Find which tile index this letter came from (the last one added ideally, but simple first match of used is fine for UI logic)
-        // To be precise we need to track mapping. But for this simple UI:
-        // We find the first index in usedIndices that corresponds to this letter in shuffledLetters
-        // AND isn't "claimed" by another slot. This is complex to track perfectly without an ID.
-        // Simplified: Just remove from slot and find *an* available index to free up.
-
-        // Actually, better approach: track mapping. But let's stick to the previous logic if it worked, or improve.
-        // Improvement: We just need to free *one* instance of this letter index.
         let indexToFree = -1;
-
-        // Reconstruct used indices from current slots to find what's missing? No.
-        // Let's iterate shuffledLetters to find a match that is currently in usedIndices.
         for (const i of usedIndices) {
             if (shuffledLetters[i] === letter) {
-                // Check if this specific index is needed by OTHER slots?
-                // This is the tricky part. Let's just remove the first match.
-                // It doesn't matter visually which tile flies back as long as it's the same letter.
                 indexToFree = i;
-                // We need to ensure we don't free an index that other slots are relying on?
-                // Since slots don't hold IDs, it's ambiguous.
-                // But for "remove last added", we usually act on the last slot.
-                // If user clicks middle slot, it's ambiguous.
                 break;
             }
         }
@@ -137,7 +120,7 @@
     }
 
     function isComplete() {
-        if (typedInput.length > 0) return typedInput.length > 0;
+        if (typedInput.length > 0) return true;
         return answerSlots.every((s) => s !== null);
     }
 

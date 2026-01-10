@@ -1,3 +1,5 @@
+import { browser } from '$app/environment';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '$lib/utils/safe-storage';
 import { STORAGE_KEYS } from "$lib/storage-keys";
 
 export interface NotificationSettings {
@@ -33,6 +35,7 @@ export function getNotificationStore(): NotificationStore {
 }
 
 export async function initNotifications(): Promise<void> {
+  if (!browser) return;
   loadSettings();
 
   store.isSupported = "Notification" in window && "serviceWorker" in navigator;
@@ -57,8 +60,9 @@ export async function initNotifications(): Promise<void> {
 }
 
 function loadSettings(): void {
+  if (!browser) return;
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATION_SETTINGS);
+    const saved = safeGetItem(STORAGE_KEYS.NOTIFICATION_SETTINGS);
     if (saved) {
       const parsed = JSON.parse(saved);
       store.settings = { ...DEFAULT_SETTINGS, ...parsed };
@@ -69,14 +73,11 @@ function loadSettings(): void {
 }
 
 function saveSettings(): void {
-  try {
-    localStorage.setItem(
-      STORAGE_KEYS.NOTIFICATION_SETTINGS,
-      JSON.stringify(store.settings),
-    );
-  } catch {
-    // ignore
-  }
+  if (!browser) return;
+  safeSetItem(
+    STORAGE_KEYS.NOTIFICATION_SETTINGS,
+    JSON.stringify(store.settings),
+  );
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -129,7 +130,7 @@ let scheduledTimeoutId: ReturnType<typeof setTimeout> | null = null;
 export function scheduleNotifications(): void {
   cancelAllNotifications();
 
-  if (!store.settings.enabled || store.permission !== "granted") {
+  if (!browser || !store.settings.enabled || store.permission !== "granted") {
     return;
   }
 
@@ -146,7 +147,7 @@ export function scheduleNotifications(): void {
 
   const delay = nextTime.getTime() - now.getTime();
 
-  localStorage.setItem(
+  safeSetItem(
     STORAGE_KEYS.NOTIFICATION_SCHEDULED,
     JSON.stringify({ nextTime: nextTime.toISOString() }),
   );
@@ -162,7 +163,7 @@ export function cancelAllNotifications(): void {
     clearTimeout(scheduledTimeoutId);
     scheduledTimeoutId = null;
   }
-  localStorage.removeItem(STORAGE_KEYS.NOTIFICATION_SCHEDULED);
+  safeRemoveItem(STORAGE_KEYS.NOTIFICATION_SCHEDULED);
 }
 
 async function showNotificationViaServiceWorker(

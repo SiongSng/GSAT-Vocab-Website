@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Disallow: /flashcard/session
+Disallow: /quiz/session
+
+Sitemap: https://siongsng.github.io/GSAT-Vocab-Website/sitemap.xml

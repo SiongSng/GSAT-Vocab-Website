@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { browser } from '$app/environment';
+    import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
     import {
         ensureEntryCard,
         getSessionCardCounts,
@@ -83,8 +85,9 @@
     });
 
     function loadSettings(): void {
+        if (!browser) return;
         try {
-            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+            const saved = safeGetItem(STORAGE_KEYS.STUDY_SETTINGS);
             if (saved) {
                 const settings: StudySettings = JSON.parse(saved);
                 newCardLimit =
@@ -102,6 +105,7 @@
     }
 
     function saveSettings(): void {
+        if (!browser) return;
         try {
             const settings: StudySettings = {
                 newCardLimit,
@@ -110,7 +114,7 @@
                 levelFilter,
                 studyPriority,
             };
-            localStorage.setItem(
+            safeSetItem(
                 STORAGE_KEYS.STUDY_SETTINGS,
                 JSON.stringify(settings),
             );
@@ -176,8 +180,9 @@
     }
 
     function saveCustomDecks(decks: CustomDeck[]): void {
+        if (!browser) return;
         try {
-            localStorage.setItem(
+            safeSetItem(
                 STORAGE_KEYS.CUSTOM_DECKS,
                 JSON.stringify(decks),
             );
@@ -187,8 +192,9 @@
     }
 
     function loadCustomDecks(): void {
+        if (!browser) return;
         try {
-            const saved = localStorage.getItem(STORAGE_KEYS.CUSTOM_DECKS);
+            const saved = safeGetItem(STORAGE_KEYS.CUSTOM_DECKS);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed)) {

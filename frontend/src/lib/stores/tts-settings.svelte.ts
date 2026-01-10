@@ -1,3 +1,6 @@
+import { browser } from '$app/environment';
+import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
+
 export type TTSEngine = "edge-tts" | "kokoro";
 
 export type KokoroModelStatus =
@@ -19,9 +22,21 @@ interface TTSSettingsStore {
 
 const STORAGE_KEY = "tts-settings";
 
+function getDefaultState(): TTSSettingsStore {
+  return {
+    engine: "edge-tts",
+    kokoro: {
+      status: "not-downloaded",
+      downloadProgress: 0,
+      error: null,
+    },
+  };
+}
+
 function loadFromStorage(): TTSSettingsStore {
+  if (!browser) return getDefaultState();
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = safeGetItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
@@ -37,19 +52,13 @@ function loadFromStorage(): TTSSettingsStore {
   } catch {
     // ignore
   }
-  return {
-    engine: "edge-tts",
-    kokoro: {
-      status: "not-downloaded",
-      downloadProgress: 0,
-      error: null,
-    },
-  };
+  return getDefaultState();
 }
 
 function saveToStorage(store: TTSSettingsStore): void {
+  if (!browser) return;
   try {
-    localStorage.setItem(
+    safeSetItem(
       STORAGE_KEY,
       JSON.stringify({
         engine: store.engine,
@@ -61,7 +70,16 @@ function saveToStorage(store: TTSSettingsStore): void {
   }
 }
 
-const store: TTSSettingsStore = $state(loadFromStorage());
+const store: TTSSettingsStore = $state(getDefaultState());
+let initialized = false;
+
+export function initTTSSettings(): void {
+  if (!browser || initialized) return;
+  initialized = true;
+  const loaded = loadFromStorage();
+  store.engine = loaded.engine;
+  store.kokoro = loaded.kokoro;
+}
 
 export function getTTSSettingsStore() {
   return {

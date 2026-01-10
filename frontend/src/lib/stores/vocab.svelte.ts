@@ -15,8 +15,9 @@ import {
   isPhraseEntry,
   isPatternEntry,
 } from "$lib/types/vocab";
-import { getRouterStore, navigate } from "./router.svelte";
 import { openMobileDetail } from "./app.svelte";
+import { goto } from "$app/navigation";
+import { base } from "$app/paths";
 import {
   initVocabDB,
   buildIndex,
@@ -180,6 +181,9 @@ export function getVocabStore() {
     },
     get isLoading() {
       return isLoading;
+    },
+    get isLoaded() {
+      return vocabIndex.length > 0;
     },
     get isLoadingDetail() {
       return isLoadingDetail;
@@ -393,19 +397,20 @@ export async function selectWordAndNavigate(
   lemma: string,
   typeHint?: "word" | "phrase" | "pattern",
 ): Promise<void> {
-  navigate({ name: "word", params: { lemma } });
+  const isMobile = window.matchMedia("(max-width: 1023px)").matches;
+
+  if (isMobile) {
+    await goto(`${base}/word/${encodeURIComponent(lemma)}`, { replaceState: false });
+  } else {
+    history.replaceState({}, "", `${base}/word/${encodeURIComponent(lemma)}`);
+  }
+
   await selectWord(lemma, typeHint);
 }
 
-export function syncWordFromRoute(): void {
-  const router = getRouterStore();
-  if (router.route.name === "word") {
-    const lemma = router.route.params.lemma;
-    if (!lemma) return;
-
-    if (lemma !== selectedLemma) {
-      selectWord(lemma);
-    }
+export function syncWordFromRoute(lemma: string | null): void {
+  if (lemma && lemma !== selectedLemma) {
+    selectWord(lemma);
     openMobileDetail();
   }
 }

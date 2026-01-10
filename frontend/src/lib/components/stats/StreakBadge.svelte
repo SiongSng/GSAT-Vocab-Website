@@ -2,7 +2,8 @@
     import { onMount, onDestroy } from "svelte";
     import { getAllDailyStats, onDataChange } from "$lib/stores/srs-storage";
     import { calculateStreak, type StreakInfo } from "$lib/utils/stats";
-    import { navigate } from "$lib/stores/router.svelte";
+    import { goto } from "$app/navigation";
+    import { base } from "$app/paths";
 
     let streakInfo: StreakInfo = $state({
         currentStreak: 0,
@@ -29,7 +30,7 @@
     });
 
     function handleClick() {
-        navigate({ name: "stats" });
+        goto(`${base}/stats`);
     }
 </script>
 

@@ -461,7 +461,7 @@ def export(
     if input_path is None:
         input_path = data_dir / "output" / "vocab.json"
     if output_dir is None:
-        output_dir = data_dir.parent.parent / "frontend" / "public" / "data"
+        output_dir = data_dir.parent.parent / "frontend" / "static" / "data"
 
     if not input_path.exists():
         console.print(f"[red]✗[/] Input file not found: {input_path}")

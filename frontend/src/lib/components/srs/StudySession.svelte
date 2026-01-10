@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { browser } from '$app/environment';
+    import { safeGetItem } from '$lib/utils/safe-storage';
     import { Rating } from "ts-fsrs";
     import {
         getSRSStore,
@@ -36,8 +38,9 @@
     const ratingMap = [Rating.Again, Rating.Hard, Rating.Good, Rating.Easy];
 
     function getAutoSpeak(): boolean {
+        if (!browser) return true;
         try {
-            const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+            const saved = safeGetItem(STORAGE_KEYS.STUDY_SETTINGS);
             if (saved) {
                 const settings = JSON.parse(saved);
                 return settings.autoSpeak ?? true;

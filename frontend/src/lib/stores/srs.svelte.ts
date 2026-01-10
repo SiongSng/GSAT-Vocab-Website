@@ -1,3 +1,5 @@
+import { browser } from '$app/environment';
+import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
 import { FSRS, Rating, State, type RecordLog } from "ts-fsrs";
 import {
   initStorage,
@@ -186,9 +188,10 @@ export async function runSRSSenseMigration(
 }
 
 function loadDailyProgress(): void {
+  if (!browser) return;
   const today = getTodayKey();
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_STUDIED(today));
+    const saved = safeGetItem(STORAGE_KEYS.DAILY_STUDIED(today));
     if (saved) {
       const data = JSON.parse(saved);
       store.newCardsStudiedToday = data.newCards || 0;
@@ -204,9 +207,10 @@ function loadDailyProgress(): void {
 }
 
 function saveDailyProgress(): void {
+  if (!browser) return;
   const today = getTodayKey();
   try {
-    localStorage.setItem(
+    safeSetItem(
       STORAGE_KEYS.DAILY_STUDIED(today),
       JSON.stringify({
         newCards: store.newCardsStudiedToday,
@@ -492,9 +496,6 @@ let preloadTimer: ReturnType<typeof setTimeout> | undefined;
 function preloadUpcomingAudio(): void {
   clearTimeout(preloadTimer);
 
-  // Delay preloading to specific prioritize current card playback.
-  // This avoids network contention and ensures the current card's auto-play
-  // gets the first slot in the request queue.
   preloadTimer = setTimeout(() => {
     if (!store.isStudying) return;
 
@@ -676,8 +677,9 @@ export function getIntervalText(rating: Rating): string {
 
 export function setDailyLimits(limits: Partial<DailyLimits>): void {
   store.dailyLimits = { ...store.dailyLimits, ...limits };
+  if (!browser) return;
   try {
-    localStorage.setItem(
+    safeSetItem(
       STORAGE_KEYS.DAILY_LIMITS,
       JSON.stringify(store.dailyLimits),
     );
@@ -687,8 +689,9 @@ export function setDailyLimits(limits: Partial<DailyLimits>): void {
 }
 
 export function loadDailyLimits(): void {
+  if (!browser) return;
   try {
-    const saved = localStorage.getItem(STORAGE_KEYS.DAILY_LIMITS);
+    const saved = safeGetItem(STORAGE_KEYS.DAILY_LIMITS);
     if (saved) {
       store.dailyLimits = { ...DEFAULT_DAILY_LIMITS, ...JSON.parse(saved) };
     }

@@ -5,7 +5,8 @@
         type QuizQuestionType,
     } from "$lib/stores/quiz-generator";
     import { loadVocabData, getVocabStore } from "$lib/stores/vocab.svelte";
-    import { navigate } from "$lib/stores/router.svelte";
+    import { goto } from "$app/navigation";
+    import { base } from "$app/paths";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { onMount } from "svelte";
     import { onDataChange } from "$lib/stores/srs-storage";
@@ -83,8 +84,8 @@
         });
     }
 
-    function handleBrowse() {
-        navigate({ name: "browse" });
+    function handleFlashcard() {
+        goto(`${base}/flashcard`);
     }
 
     function handleKeydown(e: KeyboardEvent) {
@@ -94,7 +95,7 @@
                 handleStart();
             } else {
                 e.preventDefault();
-                handleBrowse();
+                handleFlashcard();
             }
         }
     }
@@ -181,14 +182,14 @@
                         />
                     </svg>
                 </div>
-                <h1>尚無待複習卡片</h1>
+                <h1>開始學習單字</h1>
                 <p class="subtitle">
-                    目前沒有需要複習的單字。去探索新的單字並加入學習計畫吧！
+                    先用字卡學習單字，測驗會自動從已學習的內容出題。
                 </p>
 
                 <div class="main-actions">
-                    <button class="btn-primary" onclick={handleBrowse}>
-                        <span>瀏覽單字庫</span>
+                    <button class="btn-primary" onclick={handleFlashcard}>
+                        <span>前往字卡學習</span>
                     </button>
                 </div>
             </div>

@@ -1,3 +1,6 @@
+import { browser } from '$app/environment';
+import { safeGetItem, safeSetItem, safeRemoveItem } from '$lib/utils/safe-storage';
+
 type BeforeInstallPromptEvent = Event & {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -24,6 +27,7 @@ const store: PWAStore = $state({
 });
 
 function detectPlatform(): void {
+  if (!browser) return;
   const ua = navigator.userAgent;
   const isIOSDevice = /iPad|iPhone|iPod/.test(ua) && !("MSStream" in window);
   const isIPadOS =
@@ -40,17 +44,17 @@ function detectPlatform(): void {
 }
 
 function shouldShowBanner(): boolean {
+  if (!browser) return false;
   if (store.isStandalone) return false;
 
   const dismissCount = parseInt(
-    localStorage.getItem("pwa-dismiss-count") || "0",
+    safeGetItem("pwa-dismiss-count") || "0",
   );
   if (dismissCount >= 5) return false;
 
-  // First 2 dismisses: show again immediately (in case of accidental tap)
   if (dismissCount < 2) return true;
 
-  const lastDismiss = localStorage.getItem("pwa-last-dismiss");
+  const lastDismiss = safeGetItem("pwa-last-dismiss");
   if (lastDismiss) {
     const daysSinceLastDismiss =
       (Date.now() - parseInt(lastDismiss)) / (1000 * 60 * 60 * 24);
@@ -62,6 +66,7 @@ function shouldShowBanner(): boolean {
 }
 
 export function initPWA(): void {
+  if (!browser) return;
   detectPlatform();
 
   if (store.isStandalone) return;
@@ -83,8 +88,8 @@ export function initPWA(): void {
     store.showInstallBanner = false;
     store.showIOSGuide = false;
     deferredPrompt = null;
-    localStorage.removeItem("pwa-dismiss-count");
-    localStorage.removeItem("pwa-last-dismiss");
+    safeRemoveItem("pwa-dismiss-count");
+    safeRemoveItem("pwa-last-dismiss");
   });
 
   if (store.isIOS && shouldShowBanner()) {
@@ -144,10 +149,10 @@ export function hideIOSInstallGuide(): void {
 
 function recordDismiss(): void {
   const dismissCount = parseInt(
-    localStorage.getItem("pwa-dismiss-count") || "0",
+    safeGetItem("pwa-dismiss-count") || "0",
   );
-  localStorage.setItem("pwa-dismiss-count", (dismissCount + 1).toString());
-  localStorage.setItem("pwa-last-dismiss", Date.now().toString());
+  safeSetItem("pwa-dismiss-count", (dismissCount + 1).toString());
+  safeSetItem("pwa-last-dismiss", Date.now().toString());
 }
 
 export function dismissInstallBanner(): void {

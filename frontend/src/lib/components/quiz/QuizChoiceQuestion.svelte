@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { browser } from '$app/environment';
+    import { safeGetItem } from '$lib/utils/safe-storage';
     import type { QuizQuestion } from "$lib/stores/quiz-generator";
     import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
@@ -49,8 +51,8 @@
     const audioController = createAudioController(() => questionData.lemma);
 
     function getAutoSpeak() {
-        if (typeof window === "undefined") return false;
-        const saved = localStorage.getItem(STORAGE_KEYS.STUDY_SETTINGS);
+        if (!browser) return false;
+        const saved = safeGetItem(STORAGE_KEYS.STUDY_SETTINGS);
         if (!saved) return false;
         const settings = JSON.parse(saved);
         return settings.autoSpeak ?? true;
@@ -485,11 +487,10 @@
 
     @media (max-width: 640px) {
         .card {
-            padding: 1.5rem;
+            padding: 0;
             background: transparent;
             border: none;
             box-shadow: none;
-            padding: 0;
         }
 
         .sentence-box {
