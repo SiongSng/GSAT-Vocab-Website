@@ -5,6 +5,8 @@ import {
   setKokoroError,
 } from "./stores/tts-settings.svelte";
 
+import KokoroWorker from "./kokoro-worker?worker";
+
 let worker: Worker | null = null;
 let loadingPromise: Promise<Worker> | null = null;
 let requestId = 0;
@@ -61,9 +63,16 @@ export function loadKokoroModel(): Promise<Worker> {
     setKokoroStatus("downloading");
     setKokoroDownloadProgress(0);
 
-    const w = new Worker(new URL("./kokoro-worker.ts", import.meta.url), {
-      type: "module",
-    });
+    let w: Worker;
+    try {
+      w = new KokoroWorker();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create worker";
+      setKokoroError(`Worker creation failed: ${message}`);
+      loadingPromise = null;
+      reject(new Error(message));
+      return;
+    }
 
     const onMessage = (e: MessageEvent<WorkerResponse>) => {
       handleWorkerMessage(e);
