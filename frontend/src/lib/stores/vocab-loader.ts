@@ -31,26 +31,53 @@ export interface LoadProgress {
   message: string;
 }
 
+const VERSION_CHECK_TIMEOUT_MS = 5000;
+
 export async function fetchVersionInfo(): Promise<VersionInfo> {
-  const response = await fetch(`${getDataUrl('version.json')}?t=${Date.now()}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch version info: ${response.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), VERSION_CHECK_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${getDataUrl('version.json')}?t=${Date.now()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch version info: ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return response.json();
 }
 
-export async function checkForUpdate(): Promise<{
+export interface UpdateCheckResult {
   needsUpdate: boolean;
-  remoteVersion: VersionInfo;
-}> {
-  const remoteVersion = await fetchVersionInfo();
+  remoteVersion: VersionInfo | null;
+  isOffline: boolean;
+  hasLocalData: boolean;
+}
+
+export async function checkForUpdate(): Promise<UpdateCheckResult> {
   const [localVersionInfo, localMetadata, totalEntries] = await Promise.all([
     getStoredVersionInfo(),
     getStoredMetadata(),
     getTotalEntriesCount(),
   ]);
+
+  const hasLocalData = totalEntries > 0;
+
+  let remoteVersion: VersionInfo | null = null;
+  try {
+    remoteVersion = await fetchVersionInfo();
+  } catch {
+    return {
+      needsUpdate: !hasLocalData,
+      remoteVersion: null,
+      isOffline: true,
+      hasLocalData,
+    };
+  }
 
   const remoteFingerprint = createGenerationFingerprint(remoteVersion);
   const localFingerprint = localVersionInfo
@@ -73,7 +100,7 @@ export async function checkForUpdate(): Promise<{
   const needsUpdate =
     generationChanged || fingerprintChanged || hashChanged || entriesMismatch;
 
-  return { needsUpdate, remoteVersion };
+  return { needsUpdate, remoteVersion, isOffline: false, hasLocalData };
 }
 
 async function decompressGzipStream(
@@ -239,7 +266,7 @@ export async function downloadAndStoreVocab(
 
 export async function loadVocabWithVersionCheck(
   onProgress?: (progress: LoadProgress) => void,
-): Promise<boolean> {
+): Promise<{ downloaded: boolean; isOffline: boolean }> {
   onProgress?.({
     phase: "checking",
     current: 0,
@@ -247,11 +274,24 @@ export async function loadVocabWithVersionCheck(
     message: "正在檢查更新...",
   });
 
-  const { needsUpdate, remoteVersion } = await checkForUpdate();
+  const { needsUpdate, remoteVersion, isOffline, hasLocalData } = await checkForUpdate();
 
-  if (needsUpdate) {
+  if (isOffline) {
+    if (hasLocalData) {
+      onProgress?.({
+        phase: "ready",
+        current: 100,
+        total: 100,
+        message: "離線模式：使用本機資料",
+      });
+      return { downloaded: false, isOffline: true };
+    }
+    throw new Error("無法載入資料：沒有網路連線且沒有本機快取");
+  }
+
+  if (needsUpdate && remoteVersion) {
     await downloadAndStoreVocab(onProgress, remoteVersion);
-    return true;
+    return { downloaded: true, isOffline: false };
   }
 
   onProgress?.({
@@ -261,7 +301,7 @@ export async function loadVocabWithVersionCheck(
     message: "載入完成",
   });
 
-  return false;
+  return { downloaded: false, isOffline: false };
 }
 
 function normalizeImportanceScores(

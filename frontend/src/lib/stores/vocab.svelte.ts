@@ -26,7 +26,7 @@ import {
   getWord,
   getPhrase,
 } from "./vocab-db";
-import { checkForUpdate, loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
+import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 import { updateWordStructuredData } from "$lib/utils/seo";
 import { runSRSSenseMigration, runSRSEntryTypeFix } from "./srs.svelte";
 
@@ -247,7 +247,7 @@ export function getFilters() {
   };
 }
 
-async function downloadAndBuildIndex(): Promise<void> {
+async function downloadAndBuildIndex(): Promise<{ isOffline: boolean }> {
   loadProgress = {
     phase: "checking",
     current: 0,
@@ -256,7 +256,7 @@ async function downloadAndBuildIndex(): Promise<void> {
   };
 
   try {
-    await loadVocabWithVersionCheck((progress) => {
+    const result = await loadVocabWithVersionCheck((progress) => {
       loadProgress = progress;
     });
 
@@ -268,6 +268,7 @@ async function downloadAndBuildIndex(): Promise<void> {
     vocabIndex = index;
     lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
     loadProgress = null;
+    return { isOffline: result.isOffline };
   } catch (e) {
     console.error("Failed to download vocab data:", e);
     loadProgress = null;
@@ -284,19 +285,7 @@ export async function loadVocabData(): Promise<void> {
 
   try {
     await initVocabDB();
-    const { needsUpdate } = await checkForUpdate();
-
-    if (needsUpdate) {
-      await downloadAndBuildIndex();
-    } else {
-      const index = await buildIndex(
-        createWordIndexItem,
-        createPhraseIndexItem,
-        createPatternIndexItem,
-      );
-      vocabIndex = index;
-      lemmaSet = new Set(index.map((item) => item.lemma.toLowerCase()));
-    }
+    await downloadAndBuildIndex();
 
     runSRSSenseMigration(getSRSEligibleEntry).catch((e) => {
       console.warn("SRS sense migration failed:", e);
