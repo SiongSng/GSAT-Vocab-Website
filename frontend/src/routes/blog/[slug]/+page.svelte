@@ -44,7 +44,7 @@
     <div class="layout">
         <article class="article">
             <header class="header">
-                <a href="/blog" class="back">← 學習資源</a>
+                <a href="{BASE_URL}/blog" class="back">← 學習資源</a>
                 <h1>{metadata.title}</h1>
                 <div class="meta">
                     <time datetime={metadata.date}>
@@ -87,7 +87,7 @@
                         rel="noopener">Unsplash</a
                     >
                 </p>
-                <a href="/blog" class="back-btn">← 返回文章列表</a>
+                <a href="{BASE_URL}/blog" class="back-btn">← 返回文章列表</a>
             </footer>
         </article>
 
