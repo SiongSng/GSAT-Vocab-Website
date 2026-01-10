@@ -90,10 +90,12 @@ export function loadKokoroModel(): Promise<Worker> {
     w.addEventListener("message", onMessage);
 
     w.addEventListener("error", (err) => {
-      setKokoroError(err.message || "Worker error");
+      const errorInfo = err.message || err.filename || err.error?.message || "Worker error";
+      console.error("[Kokoro] Worker error event:", err, err.error);
+      setKokoroError(errorInfo);
       loadingPromise = null;
       w.terminate();
-      reject(new Error(err.message || "Worker error"));
+      reject(new Error(errorInfo));
     });
   });
 

@@ -66,6 +66,24 @@
     onMount(() => {
         initTTSSettings();
 
+        // Unregister old Service Workers and clear caches from VitePWA migration
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+                for (const registration of registrations) {
+                    await registration.unregister();
+                }
+                // Clear all caches after unregistering
+                if ("caches" in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames
+                            .filter((name) => name.startsWith("workbox-"))
+                            .map((name) => caches.delete(name))
+                    );
+                }
+            });
+        }
+
         const mediaQuery = window.matchMedia("(max-width: 1023px)");
         setMobile(mediaQuery.matches);
 
