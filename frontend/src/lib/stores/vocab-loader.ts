@@ -11,9 +11,11 @@ import {
   bulkInsertPatterns,
   getTotalEntriesCount,
 } from "./vocab-db";
+import { base } from "$app/paths";
 
-const VERSION_URL = `${import.meta.env.BASE_URL}data/version.json`;
-const VOCAB_URL = `${import.meta.env.BASE_URL}data/vocab.json.gz`;
+function getDataUrl(path: string): string {
+  return `${base}/data/${path}`;
+}
 
 function createGenerationFingerprint(versionInfo: VersionInfo): string {
   const generation = versionInfo.generated_at ?? versionInfo.version;
@@ -30,7 +32,7 @@ export interface LoadProgress {
 }
 
 export async function fetchVersionInfo(): Promise<VersionInfo> {
-  const response = await fetch(`${VERSION_URL}?t=${Date.now()}`, {
+  const response = await fetch(`${getDataUrl('version.json')}?t=${Date.now()}`, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -131,8 +133,8 @@ export async function downloadAndStoreVocab(
   });
 
   const vocabUrl = resolvedVersionInfo?.vocab_hash
-    ? `${VOCAB_URL}?hash=${resolvedVersionInfo.vocab_hash}`
-    : `${VOCAB_URL}?t=${Date.now()}`;
+    ? `${getDataUrl('vocab.json.gz')}?hash=${resolvedVersionInfo.vocab_hash}`
+    : `${getDataUrl('vocab.json.gz')}?t=${Date.now()}`;
 
   const response = await fetch(vocabUrl, { cache: "no-cache" });
   if (!response.ok) {

@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { browser } from "$app/environment";
     import { page } from "$app/stores";
+    import { base } from "$app/paths";
     import Header from "$lib/components/Header.svelte";
     import BottomNav from "$lib/components/BottomNav.svelte";
     import LoadingOverlay from "$lib/components/LoadingOverlay.svelte";
@@ -17,8 +18,7 @@
     const vocab = getVocabStore();
 
     function getRelativePath(pathname: string): string {
-        const base = import.meta.env.BASE_URL || '';
-        if (base && base !== '/' && pathname.startsWith(base)) {
+        if (base && pathname.startsWith(base)) {
             return pathname.slice(base.length) || '/';
         }
         return pathname;
