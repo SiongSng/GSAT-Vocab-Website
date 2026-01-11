@@ -63,6 +63,8 @@ ACTIVE_TESTED_ROLES = {
     AnnotationRole.TESTED_KEYWORD,
 }
 
+REFERENCE_EXAM_TYPES = {ExamType.GSAT_REF}
+
 
 @dataclass
 class FrequencyCounter:
@@ -253,6 +255,63 @@ def _is_valid_phrase(surface: str) -> bool:
     return surface.lower() not in common_compositional
 
 
+def _context_fingerprint(text: str) -> str:
+    """Lenient fingerprint for deduping near-identical contexts across exams.
+
+    Normalizes to lowercase alphanumerics with collapsed whitespace so LLM
+    paraphrases with minor punctuation differences still align.
+    """
+    text = text.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", text)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if normalized:
+        return normalized
+    return text.strip()
+
+
+def _should_keep_context(
+    lemma: str,
+    text: str,
+    exam_type: ExamType,
+    year: int,
+    seen_map: dict[str, dict[str, tuple[ExamType, int]]],
+) -> bool:
+    """Decide whether to keep a context to avoid ref/trial echoes.
+
+    Rules:
+    - First occurrence always kept.
+    - If a ref context repeats a fingerprint already seen, drop it to
+      avoid double-counting recycled sentences.
+    - If the first sighting was ref and an official exam later reuses the
+      same sentence, keep the official one (upgrade the record) while keeping
+      the historical signal from the ref occurrence.
+    - Repeated official contexts are allowed since they represent true
+      multi-year occurrences.
+    """
+    fp = _context_fingerprint(text)
+    if not fp:
+        return False
+
+    existing = seen_map[lemma].get(fp)
+    if existing is None:
+        seen_map[lemma][fp] = (exam_type, year)
+        return True
+
+    existing_type, _ = existing
+
+    if exam_type not in REFERENCE_EXAM_TYPES and existing_type in REFERENCE_EXAM_TYPES:
+        seen_map[lemma][fp] = (exam_type, year)
+        return True
+
+    if exam_type in REFERENCE_EXAM_TYPES and existing_type not in REFERENCE_EXAM_TYPES:
+        return False
+
+    if exam_type in REFERENCE_EXAM_TYPES and existing_type in REFERENCE_EXAM_TYPES:
+        return False
+
+    return True
+
+
 def _is_quality_context(text: str, sentence_role: SentenceRole | None = None) -> bool:
     """Check if sentence is suitable for WSD context"""
     # Filter out short fragments (regardless of role)
@@ -319,6 +378,7 @@ def _process_sections(
     nlp: Language,
     official_wordlist: dict[str, OfficialWordEntry],
     doc_cache: dict[str, Doc],
+    context_seen: dict[str, dict[str, tuple[ExamType, int]]],
     progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> tuple[
     dict[str, FrequencyCounter],
@@ -506,6 +566,10 @@ def _process_sections(
                         adv_base in official_wordlist or adv_base in frequency_counters
                     ):
                         lemma = adv_base
+                if not _should_keep_context(
+                    lemma, task.text, task.exam_type, task.exam_year, context_seen
+                ):
+                    continue
                 frequency_counters[lemma].add(
                     year=task.exam_year,
                     role=ann.role,
@@ -549,6 +613,11 @@ def _process_sections(
                     ):
                         lemma = adv_base
 
+                if not _should_keep_context(
+                    lemma, sent_text, task.exam_type, task.exam_year, context_seen
+                ):
+                    continue
+
                 frequency_counters[lemma].add(
                     year=task.exam_year,
                     role=role,
@@ -580,6 +649,7 @@ def _process_translation_items(
     nlp: Language,
     official_wordlist: dict[str, OfficialWordEntry],
     doc_cache: dict[str, Doc],
+    context_seen: dict[str, dict[str, tuple[ExamType, int]]],
 ) -> tuple[dict[str, FrequencyCounter], dict[str, list[ContextSentence]]]:
     frequency_counters: dict[str, FrequencyCounter] = defaultdict(FrequencyCounter)
     contexts_map: dict[str, list[ContextSentence]] = defaultdict(list)
@@ -627,6 +697,9 @@ def _process_translation_items(
                 ):
                     lemma = adv_base
 
+            if not _should_keep_context(lemma, chinese_prompt, exam_type, year, context_seen):
+                continue
+
             frequency_counters[lemma].add(
                 year=year,
                 role=AnnotationRole.TESTED_KEYWORD,
@@ -651,6 +724,7 @@ def _process_essay_suggested_words(
     nlp: Language,
     official_wordlist: dict[str, OfficialWordEntry],
     doc_cache: dict[str, Doc],
+    context_seen: dict[str, dict[str, tuple[ExamType, int]]],
 ) -> tuple[dict[str, FrequencyCounter], dict[str, list[ContextSentence]]]:
     frequency_counters: dict[str, FrequencyCounter] = defaultdict(FrequencyCounter)
     contexts_map: dict[str, list[ContextSentence]] = defaultdict(list)
@@ -696,6 +770,9 @@ def _process_essay_suggested_words(
                 ):
                     lemma = adv_base
 
+            if not _should_keep_context(lemma, description, exam_type, year, context_seen):
+                continue
+
             frequency_counters[lemma].add(
                 year=year,
                 role=None,
@@ -717,14 +794,30 @@ def _process_essay_suggested_words(
 
 def _dedupe_contexts(contexts: list[ContextSentence]) -> list[ContextSentence]:
     seen = set()
+    primary_seen_fp: set[str] = set()
     result = []
-    for ctx in contexts:
+
+    def priority(exam_type: ExamType) -> int:
+        return 1 if exam_type in REFERENCE_EXAM_TYPES else 0
+
+    for ctx in sorted(contexts, key=lambda c: (priority(c.source.exam_type), c.source.year)):
         if re.search(r"__\d+__", ctx.text):
             continue
+
+        fp = _context_fingerprint(ctx.text)
+        if fp and fp in primary_seen_fp and ctx.source.exam_type in REFERENCE_EXAM_TYPES:
+            continue
+
         key = (ctx.text.strip(), ctx.source.year, ctx.source.question_number)
-        if key not in seen:
-            seen.add(key)
-            result.append(ctx)
+        if key in seen:
+            continue
+
+        if fp and ctx.source.exam_type not in REFERENCE_EXAM_TYPES:
+            primary_seen_fp.add(fp)
+
+        seen.add(key)
+        result.append(ctx)
+
     return result
 
 
@@ -1018,26 +1111,27 @@ def clean_and_aggregate(
 ) -> CleanedVocabData:
     nlp = get_nlp()
     doc_cache: dict[str, Doc] = {}
+    context_seen: dict[str, dict[str, tuple[ExamType, int]]] = defaultdict(dict)
 
     if progress_callback:
         progress_callback(0, 100, "processing sections")
 
     section_freq, section_contexts, phrase_map, pattern_map = _process_sections(
-        exams, nlp, official_wordlist, doc_cache, progress_callback
+        exams, nlp, official_wordlist, doc_cache, context_seen, progress_callback
     )
 
     if progress_callback:
         progress_callback(30, 100, "processing translations")
 
     translation_freq, translation_contexts = _process_translation_items(
-        exams, nlp, official_wordlist, doc_cache
+        exams, nlp, official_wordlist, doc_cache, context_seen
     )
 
     if progress_callback:
         progress_callback(40, 100, "processing essays")
 
     essay_freq, essay_contexts = _process_essay_suggested_words(
-        exams, nlp, official_wordlist, doc_cache
+        exams, nlp, official_wordlist, doc_cache, context_seen
     )
 
     if progress_callback:

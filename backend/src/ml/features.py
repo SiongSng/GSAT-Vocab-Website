@@ -29,6 +29,14 @@ RECENCY_WINDOW_YEARS = 10
 MAX_DISTRACTOR_PARTNER_CAP = 10
 TRIAL_YEARS = {110, 111}  # Known trial exam years
 
+REFERENCE_EXAM_TYPES = {ExamType.GSAT_REF, ExamType.GSAT_TRIAL}
+OFFICIAL_EXAM_TYPES = {
+    ExamType.GSAT,
+    ExamType.GSAT_MAKEUP,
+    ExamType.AST,
+    ExamType.AST_MAKEUP,
+}
+
 # Target Role Groups
 TESTED_ROLES = {
     AnnotationRole.CORRECT_ANSWER,
@@ -466,20 +474,22 @@ class FeatureExtractor:
 
         # 5. Post-process derived fields
         # CRITICAL: Only count OFFICIAL exams as "tested", NOT REF/TRIAL
-        official_exam_types = {
-            ExamType.GSAT,
-            ExamType.GSAT_MAKEUP,
-            ExamType.AST,
-            ExamType.AST_MAKEUP,
-        }
-        wf.years_appeared = sorted(list({occ["year"] for occ in wf.contexts_raw}))
+        wf.years_appeared = sorted(
+            list(
+                {
+                    occ["year"]
+                    for occ in wf.contexts_raw
+                    if occ.get("exam_type") in OFFICIAL_EXAM_TYPES and occ.get("year")
+                }
+            )
+        )
         wf.years_tested = sorted(
             list(
                 {
                     occ["year"]
                     for occ in wf.contexts_raw
                     if occ.get("role") in TESTED_ROLES
-                    and occ.get("exam_type") in official_exam_types
+                    and occ.get("exam_type") in OFFICIAL_EXAM_TYPES
                 }
             )
         )
@@ -506,9 +516,6 @@ class FeatureExtractor:
             return False
 
         history = [occ for occ in word_data.contexts_raw if is_historically_available(occ)]
-        total_occ = len(history)
-
-        # Pre-calculate counts from history
         processed_history = []
         for occ in history:
             src = occ.get("source", {})
@@ -522,21 +529,19 @@ class FeatureExtractor:
                 }
             )
 
-        years_appeared = sorted(list({occ["year"] for occ in processed_history if occ["year"] > 0}))
-        # CRITICAL: Only count OFFICIAL exams (GSAT, AST, MAKEUP) as "tested", NOT REF/TRIAL
-        official_exam_types = {
-            ExamType.GSAT,
-            ExamType.GSAT_MAKEUP,
-            ExamType.AST,
-            ExamType.AST_MAKEUP,
-        }
+        official_history = [occ for occ in processed_history if occ.get("exam_type") in OFFICIAL_EXAM_TYPES]
+        ref_history = [occ for occ in processed_history if occ.get("exam_type") == ExamType.GSAT_REF]
+        trial_history = [occ for occ in processed_history if occ.get("exam_type") == ExamType.GSAT_TRIAL]
+
+        total_occ = len(official_history)
+
+        years_appeared = sorted(list({occ["year"] for occ in official_history if occ["year"] > 0}))
         years_tested = sorted(
             list(
                 {
                     occ["year"]
-                    for occ in processed_history
+                    for occ in official_history
                     if occ.get("role") in TESTED_ROLES
-                    and occ.get("exam_type") in official_exam_types
                 }
             )
         )
@@ -544,9 +549,8 @@ class FeatureExtractor:
             list(
                 {
                     occ["year"]
-                    for occ in processed_history
+                    for occ in official_history
                     if occ.get("role") in ACTIVE_TESTED_ROLES
-                    and occ.get("exam_type") in official_exam_types
                 }
             )
         )
@@ -557,7 +561,7 @@ class FeatureExtractor:
         sentence_role_counts = defaultdict(int)
         cloze_as_answer_count = 0
 
-        for occ in processed_history:
+        for occ in official_history:
             role_counts[occ.get("role")] += 1
             section_counts[occ.get("section")] += 1
             exam_counts[occ.get("exam_type")] += 1
@@ -646,13 +650,9 @@ class FeatureExtractor:
         f.append(float(section_counts.get(SectionType.ESSAY, 0)))
 
         # 9. Exams (5)
-        gsat_count = (
-            exam_counts.get(ExamType.GSAT, 0)
-            + exam_counts.get(ExamType.GSAT_REF, 0)
-            + exam_counts.get(ExamType.GSAT_TRIAL, 0)
-        )
-        ast_count = exam_counts.get(ExamType.AST, 0)
-        trial_count = exam_counts.get(ExamType.GSAT_TRIAL, 0)
+        gsat_count = exam_counts.get(ExamType.GSAT, 0) + exam_counts.get(ExamType.GSAT_MAKEUP, 0)
+        ast_count = exam_counts.get(ExamType.AST, 0) + exam_counts.get(ExamType.AST_MAKEUP, 0)
+        trial_count = len(trial_history)
         f.append(float(gsat_count))
         f.append(float(ast_count))
         f.append(float(trial_count))
@@ -729,18 +729,22 @@ class FeatureExtractor:
             cloze_as_answer_count / max(1, section_counts.get(SectionType.CLOZE, 0))
         )  # cloze_as_answer_ratio
 
-        ref_count = len([occ for occ in history if occ.get("exam_type") == ExamType.GSAT_REF])
-        trial_count = len([occ for occ in history if occ.get("exam_type") == ExamType.GSAT_TRIAL])
+        ref_count = len(ref_history)
+        trial_count = len(trial_history)
         f.append(float(ref_count))  # ref_exam_count
 
-        last_ref_year = max(
-            [occ["year"] for occ in history if occ.get("exam_type") == ExamType.GSAT_REF], default=0
-        )
+        last_ref_year = max([occ["year"] for occ in ref_history], default=0)
         f.append(float(target_year - last_ref_year) if last_ref_year > 0 else 20.0)  # ref_recency
         f.append(float(trial_count))  # trial_exam_count
-        f.append(
-            0.0
-        )  # ref_trial_signal_gap (This feature was removed from the list, but the instruction implies it should be there. Setting to 0.0 as per the diff.)
+
+        last_signal_year = max([occ["year"] for occ in ref_history + trial_history], default=0)
+        last_official_test = years_tested[-1] if years_tested else 0
+        if last_signal_year and last_official_test:
+            f.append(float(last_official_test - last_signal_year))
+        elif last_signal_year:
+            f.append(float(target_year - last_signal_year))
+        else:
+            f.append(0.0)
 
         # 18. Phase 9 / WSD Advanced (6)
         f.append(wsd_entropy_val)  # wsd_entropy
