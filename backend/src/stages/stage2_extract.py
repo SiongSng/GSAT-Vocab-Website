@@ -533,12 +533,13 @@ def _process_sections(
                 continue
             spans = _find_surface_spans(doc, ann.surface)
             if not spans:
-                logger.warning(
-                    "Annotation surface not aligned to sentence: '%s' (year=%s, q=%s)",
-                    ann.surface,
-                    task.exam_year,
-                    task.question,
-                )
+                if ann.role in (AnnotationRole.CORRECT_ANSWER, AnnotationRole.TESTED_KEYWORD):
+                    logger.warning(
+                        "Annotation surface not aligned to sentence: '%s' (year=%s, q=%s)",
+                        ann.surface,
+                        task.exam_year,
+                        task.question,
+                    )
                 unmatched_annotations.append(ann)
                 continue
             for span in spans:
