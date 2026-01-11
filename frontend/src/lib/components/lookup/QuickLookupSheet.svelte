@@ -3,178 +3,196 @@
         getWordLookupStore,
         closeLookup,
     } from "$lib/stores/word-lookup.svelte";
-    import { selectWordAndNavigate } from "$lib/stores/vocab.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
-    import type { VocabEntryUnion } from "$lib/types/vocab";
+    import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
+    import WordDetailModal from "$lib/components/srs/WordDetailModal.svelte";
+    import type { VocabEntryUnion, WordEntry, PhraseEntry, VocabSense } from "$lib/types/vocab";
     import { isWordEntry, isPhraseEntry } from "$lib/types/vocab";
 
     const lookup = getWordLookupStore();
 
     const item = $derived(lookup.mobileItem);
 
-    function getPrimarySense(entry: VocabEntryUnion | null) {
-        if (!entry) return null;
+    let modalEntry = $state<WordEntry | PhraseEntry | null>(null);
+    let isModalOpen = $state(false);
+
+    function getSenses(entry: VocabEntryUnion | null): VocabSense[] {
+        if (!entry) return [];
         if (isWordEntry(entry) || isPhraseEntry(entry)) {
-            return entry.senses?.[0] ?? null;
+            return entry.senses ?? [];
         }
-        return null;
+        return [];
     }
 
-    function getLevel(entry: VocabEntryUnion | null): number | null {
-        if (!entry) return null;
-        if (isWordEntry(entry)) return entry.level;
-        return null;
-    }
-
-    function getIsOfficial(entry: VocabEntryUnion | null): boolean {
-        if (!entry) return false;
-        if (isWordEntry(entry)) return entry.in_official_list;
-        return false;
-    }
-
-    function getSenseCount(entry: VocabEntryUnion | null): number {
-        if (!entry) return 0;
-        if (isWordEntry(entry) || isPhraseEntry(entry)) {
-            return entry.senses?.length ?? 0;
-        }
-        return 0;
-    }
-
-    const primarySense = $derived(getPrimarySense(item?.entry ?? null));
+    const senses = $derived(getSenses(item?.entry ?? null));
     const isSheetOpen = $derived(
         lookup.isMobileOpen && lookup.position === "bottom-sheet",
     );
 
+    function getExample(sense: VocabSense): string | null {
+        return sense.generated_example || null;
+    }
+
     function handleViewFull() {
-        if (item?.lemma) {
-            selectWordAndNavigate(item.lemma);
+        if (item?.entry && (isWordEntry(item.entry) || isPhraseEntry(item.entry))) {
+            modalEntry = item.entry;
             closeLookup();
+            isModalOpen = true;
         }
     }
 
-    function formatLevel(level: number | null): string {
-        if (level === null) return "";
-        return `L${level}`;
+    function handleCloseModal() {
+        isModalOpen = false;
+        modalEntry = null;
     }
 </script>
 
 <BottomSheet isOpen={isSheetOpen} onClose={closeLookup}>
     {#if item?.isLoading}
         <div class="sheet-content">
-            <div class="skeleton-text h-7 w-28 mb-2"></div>
-            <div class="skeleton-text h-4 w-20 mb-4"></div>
-            <div class="skeleton-text h-4 w-full mb-2"></div>
-            <div class="skeleton-text h-4 w-3/4"></div>
+            <div class="skeleton" style="width: 100px; height: 24px;"></div>
+            <div class="skeleton" style="width: 100%; height: 18px; margin-top: 12px;"></div>
         </div>
     {:else if item?.entry}
-        {@const level = getLevel(item.entry)}
-        {@const isOfficial = getIsOfficial(item.entry)}
-        {@const senseCount = getSenseCount(item.entry)}
         <div class="sheet-content">
-            <div class="flex items-center justify-between mb-1">
-                <div class="flex items-center gap-2">
-                    <h2 class="text-2xl font-semibold text-accent">
-                        {item.entry.lemma}
-                    </h2>
-                    <AudioButton text={item.entry.lemma} size="md" />
+            <div class="header">
+                <span class="lemma">{item.entry.lemma}</span>
+                <AudioButton text={item.entry.lemma} size="md" />
+            </div>
+
+            {#if senses.length > 0}
+                {@const displaySenses = senses.slice(0, 3)}
+                {@const remaining = senses.length - 3}
+                <div class="senses">
+                    {#each displaySenses as sense}
+                        {@const example = getExample(sense)}
+                        <div class="sense">
+                            <p class="def">
+                                {#if sense.pos}<span class="pos">{sense.pos}</span>{/if}{sense.zh_def}
+                            </p>
+                            {#if example}
+                                <p class="example"><HighlightedText
+                                    text={example}
+                                    highlightLemma={item.entry?.lemma}
+                                    disableClickable={true}
+                                    variant="subtle"
+                                /></p>
+                            {/if}
+                        </div>
+                    {/each}
+                    {#if remaining > 0}
+                        <p class="more-hint">+{remaining} 更多</p>
+                    {/if}
                 </div>
-            </div>
-
-            <div
-                class="flex items-center gap-1 text-sm text-content-tertiary mb-4"
-            >
-                {#if primarySense}
-                    <span>{primarySense.pos}</span>
-                {/if}
-                {#if level !== null}
-                    <span>·</span>
-                    <span>{formatLevel(level)}</span>
-                {/if}
-                {#if isOfficial}
-                    <span>·</span>
-                    <span class="text-accent">官方</span>
-                {/if}
-            </div>
-
-            {#if primarySense}
-                <p class="text-base text-content-primary leading-relaxed mb-2">
-                    {primarySense.zh_def}
-                </p>
-                {#if primarySense.en_def}
-                    <p class="text-sm text-content-secondary leading-relaxed">
-                        {primarySense.en_def}
-                    </p>
-                {/if}
             {/if}
 
-            {#if senseCount > 1}
-                <p class="text-sm text-content-tertiary mt-4">
-                    +{senseCount - 1} 其他涵義
-                </p>
-            {/if}
-
-            <button
-                type="button"
-                class="view-full-btn"
-                onclick={handleViewFull}
-            >
+            <button type="button" class="full-btn" onclick={handleViewFull}>
                 查看完整資訊
             </button>
         </div>
     {:else if item}
         <div class="sheet-content">
-            <p class="text-base text-content-tertiary">找不到此單字</p>
+            <p class="not-found">找不到此單字</p>
         </div>
     {/if}
 </BottomSheet>
 
+{#if modalEntry}
+    <WordDetailModal
+        entry={modalEntry}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+    />
+{/if}
+
 <style>
     .sheet-content {
-        padding-top: 8px;
+        padding-top: 4px;
     }
 
-    .view-full-btn {
+    .header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
-        width: 100%;
-        margin-top: 24px;
-        padding: 14px 20px;
-        font-size: 1rem;
+        margin-bottom: 16px;
+    }
+
+    .lemma {
+        font-size: 22px;
         font-weight: 600;
-        color: white;
-        background-color: var(--color-accent);
-        border-radius: 12px;
-        transition: all 0.15s ease;
+        color: rgb(55, 53, 47);
     }
 
-    .view-full-btn:hover {
-        opacity: 0.9;
+    .senses {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
     }
 
-    .view-full-btn:active {
-        transform: scale(0.98);
+    .sense {
+        line-height: 1.5;
     }
 
-    .skeleton-text {
-        background: linear-gradient(
-            90deg,
-            var(--color-surface-secondary) 25%,
-            var(--color-surface-page) 50%,
-            var(--color-surface-secondary) 75%
-        );
-        background-size: 200% 100%;
-        animation: shimmer 2s infinite;
+    .def {
+        margin: 0;
+        font-size: 16px;
+        color: rgb(55, 53, 47);
+    }
+
+    .pos {
+        color: rgba(55, 53, 47, 0.5);
+        margin-right: 6px;
+    }
+
+    .example {
+        margin: 6px 0 0;
+        font-size: 15px;
+        color: rgba(55, 53, 47, 0.65);
+        line-height: 1.6;
+    }
+
+    .not-found {
+        font-size: 15px;
+        color: rgba(55, 53, 47, 0.5);
+        margin: 0;
+    }
+
+    .more-hint {
+        font-size: 14px;
+        color: rgba(55, 53, 47, 0.45);
+        margin: 0;
+    }
+
+    .full-btn {
+        display: block;
+        width: 100%;
+        margin-top: 20px;
+        padding: 12px;
+        font-size: 15px;
+        font-weight: 500;
+        color: rgb(55, 53, 47);
+        background: rgba(55, 53, 47, 0.08);
+        border-radius: 6px;
+        transition: background 0.15s;
+    }
+
+    .full-btn:hover {
+        background: rgba(55, 53, 47, 0.12);
+    }
+
+    .full-btn:active {
+        background: rgba(55, 53, 47, 0.16);
+    }
+
+    .skeleton {
+        background: rgba(55, 53, 47, 0.08);
         border-radius: 4px;
+        animation: pulse 1.5s ease-in-out infinite;
     }
 
-    @keyframes shimmer {
-        0% {
-            background-position: 200% 0;
-        }
-        100% {
-            background-position: -200% 0;
-        }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
     }
 </style>

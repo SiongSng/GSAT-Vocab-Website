@@ -18,6 +18,8 @@
         isPhrase?: boolean;
         blankMode?: boolean;
         showHints?: boolean;
+        disableClickable?: boolean;
+        variant?: "default" | "subtle";
     }
 
     let {
@@ -26,6 +28,8 @@
         isPhrase = false,
         blankMode = false,
         showHints = false,
+        disableClickable = false,
+        variant = "default",
     }: Props = $props();
 
     const vocab = getVocabStore();
@@ -193,7 +197,7 @@
     }
 </script>
 
-<span class="highlighted-text"
+<span class="highlighted-text" class:subtle={variant === "subtle"}
     >{#each segments as seg}{#if seg.type === "highlight"}{#if blankMode}{#if showHints}{#if isPhrase}{@const phraseHint = generatePhraseSpellingHint(seg.text, highlightLemma)}{#each phraseHint.hints as hint, i}{#if i > 0}{" "}{/if}<QuizBlank
                                 length={hint.blankLength}
                                 prefix={hint.prefix}
@@ -208,7 +212,7 @@
                         length={seg.text.length}
                         active={true}
                     />{/if}{:else}<mark class="highlight">{seg.text}</mark
-                >{/if}{:else if seg.type === "clickable" && seg.lemma && !blankMode}<button
+                >{/if}{:else if seg.type === "clickable" && seg.lemma && !blankMode && !disableClickable}<button
                 type="button"
                 class="clickable-word"
                 onclick={() => handleClick(seg.lemma!)}>{seg.text}</button
@@ -250,5 +254,14 @@
         border-radius: 2px;
         font-weight: 500;
         color: var(--color-content-primary);
+    }
+
+    .subtle .highlight {
+        background: rgba(35, 131, 226, 0.1);
+        padding: 1px 2px;
+        margin: 0 -1px;
+        border-radius: 3px;
+        font-weight: 500;
+        color: rgb(35, 131, 226);
     }
 </style>

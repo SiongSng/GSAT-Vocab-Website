@@ -4,267 +4,250 @@
         closeLookupItem,
         closeAllLookups,
     } from "$lib/stores/word-lookup.svelte";
-    import { selectWordAndNavigate } from "$lib/stores/vocab.svelte";
     import AudioButton from "$lib/components/ui/AudioButton.svelte";
-    import type { VocabEntryUnion } from "$lib/types/vocab";
+    import HighlightedText from "$lib/components/ui/HighlightedText.svelte";
+    import WordDetailModal from "$lib/components/srs/WordDetailModal.svelte";
+    import type { VocabEntryUnion, WordEntry, PhraseEntry, VocabSense } from "$lib/types/vocab";
     import { isWordEntry, isPhraseEntry } from "$lib/types/vocab";
 
     const lookup = getWordLookupStore();
 
-    function getPrimarySense(entry: VocabEntryUnion | null) {
-        if (!entry) return null;
+    let modalEntry = $state<WordEntry | PhraseEntry | null>(null);
+    let isModalOpen = $state(false);
+
+    function getSenses(entry: VocabEntryUnion | null): VocabSense[] {
+        if (!entry) return [];
         if (isWordEntry(entry) || isPhraseEntry(entry)) {
-            return entry.senses?.[0] ?? null;
+            return entry.senses ?? [];
         }
-        return null;
+        return [];
     }
 
-    function getLevel(entry: VocabEntryUnion | null): number | null {
-        if (!entry) return null;
-        if (isWordEntry(entry)) return entry.level;
-        return null;
-    }
-
-    function getIsOfficial(entry: VocabEntryUnion | null): boolean {
-        if (!entry) return false;
-        if (isWordEntry(entry)) return entry.in_official_list;
-        return false;
-    }
-
-    function getSenseCount(entry: VocabEntryUnion | null): number {
-        if (!entry) return 0;
+    function handleWordClick(entry: VocabEntryUnion) {
         if (isWordEntry(entry) || isPhraseEntry(entry)) {
-            return entry.senses?.length ?? 0;
+            modalEntry = entry;
+            isModalOpen = true;
         }
-        return 0;
     }
 
-    function handleWordClick(lemma: string) {
-        selectWordAndNavigate(lemma);
+    function handleCloseModal() {
+        isModalOpen = false;
+        modalEntry = null;
     }
 
-    function formatLevel(level: number | null): string {
-        if (level === null) return "";
-        return `L${level}`;
+    function getExample(sense: VocabSense): string | null {
+        return sense.generated_example || null;
     }
 
-    function handleClose(lemma: string) {
+    function handleClose(lemma: string, e: MouseEvent) {
+        e.stopPropagation();
         closeLookupItem(lemma);
     }
 </script>
 
 {#if lookup.hasItems && lookup.position === "sidebar"}
-    <aside class="lookup-sidebar">
-        <div class="sidebar-header">
-            <h3
-                class="text-xs font-semibold text-content-tertiary uppercase tracking-wider"
-            >
-                Quick Lookup
-            </h3>
+    <aside class="sidebar">
+        <div class="header">
+            <span class="title">Quick Lookup</span>
             <button
                 type="button"
-                class="close-btn"
+                class="icon-btn"
                 onclick={closeAllLookups}
                 aria-label="Close all"
             >
-                <svg
-                    class="w-4 h-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke-width="1.5"
-                    stroke="currentColor"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M6 18 18 6M6 6l12 12"
-                    />
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
 
-        <div class="sidebar-content">
+        <div class="content">
             {#each lookup.items as item (item.lemma)}
-                {@const primarySense = getPrimarySense(item.entry)}
-                <div class="lookup-card">
-                    <div class="card-header">
-                        {#if item.isLoading}
-                            <div class="skeleton-text h-5 w-20"></div>
-                        {:else if item.entry}
-                            <div class="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    class="text-lg font-semibold text-accent hover:underline"
-                                    onclick={() => handleWordClick(item.lemma)}
-                                >
-                                    {item.entry.lemma}
-                                </button>
-                                <AudioButton text={item.lemma} size="sm" />
-                            </div>
-                        {:else}
-                            <span class="text-sm text-content-tertiary"
-                                >{item.lemma}</span
-                            >
-                        {/if}
-                        <button
-                            type="button"
-                            class="close-card-btn"
-                            onclick={() => handleClose(item.lemma)}
-                            aria-label="Close"
-                        >
-                            <svg
-                                class="w-3.5 h-3.5"
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke-width="1.5"
-                                stroke="currentColor"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M6 18 18 6M6 6l12 12"
-                                />
-                            </svg>
-                        </button>
-                    </div>
-
+                {@const senses = getSenses(item.entry)}
+                <article class="card">
                     {#if item.isLoading}
+                        <div class="card-header">
+                            <div class="skeleton" style="width: 80px; height: 22px;"></div>
+                        </div>
                         <div class="card-body">
-                            <div class="skeleton-text h-4 w-16 mb-3"></div>
-                            <div class="skeleton-text h-4 w-full mb-2"></div>
-                            <div class="skeleton-text h-4 w-3/4"></div>
+                            <div class="skeleton" style="width: 100%; height: 16px;"></div>
+                            <div class="skeleton" style="width: 70%; height: 16px; margin-top: 8px;"></div>
                         </div>
                     {:else if item.entry}
-                        {@const level = getLevel(item.entry)}
-                        {@const isOfficial = getIsOfficial(item.entry)}
-                        {@const senseCount = getSenseCount(item.entry)}
-                        <div class="card-body">
-                            <div
-                                class="flex items-center gap-1 text-xs text-content-tertiary mb-2"
+                        <div class="card-header">
+                            <button
+                                type="button"
+                                class="word-link"
+                                onclick={() => handleWordClick(item.entry!)}
                             >
-                                {#if primarySense}
-                                    <span>{primarySense.pos}</span>
-                                {/if}
-                                {#if level !== null}
-                                    <span>·</span>
-                                    <span>{formatLevel(level)}</span>
-                                {/if}
-                                {#if isOfficial}
-                                    <span>·</span>
-                                    <span class="text-accent">官方</span>
+                                {item.entry.lemma}
+                            </button>
+                            <div class="actions">
+                                <AudioButton text={item.lemma} size="sm" />
+                                <button
+                                    type="button"
+                                    class="close-btn"
+                                    onclick={(e) => handleClose(item.lemma, e)}
+                                    aria-label="Close"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {#if senses.length > 0}
+                            {@const displaySenses = senses.slice(0, 3)}
+                            {@const remaining = senses.length - 3}
+                            <div class="card-body">
+                                {#each displaySenses as sense}
+                                    {@const example = getExample(sense)}
+                                    <div class="sense">
+                                        <p class="def">
+                                            {#if sense.pos}<span class="pos">{sense.pos}</span>{/if}{sense.zh_def}
+                                        </p>
+                                        {#if example}
+                                            <p class="example"><HighlightedText
+                                                text={example}
+                                                highlightLemma={item.entry?.lemma}
+                                                disableClickable={true}
+                                                variant="subtle"
+                                            /></p>
+                                        {/if}
+                                    </div>
+                                {/each}
+                                {#if remaining > 0}
+                                    <button
+                                        type="button"
+                                        class="more-btn"
+                                        onclick={() => handleWordClick(item.entry!)}
+                                    >
+                                        +{remaining} 更多
+                                    </button>
                                 {/if}
                             </div>
-
-                            {#if primarySense}
-                                <p
-                                    class="text-sm text-content-primary leading-relaxed mb-1"
-                                >
-                                    {primarySense.zh_def}
-                                </p>
-                                {#if primarySense.en_def}
-                                    <p
-                                        class="text-xs text-content-secondary leading-relaxed"
-                                    >
-                                        {primarySense.en_def}
-                                    </p>
-                                {/if}
-                            {/if}
-
-                            {#if senseCount > 1}
-                                <p class="text-xs text-content-tertiary mt-2">
-                                    +{senseCount - 1} 其他涵義
-                                </p>
-                            {/if}
-                        </div>
+                        {/if}
                     {:else}
+                        <div class="card-header">
+                            <span class="word-not-found">{item.lemma}</span>
+                            <button
+                                type="button"
+                                class="close-btn"
+                                onclick={(e) => handleClose(item.lemma, e)}
+                                aria-label="Close"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                         <div class="card-body">
-                            <p class="text-sm text-content-tertiary">
-                                找不到此單字
-                            </p>
+                            <p class="not-found-msg">找不到此單字</p>
                         </div>
                     {/if}
-                </div>
+                </article>
             {/each}
         </div>
     </aside>
 {/if}
 
+{#if modalEntry}
+    <WordDetailModal
+        entry={modalEntry}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+    />
+{/if}
+
 <style>
-    .lookup-sidebar {
+    .sidebar {
         position: fixed;
         top: 0;
         right: 0;
         bottom: 0;
-        width: 300px;
-        background-color: var(--color-surface-primary);
-        border-left: 1px solid var(--color-border);
-        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.08);
+        width: 340px;
+        background: #f8f8f7;
+        box-shadow:
+            rgba(0, 0, 0, 0.024) 0px 0px 0px 1px,
+            rgba(0, 0, 0, 0.05) 0px 3px 6px,
+            rgba(0, 0, 0, 0.04) 0px 9px 24px;
         z-index: 90;
         display: flex;
         flex-direction: column;
-        animation: slideIn 0.2s ease-out;
+        animation: slideIn 0.15s ease-out;
     }
 
     @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-        }
-        to {
-            transform: translateX(0);
-        }
+        from { opacity: 0; transform: translateX(10px); }
+        to { opacity: 1; transform: translateX(0); }
     }
 
-    .sidebar-header {
+    .header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--color-border);
+        padding: 14px 16px;
         flex-shrink: 0;
     }
 
-    .close-btn {
-        padding: 4px;
-        border-radius: 4px;
-        color: var(--color-content-tertiary);
-        transition: all 0.15s ease;
+    .title {
+        font-size: 11px;
+        font-weight: 600;
+        color: rgba(55, 53, 47, 0.45);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
-    .close-btn:hover {
-        background-color: var(--color-surface-hover);
-        color: var(--color-content-secondary);
+    .icon-btn {
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        color: rgba(55, 53, 47, 0.4);
+        transition: all 0.12s ease;
     }
 
-    .sidebar-content {
+    .icon-btn:hover {
+        background: rgba(55, 53, 47, 0.08);
+        color: rgba(55, 53, 47, 0.7);
+    }
+
+    .content {
         flex: 1;
         min-height: 0;
         overflow-y: auto;
-        padding: 16px;
+        padding: 0 12px 16px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
     }
 
-    .lookup-card {
-        background-color: var(--color-surface-page);
-        border: 1px solid var(--color-border);
+    .card {
+        background: white;
         border-radius: 10px;
+        box-shadow:
+            0 0 0 1px rgba(0, 0, 0, 0.03),
+            0 2px 4px rgba(0, 0, 0, 0.04),
+            0 4px 12px rgba(0, 0, 0, 0.03);
         overflow: hidden;
-        animation: cardIn 0.15s ease-out;
+        animation: cardIn 0.12s ease-out;
+        transition: box-shadow 0.15s ease;
         flex-shrink: 0;
     }
 
+    .card:hover {
+        box-shadow:
+            0 0 0 1px rgba(0, 0, 0, 0.04),
+            0 4px 8px rgba(0, 0, 0, 0.06),
+            0 8px 20px rgba(0, 0, 0, 0.04);
+    }
+
     @keyframes cardIn {
-        from {
-            opacity: 0;
-            transform: translateY(-8px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 
     .card-header {
@@ -272,44 +255,115 @@
         justify-content: space-between;
         align-items: center;
         padding: 12px 14px;
-        background-color: var(--color-surface-secondary);
-        border-bottom: 1px solid var(--color-border);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.04);
     }
 
-    .close-card-btn {
-        padding: 4px;
-        border-radius: 4px;
-        color: var(--color-content-tertiary);
-        transition: all 0.15s ease;
+    .word-link {
+        font-size: 17px;
+        font-weight: 600;
+        color: rgb(55, 53, 47);
+        letter-spacing: -0.01em;
+        transition: color 0.1s;
     }
 
-    .close-card-btn:hover {
-        background-color: var(--color-surface-hover);
-        color: var(--color-content-secondary);
+    .word-link:hover {
+        color: #2383e2;
+    }
+
+    .actions {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .close-btn {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        color: rgba(55, 53, 47, 0.35);
+        transition: all 0.1s;
+    }
+
+    .close-btn:hover {
+        background: rgba(55, 53, 47, 0.08);
+        color: rgba(55, 53, 47, 0.65);
+    }
+
+    .word-not-found {
+        font-size: 15px;
+        color: rgba(55, 53, 47, 0.5);
     }
 
     .card-body {
         padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
     }
 
-    .skeleton-text {
+    .sense {
+        line-height: 1.55;
+    }
+
+    .def {
+        margin: 0;
+        font-size: 14px;
+        color: rgb(55, 53, 47);
+    }
+
+    .pos {
+        font-size: 11px;
+        font-weight: 500;
+        color: rgba(55, 53, 47, 0.45);
+        margin-right: 5px;
+    }
+
+    .example {
+        margin: 6px 0 0;
+        font-size: 13px;
+        color: rgba(55, 53, 47, 0.6);
+        line-height: 1.65;
+    }
+
+    .not-found-msg {
+        margin: 0;
+        font-size: 13px;
+        color: rgba(55, 53, 47, 0.45);
+    }
+
+    .more-btn {
+        font-size: 13px;
+        font-weight: 500;
+        color: rgba(55, 53, 47, 0.5);
+        padding: 6px 10px;
+        margin: -4px -10px 0;
+        border-radius: 5px;
+        transition: all 0.1s;
+        align-self: flex-start;
+    }
+
+    .more-btn:hover {
+        background: rgba(55, 53, 47, 0.06);
+        color: rgba(55, 53, 47, 0.7);
+    }
+
+    .skeleton {
         background: linear-gradient(
             90deg,
-            var(--color-surface-secondary) 25%,
-            var(--color-surface-page) 50%,
-            var(--color-surface-secondary) 75%
+            rgba(55, 53, 47, 0.06) 0%,
+            rgba(55, 53, 47, 0.03) 50%,
+            rgba(55, 53, 47, 0.06) 100%
         );
         background-size: 200% 100%;
-        animation: shimmer 2s infinite;
         border-radius: 4px;
+        animation: shimmer 1.8s ease-in-out infinite;
     }
 
     @keyframes shimmer {
-        0% {
-            background-position: 200% 0;
-        }
-        100% {
-            background-position: -200% 0;
-        }
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
     }
 </style>
