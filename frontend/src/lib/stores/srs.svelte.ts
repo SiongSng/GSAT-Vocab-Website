@@ -12,7 +12,7 @@ import {
   ensureCard,
   updateCard,
   addReviewLog,
-  forceSave,
+  saveNow,
   hasCardForLemma,
   getCardsByLemma,
   shouldUnlockSecondarySenses,
@@ -555,14 +555,18 @@ export function rateCard(rating: Rating): void {
   const wasNew = store.currentCard.state === State.New;
   const wasReview = store.currentCard.state === State.Review;
 
+  const existingCard = getCard(store.currentCard.lemma, store.currentCard.sense_id);
+
   const updatedCard: SRSCard = {
     ...newCard,
     lemma: store.currentCard.lemma,
     sense_id: store.currentCard.sense_id,
     entry_type: store.currentCard.entry_type,
+    skills: existingCard?.skills,
   };
 
   updateCard(updatedCard);
+  store.statsVersion++;
 
   store.sessionStats.cardsStudied++;
   switch (rating) {
@@ -599,11 +603,10 @@ export function rateCard(rating: Rating): void {
     lemma: updatedCard.lemma,
     sense_id: updatedCard.sense_id,
   };
-  queueMicrotask(() => {
-    addReviewLog(reviewLog);
-    updateDailyStats(rating, wasNew);
-    store.statsVersion++;
-  });
+
+  void saveNow();
+  void addReviewLog(reviewLog).catch(() => {});
+  void updateDailyStats(rating, wasNew).catch(() => {});
 }
 
 function moveToNextCard(): void {
@@ -628,14 +631,18 @@ export async function endStudySession(): Promise<void> {
     store.sessionStats.cardsStudied > 0 &&
     !store.cramMode
   ) {
-    const startTime = store.sessionStats.startTime.getTime();
-    const endTime = Date.now();
-    await addSessionLog(
-      store.sessionId,
-      startTime,
-      endTime,
-      store.sessionStats.cardsStudied,
-    );
+    try {
+      const startTime = store.sessionStats.startTime.getTime();
+      const endTime = Date.now();
+      await addSessionLog(
+        store.sessionId,
+        startTime,
+        endTime,
+        store.sessionStats.cardsStudied,
+      );
+    } catch {
+      // ignore
+    }
   }
 
   store.isStudying = false;
@@ -648,7 +655,11 @@ export async function endStudySession(): Promise<void> {
   store.sessionId = null;
   store.cramMode = false;
   store.statsVersion++;
-  forceSave();
+  try {
+    await saveNow();
+  } catch {
+    // ignore
+  }
 }
 
 export function getIntervalText(rating: Rating): string {

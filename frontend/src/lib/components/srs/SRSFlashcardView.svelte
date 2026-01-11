@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import {
         getSRSStore,
         initSRS,
@@ -23,6 +23,10 @@
         isInitializing = false;
     });
 
+    onDestroy(() => {
+        void endStudySession();
+    });
+
     $effect(() => {
         if (srs.isStudying && srs.isComplete) {
             viewState = "complete";
@@ -32,14 +36,14 @@
     function handleStart(options: SessionOptions) {
         startStudySession(options);
         if (srs.studyQueue.length === 0) {
-            endStudySession();
+            void endStudySession();
             return;
         }
         viewState = "studying";
     }
 
     function handleBackToDashboard() {
-        endStudySession();
+        void endStudySession();
         viewState = "dashboard";
     }
 </script>

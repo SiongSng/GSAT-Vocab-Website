@@ -7,6 +7,7 @@ import {
   updateCard,
   addReviewLog,
   updateDailyStats,
+  saveNow,
 } from "./srs-storage";
 import type { SRSCard, SRSReviewLog, SkillState } from "$lib/types/srs";
 import {
@@ -163,16 +164,16 @@ export function recordQuizResult(result: QuizResult): void {
     sense_id: updatedCard.sense_id,
   };
 
-  queueMicrotask(() => {
-    addReviewLog(reviewLog);
-    updateDailyStats(rating, wasNew, result.response_time_ms);
-  });
+  void addReviewLog(reviewLog).catch(() => {});
+  void updateDailyStats(rating, wasNew, result.response_time_ms).catch(() => {});
 }
 
 export function applyQuizSessionResults(results: QuizResult[]): void {
   for (const result of results) {
     recordQuizResult(result);
   }
+
+  void saveNow();
 }
 
 export interface QuizSessionSummary {

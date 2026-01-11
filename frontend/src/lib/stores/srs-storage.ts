@@ -33,6 +33,8 @@ let db: IDBPDatabase<SRSDatabase> | null = null;
 let cardsCache: Map<string, SRSCard> = new Map();
 let cardsByLemmaCache: Map<string, SRSCard[]> = new Map();
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let dirtyCardKeys: Set<string> = new Set();
+let saveChain: Promise<void> = Promise.resolve();
 
 const SAVE_DEBOUNCE_MS = 1000;
 
@@ -170,6 +172,72 @@ function addToLemmaIndex(card: SRSCard): void {
   }
 }
 
+function toDate(value: unknown, fallback: Date = new Date()): Date {
+  try {
+    if (value instanceof Date) {
+      return new Date(value.getTime());
+    }
+    return new Date(value as any);
+  } catch {
+    return new Date(fallback.getTime());
+  }
+}
+
+function toNumber(value: unknown, fallback: number = 0): number {
+  try {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function toState(value: unknown, fallback: State = State.New): State {
+  const n = toNumber(value, fallback);
+  return n === State.New || n === State.Learning || n === State.Review || n === State.Relearning
+    ? (n as State)
+    : fallback;
+}
+
+function normalizeSkillStateForStorage(state: SkillState): SkillState {
+  return {
+    due: toDate(state.due),
+    stability: toNumber(state.stability),
+    difficulty: toNumber(state.difficulty),
+    reps: toNumber(state.reps),
+    lapses: toNumber(state.lapses),
+    state: toState(state.state),
+    last_review: state.last_review ? toDate(state.last_review) : undefined,
+  };
+}
+
+function normalizeCardForStorage(card: SRSCard): SRSCard {
+  const normalizedSkills: SRSCard["skills"] = card.skills
+    ? Object.fromEntries(
+        Object.entries(card.skills)
+          .filter(([, value]) => !!value)
+          .map(([skill, value]) => [skill, normalizeSkillStateForStorage(value as SkillState)]),
+      )
+    : undefined;
+
+  return {
+    due: toDate(card.due),
+    stability: toNumber(card.stability),
+    difficulty: toNumber(card.difficulty),
+    elapsed_days: toNumber((card as any).elapsed_days),
+    scheduled_days: toNumber((card as any).scheduled_days),
+    learning_steps: toNumber((card as any).learning_steps),
+    reps: toNumber(card.reps),
+    lapses: toNumber(card.lapses),
+    state: toState(card.state),
+    last_review: card.last_review ? toDate(card.last_review) : undefined,
+    lemma: String(card.lemma ?? ""),
+    sense_id: String(card.sense_id ?? ""),
+    entry_type: card.entry_type === "phrase" ? "phrase" : "word",
+    skills: normalizedSkills,
+  };
+}
+
 function removeFromLemmaIndex(lemma: string, senseId: string): void {
   const existing = cardsByLemmaCache.get(lemma);
   if (existing) {
@@ -197,7 +265,7 @@ export async function initStorage(): Promise<void> {
     if (updated !== card) {
       needsUpdate = true;
     }
-    updatedCards.push(updated);
+    updatedCards.push(normalizeCardForStorage(updated));
   }
 
   if (needsUpdate && !migrated) {
@@ -263,7 +331,7 @@ export function createCard(
     sense_id: senseId,
     entry_type: entryType,
   };
-  return card;
+  return normalizeCardForStorage(card);
 }
 
 export function ensureCard(
@@ -277,15 +345,19 @@ export function ensureCard(
     card = createCard(lemma, senseId, entryType);
     cardsCache.set(key, card);
     addToLemmaIndex(card);
+    dirtyCardKeys.add(key);
     scheduleSave();
   }
   return card;
 }
 
 export function updateCard(card: SRSCard): void {
-  cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
-  addToLemmaIndex(card);
-  setLastUpdated(Date.now());
+  const normalized = normalizeCardForStorage(card);
+  const key = createCardKey(normalized.lemma, normalized.sense_id);
+  cardsCache.set(key, normalized);
+  addToLemmaIndex(normalized);
+  dirtyCardKeys.add(key);
+  void setLastUpdated(Date.now()).catch(() => {});
   scheduleSave();
   notifyDataChange();
 }
@@ -298,11 +370,13 @@ export async function setAllCards(cards: SRSCard[]): Promise<void> {
   cardsCache.clear();
   cardsByLemmaCache.clear();
   for (const card of cards) {
-    cardsCache.set(createCardKey(card.lemma, card.sense_id), card);
-    await store.put(card);
+    const normalized = normalizeCardForStorage(card);
+    cardsCache.set(createCardKey(normalized.lemma, normalized.sense_id), normalized);
+    await store.put(normalized);
   }
   await tx.done;
-  rebuildLemmaIndex(cards);
+  rebuildLemmaIndex(Array.from(cardsCache.values()));
+  dirtyCardKeys = new Set();
 }
 
 export async function getLastUpdated(): Promise<number> {
@@ -341,21 +415,63 @@ function scheduleSave(): void {
     clearTimeout(saveDebounceTimer);
   }
   saveDebounceTimer = setTimeout(() => {
-    flushToIndexedDB();
+    void saveNow();
     saveDebounceTimer = null;
   }, SAVE_DEBOUNCE_MS);
 }
 
-async function flushToIndexedDB(): Promise<void> {
-  const database = await getDB();
+async function saveCard(database: IDBPDatabase<SRSDatabase>, card: SRSCard): Promise<void> {
   const tx = database.transaction(CARDS_STORE, "readwrite");
   const store = tx.objectStore(CARDS_STORE);
-
-  const promises: Promise<IDBValidKey>[] = Array.from(cardsCache.values()).map(
-    (card) => store.put(card),
-  );
-  await Promise.all(promises);
+  await store.put(normalizeCardForStorage(card));
   await tx.done;
+}
+
+async function saveDirtyCards(): Promise<void> {
+  if (dirtyCardKeys.size === 0) return;
+
+  const database = await getDB();
+
+  while (dirtyCardKeys.size > 0) {
+    const keys = [...dirtyCardKeys];
+    dirtyCardKeys = new Set();
+
+    for (const key of keys) {
+      const card = cardsCache.get(key);
+      if (!card) continue;
+
+      try {
+        await saveCard(database, card);
+      } catch (err) {
+        try {
+          const stripped = normalizeCardForStorage({ ...card, skills: undefined });
+          await saveCard(database, stripped);
+          cardsCache.set(key, stripped);
+          addToLemmaIndex(stripped);
+        } catch {
+          console.warn("Failed to persist SRS card", {
+            lemma: card.lemma,
+            sense_id: card.sense_id,
+            err,
+          });
+        }
+      }
+    }
+  }
+}
+
+export async function saveNow(): Promise<void> {
+  saveChain = saveChain
+    .then(() => saveDirtyCards())
+    .catch(async (err) => {
+      console.warn("SRS save failed", err);
+      try {
+        await saveDirtyCards();
+      } catch (err2) {
+        console.warn("SRS save retry failed", err2);
+      }
+    });
+  return saveChain;
 }
 
 export async function forceSave(): Promise<void> {
@@ -363,7 +479,8 @@ export async function forceSave(): Promise<void> {
     clearTimeout(saveDebounceTimer);
     saveDebounceTimer = null;
   }
-  await flushToIndexedDB();
+  dirtyCardKeys = new Set(cardsCache.keys());
+  await saveNow();
 }
 
 export async function getMeta<T>(key: string): Promise<T | undefined> {
