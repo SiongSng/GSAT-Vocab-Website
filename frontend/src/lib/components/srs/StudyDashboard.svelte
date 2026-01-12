@@ -36,6 +36,7 @@
     const LEVEL_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 
     export type StudyPriority = "mixed" | "new_first" | "review_first";
+    export type VocabTypeFilter = "all" | "word" | "phrase";
 
     type CustomDeck = {
         id: string;
@@ -50,6 +51,7 @@
         smartMode: boolean;
         levelFilter: number[];
         studyPriority: StudyPriority;
+        vocabTypeFilter: VocabTypeFilter;
     }
 
     const defaultSettings: StudySettings = {
@@ -58,6 +60,7 @@
         smartMode: true,
         levelFilter: [],
         studyPriority: "mixed",
+        vocabTypeFilter: "all",
     };
 
     let newCardLimit = $state(defaultSettings.newCardLimit);
@@ -65,6 +68,7 @@
     let smartMode = $state(defaultSettings.smartMode);
     let levelFilter: number[] = $state(defaultSettings.levelFilter);
     let studyPriority: StudyPriority = $state(defaultSettings.studyPriority);
+    let vocabTypeFilter: VocabTypeFilter = $state(defaultSettings.vocabTypeFilter);
     let showSettings = $state(false);
     let isCustomDeckLoaded = $state(false);
     let todayNewCardsStudied = $state(0);
@@ -98,6 +102,8 @@
                     settings.levelFilter ?? defaultSettings.levelFilter;
                 studyPriority =
                     settings.studyPriority ?? defaultSettings.studyPriority;
+                vocabTypeFilter =
+                    settings.vocabTypeFilter ?? defaultSettings.vocabTypeFilter;
             }
         } catch {
             // ignore
@@ -113,6 +119,7 @@
                 smartMode,
                 levelFilter,
                 studyPriority,
+                vocabTypeFilter,
             };
             safeSetItem(
                 STORAGE_KEYS.STUDY_SETTINGS,
@@ -149,6 +156,7 @@
         smartMode;
         levelFilter;
         studyPriority;
+        vocabTypeFilter;
         saveSettings();
     });
 
@@ -343,6 +351,11 @@
 
         // Only include words and phrases (patterns are not SRS eligible)
         pool = pool.filter((w) => w.type === "word" || w.type === "phrase");
+
+        // Apply vocab type filter
+        if (vocabTypeFilter !== "all") {
+            pool = pool.filter((w) => w.type === vocabTypeFilter);
+        }
 
         // Exclude already learned (non-New state) lemmas
         pool = pool.filter((w) => !learnedLemmaSet.has(w.lemma));
@@ -818,6 +831,41 @@
                             .join("、")} 的單字
                     {/if}
                 </p>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>詞彙類型</span>
+                    <HelpTooltip text="限制新卡片範圍為單字或片語" />
+                </div>
+                <div class="setting-row-control full-width">
+                    <div class="segmented-control">
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={vocabTypeFilter === "all"}
+                            onclick={() => (vocabTypeFilter = "all")}
+                        >
+                            全部
+                        </button>
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={vocabTypeFilter === "word"}
+                            onclick={() => (vocabTypeFilter = "word")}
+                        >
+                            單字
+                        </button>
+                        <button
+                            type="button"
+                            class="segment"
+                            class:segment-active={vocabTypeFilter === "phrase"}
+                            onclick={() => (vocabTypeFilter = "phrase")}
+                        >
+                            片語
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="setting-row">
