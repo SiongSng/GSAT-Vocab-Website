@@ -112,7 +112,7 @@ export function recordQuizResult(result: QuizResult): void {
   let card = getCard(result.lemma, result.sense_id);
 
   if (!card) {
-    card = ensureCard(result.lemma, result.sense_id, result.entry_type);
+    card = ensureCard(result.lemma, result.sense_id, result.entry_type).card;
   }
 
   const rating = mapQuizResultToRating(result);

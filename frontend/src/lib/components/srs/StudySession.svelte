@@ -7,6 +7,7 @@
         flipCard,
         rateCard,
         showAnswer,
+        tryUnlockNextSense,
     } from "$lib/stores/srs.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { getSRSEligibleEntry, getWordCached, getPhraseCached } from "$lib/stores/vocab-db";
@@ -96,7 +97,11 @@
     }
 
     function handleRate(rating: Rating) {
+        const entryBeforeRate = vocabEntry;
         rateCard(rating);
+        if (entryBeforeRate) {
+            tryUnlockNextSense(entryBeforeRate);
+        }
     }
 
     function handleKeydown(event: KeyboardEvent) {

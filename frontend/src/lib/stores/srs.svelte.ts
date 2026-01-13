@@ -13,9 +13,10 @@ import {
   updateCard,
   addReviewLog,
   saveNow,
+  forceSave,
   hasCardForLemma,
   getCardsByLemma,
-  shouldUnlockSecondarySenses,
+  getNextUnlockableSense,
   updateDailyStats,
   addSessionLog,
   migratePrimarySenseIds,
@@ -86,21 +87,56 @@ function createEmptySessionStats(): StudySessionStats {
   };
 }
 
-const deckStats = $derived<DeckStats>({
-  newCount:
-    store.initialized && store.statsVersion >= 0 ? getNewCards().length : 0,
-  learningCount:
-    store.initialized && store.statsVersion >= 0
-      ? getLearningCards().length
-      : 0,
-  reviewCount:
-    store.initialized && store.statsVersion >= 0 ? getReviewCards().length : 0,
-  relearningCount:
-    store.initialized && store.statsVersion >= 0
-      ? getAllCards().filter((c) => c.state === State.Relearning).length
-      : 0,
-  totalDue:
-    store.initialized && store.statsVersion >= 0 ? getDueCards().length : 0,
+function countTrueNewCards(): number {
+  const allNewCards = getNewCards();
+  const counted = new Set<string>();
+
+  for (const card of allNewCards) {
+    if (counted.has(card.lemma)) continue;
+    const cardsForLemma = getCardsByLemma(card.lemma);
+    const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
+    if (!hasLearnedCards) {
+      counted.add(card.lemma);
+    }
+  }
+
+  return counted.size;
+}
+
+function countUnlockedSecondarySenses(): number {
+  const allNewCards = getNewCards();
+  let count = 0;
+
+  for (const card of allNewCards) {
+    const cardsForLemma = getCardsByLemma(card.lemma);
+    if (cardsForLemma.length <= 1) continue;
+    const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
+    if (hasLearnedCards) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+const deckStats = $derived.by<DeckStats>(() => {
+  void store.statsVersion;
+  if (!store.initialized) {
+    return {
+      newCount: 0,
+      learningCount: 0,
+      reviewCount: 0,
+      relearningCount: 0,
+      totalDue: 0,
+    };
+  }
+  return {
+    newCount: countTrueNewCards(),
+    learningCount: getLearningCards().length + countUnlockedSecondarySenses(),
+    reviewCount: getReviewCards().length,
+    relearningCount: getAllCards().filter((c) => c.state === State.Relearning).length,
+    totalDue: getDueCards().length,
+  };
 });
 
 export function getSRSStore() {
@@ -187,6 +223,42 @@ export async function runSRSSenseMigration(
   return migrated;
 }
 
+export async function ensureSecondarySensesForUnlockedLemmas(
+  getEntry: (lemma: string) => Promise<SRSEligibleEntry | undefined>,
+): Promise<number> {
+  if (!store.initialized) {
+    await initSRS();
+  }
+
+  const lemmasWithCards = new Set(getAllCards().map((c) => c.lemma));
+  let createdCount = 0;
+
+  for (const lemma of lemmasWithCards) {
+    const entry = await getEntry(lemma);
+    if (!entry) continue;
+
+    const prioritizedSenses = getPrioritizedSenses(entry);
+    if (prioritizedSenses.length <= 1) continue;
+
+    const prioritizedSenseIds = prioritizedSenses.map((p) => p.sense.sense_id);
+    const entryType = isWordEntry(entry) ? "word" : "phrase";
+
+    let next = getNextUnlockableSense(lemma, prioritizedSenseIds);
+    while (next !== null) {
+      const { created } = ensureCard(lemma, next.senseId, entryType);
+      if (created) createdCount++;
+      next = getNextUnlockableSense(lemma, prioritizedSenseIds);
+    }
+  }
+
+  if (createdCount > 0) {
+    store.statsVersion++;
+    await forceSave();
+  }
+
+  return createdCount;
+}
+
 function loadDailyProgress(): void {
   if (!browser) return;
   const today = getTodayKey();
@@ -253,7 +325,7 @@ export function ensureEntryCard(entry: SRSEligibleEntry): SRSCard | null {
   }
 
   const primarySense = prioritizedSenses[0].sense;
-  return ensureCard(entry.lemma, primarySense.sense_id, entryType);
+  return ensureCard(entry.lemma, primarySense.sense_id, entryType).card;
 }
 
 export function addEntriesToSRS(entries: SRSEligibleEntry[]): void {
@@ -302,36 +374,48 @@ function getEligibleNewCards(
       const newCards = cardsForLemma.filter((c) => c.state === State.New);
       if (newCards.length === 0) continue;
 
-      const primaryCard = newCards[0];
-      const isPrimarySense = cardsForLemma.length === 1 || cardsForLemma[0] === primaryCard;
+      const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
+      if (hasLearnedCards) continue;
 
-      if (isPrimarySense || shouldUnlockSecondarySenses(lemma)) {
-        result.push(primaryCard);
-      }
+      result.push(newCards[0]);
     }
     return result;
   }
 
   const allNewCards = getNewCards();
-  const cardMap = new Map<string, SRSCard[]>();
+  const cardMap = new Map<string, SRSCard>();
+
+  for (const card of allNewCards) {
+    if (excludeSet.has(card.lemma)) continue;
+    if (cardMap.has(card.lemma)) continue;
+
+    const cardsForLemma = getCardsByLemma(card.lemma);
+    const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
+    if (hasLearnedCards) continue;
+
+    cardMap.set(card.lemma, card);
+  }
+
+  return Array.from(cardMap.values());
+}
+
+function getUnlockedSecondarySenseCards(excludeSet: Set<string>): SRSCard[] {
+  const allNewCards = getNewCards();
+  const result: SRSCard[] = [];
 
   for (const card of allNewCards) {
     if (excludeSet.has(card.lemma)) continue;
 
     const cardsForLemma = getCardsByLemma(card.lemma);
-    const isPrimarySense = cardsForLemma.length === 1 || cardsForLemma[0] === card;
+    if (cardsForLemma.length <= 1) continue;
 
-    const isEligible =
-      isPrimarySense || shouldUnlockSecondarySenses(card.lemma);
+    const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
+    if (!hasLearnedCards) continue;
 
-    if (isEligible) {
-      const existing = cardMap.get(card.lemma) || [];
-      existing.push(card);
-      cardMap.set(card.lemma, existing);
-    }
+    result.push(card);
   }
 
-  return Array.from(cardMap.values()).flat();
+  return result;
 }
 
 export type StudyPriority = "mixed" | "new_first" | "review_first";
@@ -369,9 +453,13 @@ function selectSessionCards(options: SessionOptions): SessionCards {
     ? Infinity
     : (options.reviewLimit ?? Infinity);
 
-  const learningCards = getLearningCards().filter(
+  const baseLearningCards = getLearningCards().filter(
     (c) => new Date(c.due) <= now && !excludeSet.has(c.lemma),
   );
+
+  const secondarySenseCards = getUnlockedSecondarySenseCards(excludeSet);
+  const learningCards = [...baseLearningCards, ...secondarySenseCards];
+
   const reviewCards = getReviewCards(now)
     .filter((c) => !excludeSet.has(c.lemma))
     .slice(0, reviewLimit === Infinity ? undefined : reviewLimit);
@@ -765,4 +853,20 @@ export function getSenseIndex(
 
   const idx = prioritized.findIndex((p) => p.sense.sense_id === senseId);
   return idx >= 0 ? idx : 0;
+}
+
+export function tryUnlockNextSense(entry: SRSEligibleEntry): SRSCard | null {
+  const prioritizedSenses = getPrioritizedSenses(entry);
+  if (prioritizedSenses.length <= 1) return null;
+
+  const prioritizedSenseIds = prioritizedSenses.map((p) => p.sense.sense_id);
+  const next = getNextUnlockableSense(entry.lemma, prioritizedSenseIds);
+
+  if (next === null) return null;
+
+  const entryType = isWordEntry(entry) ? "word" : "phrase";
+  const { card: newCard } = ensureCard(entry.lemma, next.senseId, entryType);
+  store.statsVersion++;
+
+  return newCard;
 }

@@ -302,7 +302,8 @@ export function sortSensesByExamFrequency(senses: VocabSense[]): VocabSense[] {
   return [...senses].sort((a, b) => {
     const aCount = a.examples?.length ?? 0;
     const bCount = b.examples?.length ?? 0;
-    return bCount - aCount;
+    if (bCount !== aCount) return bCount - aCount;
+    return a.sense_id.localeCompare(b.sense_id);
   });
 }
 

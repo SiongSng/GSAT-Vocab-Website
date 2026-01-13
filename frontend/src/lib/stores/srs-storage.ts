@@ -338,7 +338,7 @@ export function ensureCard(
   lemma: string,
   senseId: string,
   entryType: "word" | "phrase" = "word",
-): SRSCard {
+): { card: SRSCard; created: boolean } {
   const key = createCardKey(lemma, senseId);
   let card = cardsCache.get(key);
   if (!card) {
@@ -347,8 +347,9 @@ export function ensureCard(
     addToLemmaIndex(card);
     dirtyCardKeys.add(key);
     scheduleSave();
+    return { card, created: true };
   }
-  return card;
+  return { card, created: false };
 }
 
 export function updateCard(card: SRSCard): void {
@@ -479,8 +480,19 @@ export async function forceSave(): Promise<void> {
     clearTimeout(saveDebounceTimer);
     saveDebounceTimer = null;
   }
-  dirtyCardKeys = new Set(cardsCache.keys());
-  await saveNow();
+
+  const database = await getDB();
+  const allCards = Array.from(cardsCache.values());
+
+  const tx = database.transaction(CARDS_STORE, "readwrite");
+  const store = tx.objectStore(CARDS_STORE);
+
+  for (const card of allCards) {
+    await store.put(normalizeCardForStorage(card));
+  }
+
+  await tx.done;
+  dirtyCardKeys.clear();
 }
 
 export async function getMeta<T>(key: string): Promise<T | undefined> {
@@ -529,6 +541,43 @@ export function shouldUnlockSecondarySenses(lemma: string): boolean {
   const primaryCard = getPrimaryCard(lemma);
   if (!primaryCard) return false;
   return primaryCard.reps >= 3;
+}
+
+const SENSE_UNLOCK_BASE_STABILITY = 3.0;
+const SENSE_UNLOCK_FACTOR = 1.5;
+
+export function getSenseUnlockThreshold(senseIndex: number): number {
+  return SENSE_UNLOCK_BASE_STABILITY * Math.pow(SENSE_UNLOCK_FACTOR, senseIndex);
+}
+
+export function getNextUnlockableSense(
+  lemma: string,
+  prioritizedSenseIds: string[],
+): { senseId: string; index: number } | null {
+  if (prioritizedSenseIds.length <= 1) return null;
+
+  const cards = getCardsByLemma(lemma);
+  if (cards.length === 0) return null;
+
+  const cardBySenseId = new Map(cards.map((c) => [c.sense_id, c]));
+
+  let unlockedCount = 0;
+  for (const senseId of prioritizedSenseIds) {
+    const card = cardBySenseId.get(senseId);
+    if (!card) break;
+
+    const threshold = getSenseUnlockThreshold(unlockedCount);
+    if (card.stability < threshold) return null;
+
+    unlockedCount++;
+  }
+
+  if (unlockedCount >= prioritizedSenseIds.length) return null;
+
+  return {
+    senseId: prioritizedSenseIds[unlockedCount],
+    index: unlockedCount,
+  };
 }
 
 export function getSkillState(
@@ -615,27 +664,38 @@ export async function migratePrimarySenseIds(
   const cardsToDelete: SRSCard[] = [];
   const cardsToMigrate: Array<{ oldCard: SRSCard; newSenseId: string }> = [];
 
+  // Delete orphaned cards (lemmas that no longer exist in vocab)
   for (const lemma of orphanedLemmas) {
     const lemmaCards = cards.filter((c) => c.lemma === lemma);
     cardsToDelete.push(...lemmaCards);
   }
 
+  // Find cards with invalid sense_ids and migrate them to primary
   for (const lemma of uniqueLemmas) {
     const entry = entryMap.get(lemma);
     if (!entry) continue;
 
+    const validSenseIds = new Set(entry.senses.map((s) => s.sense_id));
     const primarySenseId = getPrimarySenseId(entry);
     const lemmaCards = cards.filter((c) => c.lemma === lemma);
-    const hasPrimaryCard = lemmaCards.some((c) => c.sense_id === primarySenseId);
+
+    // Check if there's already a card with a valid primary sense_id
+    const hasValidPrimaryCard = lemmaCards.some(
+      (c) => c.sense_id === primarySenseId
+    );
 
     for (const card of lemmaCards) {
-      if (card.sense_id === primarySenseId) {
+      // Skip cards with valid sense_ids
+      if (validSenseIds.has(card.sense_id)) {
         continue;
       }
 
-      if (hasPrimaryCard) {
+      // This card has an invalid sense_id, needs migration
+      if (hasValidPrimaryCard) {
+        // Already have a proper primary card, delete the invalid one
         cardsToDelete.push(card);
       } else {
+        // Migrate the invalid card to primary sense_id
         cardsToMigrate.push({ oldCard: card, newSenseId: primarySenseId });
       }
     }

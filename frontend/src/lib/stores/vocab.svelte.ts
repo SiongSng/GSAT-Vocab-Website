@@ -28,7 +28,11 @@ import {
 } from "./vocab-db";
 import { loadVocabWithVersionCheck, type LoadProgress } from "./vocab-loader";
 import { updateWordStructuredData } from "$lib/utils/seo";
-import { runSRSSenseMigration, runSRSEntryTypeFix } from "./srs.svelte";
+import {
+  runSRSSenseMigration,
+  runSRSEntryTypeFix,
+  ensureSecondarySensesForUnlockedLemmas,
+} from "./srs.svelte";
 
 export type SelectedEntry = WordEntry | PhraseEntry | PatternEntry | null;
 export type SelectedEntryType = "word" | "phrase" | "pattern" | null;
@@ -287,17 +291,29 @@ export async function loadVocabData(): Promise<void> {
     await initVocabDB();
     await downloadAndBuildIndex();
 
-    runSRSSenseMigration(getSRSEligibleEntry).catch((e) => {
+    try {
+      await runSRSSenseMigration(getSRSEligibleEntry);
+    } catch (e) {
       console.warn("SRS sense migration failed:", e);
-    });
+    }
 
-    runSRSEntryTypeFix(getWord, getPhrase).then((fixedCount) => {
+    try {
+      const fixedCount = await runSRSEntryTypeFix(getWord, getPhrase);
       if (fixedCount > 0) {
         console.log(`Fixed entry_type for ${fixedCount} cards`);
       }
-    }).catch((e) => {
+    } catch (e) {
       console.warn("SRS entry type fix failed:", e);
-    });
+    }
+
+    try {
+      const count = await ensureSecondarySensesForUnlockedLemmas(getSRSEligibleEntry);
+      if (count > 0) {
+        console.log(`Unlocked ${count} secondary sense cards`);
+      }
+    } catch (e) {
+      console.warn("Secondary sense unlock failed:", e);
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load vocabulary data";
     console.error("Failed to load vocab data:", e);
