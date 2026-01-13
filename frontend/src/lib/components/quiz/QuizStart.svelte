@@ -9,7 +9,7 @@
     import { goto } from "$app/navigation";
     import { base } from "$app/paths";
     import { getAppStore } from "$lib/stores/app.svelte";
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { onDataChange } from "$lib/stores/srs-storage";
     import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
 
@@ -103,20 +103,21 @@
         return { emoji: "✨", text: "快完成了！" };
     });
 
-    onMount(() => {
-        (async () => {
-            if (vocab.index.length === 0) {
-                await loadVocabData();
-            }
-            setTimeout(() => {
-                isInitializing = false;
-            }, 300);
-        })();
+    const unsubscribeDataChange = onDataChange(() => {
+        dataVersion++;
+    });
 
-        const unsubscribe = onDataChange(() => {
-            dataVersion++;
-        });
-        return unsubscribe;
+    onDestroy(() => {
+        unsubscribeDataChange();
+    });
+
+    onMount(async () => {
+        if (vocab.index.length === 0) {
+            await loadVocabData();
+        }
+        setTimeout(() => {
+            isInitializing = false;
+        }, 300);
     });
 
     function handleStart() {

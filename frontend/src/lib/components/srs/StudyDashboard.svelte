@@ -6,7 +6,7 @@
         getSessionCardCounts,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
-    import { getVocabStore } from "$lib/stores/vocab.svelte";
+    import { getVocabStore, loadVocabData } from "$lib/stores/vocab.svelte";
     import { getAppStore } from "$lib/stores/app.svelte";
     import {
         getAllCards,
@@ -17,8 +17,9 @@
     import { State } from "ts-fsrs";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
+    import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
     import DeckEditor from "./DeckEditor.svelte";
-    import { onDestroy } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import { STORAGE_KEYS } from "$lib/storage-keys";
     import { isWordIndexItem } from "$lib/types/vocab";
 
@@ -78,6 +79,7 @@
     let isDeckModalOpen = $state(false);
     let editingDeckId: string | null = $state(null);
     let dataVersion = $state(0);
+    let isInitializing = $state(true);
 
     const unsubscribeDataChange = onDataChange(() => {
         dataVersion++;
@@ -86,6 +88,15 @@
 
     onDestroy(() => {
         unsubscribeDataChange();
+    });
+
+    onMount(async () => {
+        if (vocab.index.length === 0) {
+            await loadVocabData();
+        }
+        setTimeout(() => {
+            isInitializing = false;
+        }, 300);
     });
 
     function loadSettings(): void {
@@ -490,6 +501,11 @@
     }
 </script>
 
+{#if isInitializing || vocab.isLoading}
+    <div class="sync-wrapper">
+        <SyncIndicator />
+    </div>
+{:else}
 <div class="dashboard-layout">
     <div
         class="main-card bg-surface-primary rounded-lg border border-border p-6 lg:p-8"
@@ -520,7 +536,7 @@
                     >
                     <span class="stats-label">熟悉中</span>
                     <HelpTooltip
-                        text="正在學習的卡片，需要多次練習來鞏固記憶"
+                        text="正在學習的卡片和已解鎖的新義項"
                     />
                 </div>
                 <div class="stats-item">
@@ -738,6 +754,7 @@
         </div>
     </div>
 </div>
+{/if}
 
 {#if app.isMobile}
     <BottomSheet isOpen={isDeckModalOpen} onClose={handleModalClose}>
@@ -955,6 +972,17 @@
 
 <style>
     /* Layout */
+    .sync-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        background: var(--color-surface-primary);
+        border: 1px solid var(--color-border);
+        border-radius: 0.5rem;
+        padding: 2rem;
+    }
+
     .dashboard-layout {
         display: flex;
         flex-direction: column;
