@@ -4,6 +4,7 @@ import type {
   VocabSense,
   ConfusionNote,
   VocabEntry,
+  ExamExample,
 } from "$lib/types/vocab";
 import { isWordEntry } from "$lib/types/vocab";
 import type { SRSCard, SkillType, SkillState } from "$lib/types/srs";
@@ -14,8 +15,8 @@ import {
   getNewSkillsForCard,
 } from "./srs-storage";
 import {
-  getAllWordForms,
   getAllPhraseForms,
+  getBaseForms,
 } from "$lib/utils/word-forms";
 
 export type QuizQuestionType =
@@ -61,7 +62,7 @@ export interface QuizQuestion {
 export interface QuizConfig {
   count: number;
   entry_type?: "word" | "phrase" | "all";
-  force_type?: QuizQuestionType;
+  force_types?: QuizQuestionType[];
   specific_lemmas?: string[];
 }
 
@@ -106,12 +107,195 @@ function isLearned(card: SRSCard): boolean {
   return card.state !== State.New;
 }
 
+interface ExampleScoringContext {
+  quizType: QuizQuestionType;
+}
+
+function scoreExample(
+  example: ExamExample,
+  context: ExampleScoringContext,
+): number {
+  let score = 0;
+  const source = example.source;
+
+  const roleScores: Record<string, Record<QuizQuestionType, number>> = {
+    correct_answer: {
+      recognition: 10,
+      reverse: 10,
+      fill_blank: 15,
+      spelling: 15,
+      distinction: 20,
+    },
+    notable_phrase: {
+      recognition: 5,
+      reverse: 5,
+      fill_blank: 8,
+      spelling: 5,
+      distinction: 5,
+    },
+    notable_pattern: {
+      recognition: 4,
+      reverse: 4,
+      fill_blank: 6,
+      spelling: 4,
+      distinction: 4,
+    },
+    distractor: {
+      recognition: 3,
+      reverse: 3,
+      fill_blank: 5,
+      spelling: 3,
+      distinction: 10,
+    },
+  };
+  score += roleScores[source.role ?? ""]?.[context.quizType] ?? 1;
+
+  if (context.quizType === "fill_blank" || context.quizType === "spelling") {
+    if (source.sentence_role === "cloze") score += 10;
+    else if (source.sentence_role === "option") score += 5;
+  }
+
+  if (source.exam_type === "gsat" || source.exam_type === "ast") score += 5;
+  else if (source.exam_type === "gsat_ref") score += 2;
+
+  const currentYear = new Date().getFullYear() - 1911;
+  const yearDiff = currentYear - source.year;
+  score += Math.max(0, 5 - yearDiff);
+
+  return score;
+}
+
+function selectBestExample(
+  examples: ExamExample[],
+  context: ExampleScoringContext,
+): ExamExample | null {
+  if (!examples?.length) return null;
+  if (examples.length === 1) return examples[0];
+
+  const scored = examples.map((ex) => ({
+    example: ex,
+    score: scoreExample(ex, context),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+
+  const topScore = scored[0].score;
+  const THRESHOLD_RATIO = 0.7;
+  const eligibleCandidates = scored.filter(
+    (s) => s.score >= topScore * THRESHOLD_RATIO,
+  );
+
+  return eligibleCandidates[
+    Math.floor(Math.random() * eligibleCandidates.length)
+  ].example;
+}
+
+// TODO: Remove this function after backend fixes confusion_notes generation
+// Backend sometimes generates "word1 (pos) vs. word2 (pos)" format, needs frontend parsing
+function parseConfusedWith(confusedWith: string): string | null {
+  const trimmed = confusedWith.trim();
+
+  const vsMatch = trimmed.match(/\bvs\.?\s+(\w+)/i);
+  if (vsMatch) {
+    return vsMatch[1].toLowerCase();
+  }
+
+  const posMatch = trimmed.match(/^(\w+)\s*\(/);
+  if (posMatch) {
+    return posMatch[1].toLowerCase();
+  }
+
+  if (/^[a-zA-Z-]+$/.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  // TODO: Log unparseable formats to help backend improvement
+  console.warn(
+    `[confusion_notes] Cannot parse confused_with: "${confusedWith}"`,
+  );
+  return null;
+}
+
+function getValidConfusionNotes(
+  confusionNotes: ConfusionNote[] | undefined,
+  currentLemma: string,
+): ConfusionNote[] {
+  if (!confusionNotes?.length) return [];
+
+  return confusionNotes
+    .map((note) => {
+      const parsed = parseConfusedWith(note.confused_with);
+      // TODO: Backend should ensure confused_with is never the same as the original word
+      if (!parsed || parsed === currentLemma.toLowerCase()) {
+        return null;
+      }
+      return {
+        ...note,
+        confused_with: parsed,
+      };
+    })
+    .filter((note): note is ConfusionNote => note !== null);
+}
+
+type SelectionCategory = "due" | "weak" | "strong" | "recent";
+
+interface SelectionQuota {
+  due: number;
+  weak: number;
+  strong: number;
+  recent: number;
+}
+
+const DEFAULT_QUOTA: SelectionQuota = {
+  due: 0.4,
+  weak: 0.3,
+  strong: 0.2,
+  recent: 0.1,
+};
+
 interface QuizEligibleEntry {
   entry: VocabEntry;
   card: SRSCard;
   skillType: SkillType | null;
   skillState: SkillState | null;
-  priority: "due_skill" | "new_skill" | "due_main" | "weak" | "other";
+  category: SelectionCategory;
+}
+
+function interleaveBuckets(
+  buckets: Record<SelectionCategory, QuizEligibleEntry[]>,
+  targetCount: number,
+  quota: SelectionQuota,
+): QuizEligibleEntry[] {
+  const result: QuizEligibleEntry[] = [];
+  const indices: Record<SelectionCategory, number> = {
+    due: 0,
+    weak: 0,
+    strong: 0,
+    recent: 0,
+  };
+  const categories: SelectionCategory[] = ["due", "weak", "strong", "recent"];
+
+  while (result.length < targetCount) {
+    const available = categories.filter(
+      (cat) => indices[cat] < buckets[cat].length,
+    );
+    if (available.length === 0) break;
+
+    const totalWeight = available.reduce((sum, cat) => sum + quota[cat], 0);
+    let rand = Math.random() * totalWeight;
+    let chosen: SelectionCategory = available[0];
+
+    for (const cat of available) {
+      rand -= quota[cat];
+      if (rand <= 0) {
+        chosen = cat;
+        break;
+      }
+    }
+
+    result.push(buckets[chosen][indices[chosen]++]);
+  }
+
+  return shuffleArray(result);
 }
 
 async function getQuizEligibleEntries(
@@ -121,10 +305,14 @@ async function getQuizEligibleEntries(
   if (allCards.length === 0) return [];
 
   const now = new Date();
-  const dueSkillEntries: QuizEligibleEntry[] = [];
-  const newSkillEntries: QuizEligibleEntry[] = [];
-  const dueMainEntries: QuizEligibleEntry[] = [];
-  const weakEntries: QuizEligibleEntry[] = [];
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  const buckets: Record<SelectionCategory, QuizEligibleEntry[]> = {
+    due: [],
+    weak: [],
+    strong: [],
+    recent: [],
+  };
 
   const seenKeys = new Set<string>();
 
@@ -151,69 +339,77 @@ async function getQuizEligibleEntries(
         const skillType = skill as SkillType;
         const key = `${card.lemma}::${card.sense_id}::${skillType}`;
         if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
 
-        if (new Date(state.due) <= now) {
-          seenKeys.add(key);
-          dueSkillEntries.push({
-            entry,
-            card,
-            skillType,
-            skillState: state,
-            priority: "due_skill",
-          });
-        }
+        const isDue = new Date(state.due) <= now;
+        const isWeak = state.lapses >= 2 || state.stability < 3;
+        const isStrong = state.stability >= 21;
+        const isRecent =
+          state.last_review && new Date(state.last_review) >= oneDayAgo;
+
+        let category: SelectionCategory;
+        if (isDue) category = "due";
+        else if (isWeak) category = "weak";
+        else if (isRecent) category = "recent";
+        else if (isStrong) category = "strong";
+        else continue;
+
+        buckets[category].push({
+          entry,
+          card,
+          skillType,
+          skillState: state,
+          category,
+        });
       }
     }
 
     const newSkills = getNewSkillsForCard(card);
-    if (newSkills.length > 0) {
-      const randomSkill = newSkills[Math.floor(Math.random() * newSkills.length)];
-      const key = `${card.lemma}::${card.sense_id}::${randomSkill}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        newSkillEntries.push({
-          entry,
-          card,
-          skillType: randomSkill,
-          skillState: null,
-          priority: "new_skill",
-        });
-      }
+    for (const skill of newSkills) {
+      const key = `${card.lemma}::${card.sense_id}::${skill}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      buckets.due.push({
+        entry,
+        card,
+        skillType: skill,
+        skillState: null,
+        category: "due",
+      });
     }
 
     const mainKey = `${card.lemma}::${card.sense_id}::main`;
-    if (!seenKeys.has(mainKey)) {
-      const isDue = new Date(card.due) <= now;
-      const isWeak = card.lapses >= 2 || card.stability < 3;
+    if (seenKeys.has(mainKey)) continue;
+    seenKeys.add(mainKey);
 
-      if (isDue) {
-        seenKeys.add(mainKey);
-        dueMainEntries.push({
-          entry,
-          card,
-          skillType: null,
-          skillState: null,
-          priority: "due_main",
-        });
-      } else if (isWeak) {
-        seenKeys.add(mainKey);
-        weakEntries.push({
-          entry,
-          card,
-          skillType: null,
-          skillState: null,
-          priority: "weak",
-        });
-      }
-    }
+    const isDue = new Date(card.due) <= now;
+    const isWeak = card.lapses >= 2 || card.stability < 3;
+    const isStrong = card.stability >= 21;
+    const isRecent =
+      card.last_review && new Date(card.last_review) >= oneDayAgo;
+
+    let category: SelectionCategory;
+    if (isDue) category = "due";
+    else if (isWeak) category = "weak";
+    else if (isRecent) category = "recent";
+    else if (isStrong) category = "strong";
+    else continue;
+
+    buckets[category].push({
+      entry,
+      card,
+      skillType: null,
+      skillState: null,
+      category,
+    });
   }
 
-  return [
-    ...shuffleArray(dueSkillEntries),
-    ...shuffleArray(newSkillEntries),
-    ...shuffleArray(dueMainEntries),
-    ...shuffleArray(weakEntries),
-  ];
+  for (const cat of Object.keys(buckets) as SelectionCategory[]) {
+    buckets[cat] = shuffleArray(buckets[cat]);
+  }
+
+  return interleaveBuckets(buckets, config.count * 2, DEFAULT_QUOTA);
 }
 
 let allWordsCache: WordEntry[] | null = null;
@@ -292,12 +488,9 @@ async function generateDistractors(
   const entryPOS = getEntryPOS(entry);
   const entryLevel = getEntryLevel(entry);
 
-  if (
-    type === "word" &&
-    entry.confusion_notes &&
-    entry.confusion_notes.length > 0
-  ) {
-    for (const note of entry.confusion_notes) {
+  if (type === "word") {
+    const validNotes = getValidConfusionNotes(entry.confusion_notes, entry.lemma);
+    for (const note of validNotes) {
       if (distractors.length >= count) break;
       const confusedWord = note.confused_with.toLowerCase();
       if (!usedValues.has(confusedWord) && !excludedLemmas.has(confusedWord)) {
@@ -403,16 +596,48 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function findAllLemmaMatches(
+  text: string,
+  lemma: string,
+  isPhrase: boolean,
+): { match: string; index: number }[] {
+  const lemmaLower = lemma.toLowerCase();
+
+  if (isPhrase) {
+    const forms = getAllPhraseForms(lemma);
+    const escapedForms = Array.from(forms).map(escapeRegex);
+    const pattern = new RegExp(`\\b(${escapedForms.join("|")})\\b`, "gi");
+    const matches: { match: string; index: number }[] = [];
+    let result;
+    while ((result = pattern.exec(text)) !== null) {
+      matches.push({ match: result[1], index: result.index });
+    }
+    return matches;
+  }
+
+  const wordPattern = /\b[a-zA-Z]+(?:'[a-zA-Z]+)?\b/g;
+  const matches: { match: string; index: number }[] = [];
+  let wordMatch;
+
+  while ((wordMatch = wordPattern.exec(text)) !== null) {
+    const word = wordMatch[0];
+    const baseForms = getBaseForms(word);
+
+    if (baseForms.includes(lemmaLower)) {
+      matches.push({ match: word, index: wordMatch.index });
+    }
+  }
+
+  return matches;
+}
+
 function extractInflectedForm(
   text: string,
   lemma: string,
   isPhrase: boolean,
 ): string | null {
-  const forms = isPhrase ? getAllPhraseForms(lemma) : getAllWordForms(lemma);
-  const escapedForms = Array.from(forms).map(escapeRegex);
-  const pattern = new RegExp(`\\b(${escapedForms.join("|")})\\b`, "gi");
-  const match = pattern.exec(text);
-  return match ? match[1] : null;
+  const matches = findAllLemmaMatches(text, lemma, isPhrase);
+  return matches.length > 0 ? matches[0].match : null;
 }
 
 function blankOutLemma(
@@ -420,10 +645,19 @@ function blankOutLemma(
   lemma: string,
   isPhrase: boolean,
 ): string {
-  const forms = isPhrase ? getAllPhraseForms(lemma) : getAllWordForms(lemma);
-  const escapedForms = Array.from(forms).map(escapeRegex);
-  const pattern = new RegExp(`\\b(${escapedForms.join("|")})\\b`, "gi");
-  return text.replace(pattern, "_______");
+  const matches = findAllLemmaMatches(text, lemma, isPhrase);
+
+  if (matches.length === 0) {
+    return text;
+  }
+
+  let result = text;
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const { match, index } = matches[i];
+    result = result.slice(0, index) + "_______" + result.slice(index + match.length);
+  }
+
+  return result;
 }
 
 function generateRecognitionQuestion(
@@ -481,8 +715,7 @@ function generateFillBlankQuestion(
   sense: VocabSense,
   distractorWords: string[],
 ): QuizQuestion {
-  const example =
-    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const example = selectBestExample(sense.examples, { quizType: "fill_blank" });
   const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
@@ -520,8 +753,7 @@ function generateSpellingQuestion(
   entry: VocabEntry,
   sense: VocabSense,
 ): QuizQuestion {
-  const example =
-    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const example = selectBestExample(sense.examples, { quizType: "spelling" });
   const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
@@ -561,13 +793,10 @@ function generateDistinctionQuestion(
   sense: VocabSense,
   distractorWords: string[],
 ): QuizQuestion {
-  const confusionNote =
-    entry.confusion_notes && entry.confusion_notes.length > 0
-      ? entry.confusion_notes[0]
-      : null;
+  const validNotes = getValidConfusionNotes(entry.confusion_notes, entry.lemma);
+  const confusionNote = validNotes.length > 0 ? validNotes[0] : null;
 
-  const example =
-    sense.examples && sense.examples.length > 0 ? sense.examples[0] : null;
+  const example = selectBestExample(sense.examples, { quizType: "distinction" });
   const isPhrase = !isWordEntry(entry);
 
   const sentenceText = example?.text || sense.generated_example || "";
@@ -674,8 +903,9 @@ export async function generateQuizLocally(
     const sense = entry.senses[0];
 
     let quizType: QuizQuestionType;
-    if (config.force_type) {
-      quizType = config.force_type;
+    if (config.force_types && config.force_types.length > 0) {
+      quizType =
+        config.force_types[Math.floor(Math.random() * config.force_types.length)];
     } else if (skillType) {
       quizType = skillTypeToQuizType(skillType);
     } else {

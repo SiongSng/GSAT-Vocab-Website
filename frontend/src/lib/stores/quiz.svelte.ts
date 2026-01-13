@@ -119,7 +119,7 @@ export function getQuizStore() {
 export interface QuizConfig {
   count: number;
   entry_type?: "word" | "phrase" | "all";
-  force_type?: QuizQuestionType;
+  force_types?: QuizQuestionType[];
 }
 
 export async function startQuiz(config: QuizConfig): Promise<void> {
@@ -130,24 +130,26 @@ export async function startQuiz(config: QuizConfig): Promise<void> {
     const generatorConfig: GeneratorConfig = {
       count: config.count,
       entry_type: config.entry_type,
-      force_type: config.force_type,
+      force_types: config.force_types,
     };
 
     const questions = await generateQuizLocally(generatorConfig);
 
     if (questions.length === 0) {
-      const entryTypeText =
-        config.entry_type === "phrase"
-          ? "片語"
-          : config.entry_type === "word"
-            ? "單字"
-            : "題目";
-      store.error = `沒有可用的${entryTypeText}。請先在 Flashcard 學習一些${config.entry_type === "phrase" ? "片語" : "單字"}。`;
+      let entryTypeText = "題目";
+      if (config.entry_type === "phrase") {
+        entryTypeText = "片語";
+      } else if (config.entry_type === "word") {
+        entryTypeText = "單字";
+      }
+      const learnHint = config.entry_type === "phrase" ? "片語" : "單字";
+      store.error = `沒有可用的${entryTypeText}。請先在 Flashcard 學習一些${learnHint}。`;
       store.isLoading = false;
       return;
     }
 
-    store.type = config.force_type ?? "adaptive";
+    store.type =
+      config.force_types?.length === 1 ? config.force_types[0] : "adaptive";
     store.questions = questions;
     store.currentIndex = 0;
     store.results = [];
@@ -272,10 +274,10 @@ export async function retryIncorrect(): Promise<void> {
     const lemmas = incorrect.map((q) => q.lemma);
     const questions = await generateQuizLocally({
       count: incorrect.length,
-      force_type:
+      force_types:
         store.type === "adaptive"
           ? undefined
-          : (store.type as QuizQuestionType),
+          : [store.type as QuizQuestionType],
       specific_lemmas: lemmas,
     });
 

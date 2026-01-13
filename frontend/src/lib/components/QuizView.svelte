@@ -80,12 +80,12 @@
     async function handleStartQuiz(config: {
         count: number;
         entry_type?: "word" | "phrase";
-        force_type?: QuizQuestionType;
+        force_types?: QuizQuestionType[];
     }) {
         const quizConfig: QuizConfig = {
             count: config.count,
             entry_type: config.entry_type,
-            force_type: config.force_type,
+            force_types: config.force_types,
         };
 
         await startQuiz(quizConfig);

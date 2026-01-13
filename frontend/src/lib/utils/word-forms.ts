@@ -24,6 +24,14 @@ export function getAllWordForms(word: string): Set<string> {
     forms.add(inf.toGerund());
   }
 
+  // Add plural of gerunds (e.g., drawing → drawings)
+  const currentForms = Array.from(forms);
+  for (const form of currentForms) {
+    if (form.endsWith("ing")) {
+      forms.add(form + "s");
+    }
+  }
+
   const doc = nlp(lower);
 
   const asNoun = doc.nouns();
@@ -86,11 +94,43 @@ export function getBaseForm(word: string): string {
 
 export function getBaseForms(word: string): string[] {
   const forms = new Set<string>();
-  const normalized = word.replace(/'s$/i, "").replace(/n't$/i, "").toLowerCase();
+  const normalized = word
+    .replace(/'s$/i, "")
+    .replace(/n't$/i, "")
+    .toLowerCase();
   forms.add(normalized);
 
-  const baseForm = getBaseForm(normalized);
-  forms.add(baseForm);
+  const doc = nlp(normalized);
+  const asNoun = doc.nouns();
+  const singular = asNoun.found
+    ? asNoun.toSingular().text().toLowerCase()
+    : normalized;
+
+  if (singular !== normalized) {
+    forms.add(singular);
+  }
+
+  const candidates = singular !== normalized
+    ? [normalized, singular]
+    : [normalized];
+
+  for (const candidate of candidates) {
+    const infinitive = findVerbInfinitive(candidate);
+    if (infinitive) {
+      forms.add(infinitive);
+      break;
+    }
+  }
+
+  for (const candidate of candidates) {
+    const verbDoc = nlp(candidate);
+    if (verbDoc.verbs().found) {
+      const inf = verbDoc.verbs().toInfinitive().text().toLowerCase();
+      if (inf && inf !== candidate) {
+        forms.add(inf);
+      }
+    }
+  }
 
   return Array.from(forms);
 }

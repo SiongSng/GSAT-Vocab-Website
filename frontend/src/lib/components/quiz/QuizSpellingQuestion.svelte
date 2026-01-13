@@ -41,6 +41,7 @@
     const app = getAppStore();
     let shuffledLetters: string[] = $state([]);
     let answerSlots: (string | null)[] = $state([]);
+    let slotToSourceIndex: (number | null)[] = $state([]);
     let usedIndices: Set<number> = $state(new Set());
     let typedInput = $state("");
     let inputRef: HTMLInputElement | undefined = $state();
@@ -71,6 +72,7 @@
 
         shuffledLetters = letterPool;
         answerSlots = new Array(letterPool.length).fill(null);
+        slotToSourceIndex = new Array(letterPool.length).fill(null);
         usedIndices = new Set();
         typedInput = "";
 
@@ -94,6 +96,7 @@
         const emptySlotIdx = answerSlots.findIndex((s) => s === null);
         if (emptySlotIdx !== -1) {
             answerSlots[emptySlotIdx] = letter;
+            slotToSourceIndex[emptySlotIdx] = index;
             usedIndices.add(index);
             usedIndices = new Set(usedIndices);
         }
@@ -104,19 +107,13 @@
         const letter = answerSlots[slotIndex];
         if (!letter) return;
 
-        let indexToFree = -1;
-        for (const i of usedIndices) {
-            if (shuffledLetters[i] === letter) {
-                indexToFree = i;
-                break;
-            }
-        }
-
-        if (indexToFree !== -1) {
-            usedIndices.delete(indexToFree);
+        const sourceIndex = slotToSourceIndex[slotIndex];
+        if (sourceIndex !== null) {
+            usedIndices.delete(sourceIndex);
             usedIndices = new Set(usedIndices);
-            answerSlots[slotIndex] = null;
         }
+        answerSlots[slotIndex] = null;
+        slotToSourceIndex[slotIndex] = null;
     }
 
     function isComplete() {
@@ -277,33 +274,39 @@
                         />
                     </div>
 
-                    {#if !typedInput && !showFeedback}
-                        <div class="tiles-container">
+                    {#if !typedInput}
+                        <div
+                            class="tiles-container"
+                            class:tiles-correct={showFeedback && isCorrect}
+                            class:tiles-wrong={showFeedback && !isCorrect}
+                        >
                             <div class="slots-row">
                                 {#each answerSlots as letter, i}
                                     <button
                                         class="slot"
                                         class:slot-filled={letter !== null}
                                         onclick={() => removeLetterAt(i)}
-                                        disabled={letter === null}
+                                        disabled={showFeedback || letter === null}
                                     >
                                         {letter || ""}
                                     </button>
                                 {/each}
                             </div>
 
-                            <div class="letters-grid">
-                                {#each shuffledLetters as letter, i}
-                                    <button
-                                        class="tile"
-                                        class:tile-used={usedIndices.has(i)}
-                                        onclick={() => selectLetter(letter, i)}
-                                        disabled={usedIndices.has(i)}
-                                    >
-                                        {letter}
-                                    </button>
-                                {/each}
-                            </div>
+                            {#if !showFeedback}
+                                <div class="letters-grid">
+                                    {#each shuffledLetters as letter, i}
+                                        <button
+                                            class="tile"
+                                            class:tile-used={usedIndices.has(i)}
+                                            onclick={() => selectLetter(letter, i)}
+                                            disabled={usedIndices.has(i)}
+                                        >
+                                            {letter}
+                                        </button>
+                                    {/each}
+                                </div>
+                            {/if}
                         </div>
                     {/if}
 
@@ -509,6 +512,18 @@
         flex-direction: column;
         gap: 1.5rem;
         margin-bottom: 1.5rem;
+    }
+
+    .tiles-correct .slot {
+        border-color: #4caf50;
+        background-color: rgba(76, 175, 80, 0.1);
+        color: #2e7d32;
+    }
+
+    .tiles-wrong .slot {
+        border-color: #ef4444;
+        background-color: rgba(239, 68, 68, 0.1);
+        color: #c62828;
     }
 
     @media (min-width: 768px) {

@@ -15,7 +15,7 @@
         onStart: (config: {
             count: number;
             entry_type?: "word" | "phrase";
-            force_type?: QuizQuestionType;
+            force_types?: QuizQuestionType[];
         }) => void;
     }
 
@@ -26,8 +26,46 @@
 
     let questionCount = $state(20);
     let entryType = $state<"word" | "phrase" | "all">("all");
+    let selectedTypes = $state<Set<string>>(new Set());
     let isInitializing = $state(true);
+    let isStarting = $state(false);
     let dataVersion = $state(0);
+
+    const quizTypeOptions: Array<{
+        value: string;
+        types: QuizQuestionType[];
+        label: string;
+    }> = [
+        {
+            value: "meaning",
+            types: ["recognition", "reverse"],
+            label: "字義題",
+        },
+        { value: "fill_blank", types: ["fill_blank"], label: "克漏字" },
+        { value: "spelling", types: ["spelling"], label: "拼寫題" },
+        { value: "distinction", types: ["distinction"], label: "易混淆" },
+    ];
+
+    function toggleType(value: string) {
+        const newSet = new Set(selectedTypes);
+        if (newSet.has(value)) {
+            newSet.delete(value);
+        } else {
+            newSet.add(value);
+        }
+        selectedTypes = newSet;
+    }
+
+    function getSelectedQuizTypes(): QuizQuestionType[] {
+        if (selectedTypes.size === 0) return [];
+        const types: QuizQuestionType[] = [];
+        for (const opt of quizTypeOptions) {
+            if (selectedTypes.has(opt.value)) {
+                types.push(...opt.types);
+            }
+        }
+        return types;
+    }
 
     const availableCount = $derived.by(() => {
         dataVersion;
@@ -43,8 +81,10 @@
 
     const detailText = $derived.by(() => {
         const parts: string[] = [];
-        if (stats.breakdown.words > 0) parts.push(`${stats.breakdown.words} 單字`);
-        if (stats.breakdown.phrases > 0) parts.push(`${stats.breakdown.phrases} 片語`);
+        if (stats.breakdown.words > 0)
+            parts.push(`${stats.breakdown.words} 單字`);
+        if (stats.breakdown.phrases > 0)
+            parts.push(`${stats.breakdown.phrases} 片語`);
 
         const hasAdvanced = stats.dueSkillCount + stats.newSkillCount > 0;
         if (hasAdvanced) {
@@ -76,11 +116,14 @@
     });
 
     function handleStart() {
-        if (availableCount === 0) return;
+        if (availableCount === 0 || isStarting) return;
 
+        isStarting = true;
+        const forceTypes = getSelectedQuizTypes();
         onStart({
             count: questionCount,
             entry_type: entryType === "all" ? undefined : entryType,
+            force_types: forceTypes.length > 0 ? forceTypes : undefined,
         });
     }
 
@@ -89,7 +132,7 @@
     }
 
     function handleKeydown(e: KeyboardEvent) {
-        if (e.key === "Enter" && !isInitializing) {
+        if (e.key === "Enter" && !isInitializing && !isStarting) {
             if (availableCount > 0) {
                 e.preventDefault();
                 handleStart();
@@ -143,13 +186,30 @@
                     <div class="setting-group">
                         <span class="setting-label">範圍</span>
                         <div class="pill-selector">
-                            {#each [{ value: "all", label: "全部" }, { value: "word", label: "單字" }, { value: "phrase", label: "片語" }] as type}
+                            {#each [{ value: "all", label: "全部" }, { value: "word", label: "單字" }, { value: "phrase", label: "片語" }] as type (type.value)}
                                 <button
                                     class:active={entryType === type.value}
                                     onclick={() =>
-                                        (entryType = type.value as any)}
+                                        (entryType = type.value as
+                                            | "word"
+                                            | "phrase"
+                                            | "all")}
                                 >
                                     {type.label}
+                                </button>
+                            {/each}
+                        </div>
+                    </div>
+
+                    <div class="setting-group full-width">
+                        <span class="setting-label">題型</span>
+                        <div class="pill-selector type-selector">
+                            {#each quizTypeOptions as opt}
+                                <button
+                                    class:active={selectedTypes.has(opt.value)}
+                                    onclick={() => toggleType(opt.value)}
+                                >
+                                    {opt.label}
                                 </button>
                             {/each}
                         </div>
@@ -157,11 +217,19 @@
                 </div>
 
                 <div class="main-actions">
-                    <button class="btn-start" onclick={handleStart}>
-                        開始測驗
-                        <span class="arrow">→</span>
+                    <button
+                        class="btn-start"
+                        onclick={handleStart}
+                        disabled={isStarting}
+                    >
+                        {#if isStarting}
+                            <span class="btn-spinner"></span>
+                            正在出題...
+                        {:else}
+                            開始測驗
+                        {/if}
                     </button>
-                    {#if !app.isMobile}
+                    {#if !app.isMobile && !isStarting}
                         <p class="kbd-hint"><kbd>Enter</kbd> 快速開始</p>
                     {/if}
                 </div>
@@ -260,6 +328,7 @@
     /* Compact Settings */
     .compact-settings {
         display: flex;
+        flex-wrap: wrap;
         gap: 1rem;
         padding: 1rem 0;
         border-top: 1px solid var(--color-border);
@@ -272,6 +341,11 @@
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+    }
+
+    .setting-group.full-width {
+        flex: none;
+        width: 100%;
     }
 
     .setting-label {
@@ -314,6 +388,16 @@
         font-weight: 600;
     }
 
+    .type-selector {
+        display: flex;
+        gap: 4px;
+    }
+
+    .type-selector button {
+        flex: 1;
+        min-width: 0;
+    }
+
     /* Main Actions */
     .main-actions {
         text-align: center;
@@ -344,13 +428,24 @@
         transform: scale(0.98);
     }
 
-    .btn-start .arrow {
-        font-size: 1.125rem;
-        transition: transform 0.15s ease;
+    .btn-start:disabled {
+        opacity: 0.7;
+        cursor: wait;
     }
 
-    .btn-start:hover .arrow {
-        transform: translateX(2px);
+    .btn-spinner {
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid transparent;
+        border-top-color: currentColor;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     .kbd-hint {
@@ -387,12 +482,6 @@
         border-top-color: var(--color-content-primary);
         border-radius: 50%;
         animation: spin 0.7s linear infinite;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
     }
 
     .state-empty {
