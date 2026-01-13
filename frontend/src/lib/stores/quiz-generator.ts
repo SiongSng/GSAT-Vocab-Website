@@ -103,6 +103,10 @@ function shuffleArray<T>(array: T[]): T[] {
   return result;
 }
 
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function isLearned(card: SRSCard): boolean {
   return card.state !== State.New;
 }
@@ -316,6 +320,7 @@ async function getQuizEligibleEntries(
 
   const seenKeys = new Set<string>();
 
+  let processedCount = 0;
   for (const card of allCards) {
     if (!isLearned(card)) continue;
 
@@ -332,6 +337,11 @@ async function getQuizEligibleEntries(
         ? await getPhrase(card.lemma)
         : await getWord(card.lemma);
     if (!entry) continue;
+
+    processedCount++;
+    if (processedCount % 50 === 0) {
+      await yieldToMain();
+    }
 
     if (card.skills) {
       for (const [skill, state] of Object.entries(card.skills)) {
@@ -897,7 +907,8 @@ export async function generateQuizLocally(
 
   const questions: QuizQuestion[] = [];
 
-  for (const { entry, card, skillType } of shuffledSelected) {
+  for (let i = 0; i < shuffledSelected.length; i++) {
+    const { entry, card, skillType } = shuffledSelected[i];
     if (!entry.senses || entry.senses.length === 0) continue;
 
     const sense = entry.senses[0];
@@ -915,6 +926,10 @@ export async function generateQuizLocally(
     const question = await generateQuestion(entry, sense, quizType);
     question.sense_id = card.sense_id;
     questions.push(question);
+
+    if ((i + 1) % 5 === 0) {
+      await yieldToMain();
+    }
   }
 
   return questions;

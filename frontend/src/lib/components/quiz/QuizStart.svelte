@@ -5,11 +5,13 @@
         type QuizQuestionType,
     } from "$lib/stores/quiz-generator";
     import { loadVocabData, getVocabStore } from "$lib/stores/vocab.svelte";
+    import { getQuizStore } from "$lib/stores/quiz.svelte";
     import { goto } from "$app/navigation";
     import { base } from "$app/paths";
     import { getAppStore } from "$lib/stores/app.svelte";
     import { onMount } from "svelte";
     import { onDataChange } from "$lib/stores/srs-storage";
+    import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
 
     interface Props {
         onStart: (config: {
@@ -23,13 +25,15 @@
 
     const vocab = getVocabStore();
     const app = getAppStore();
+    const quiz = getQuizStore();
 
     let questionCount = $state(20);
     let entryType = $state<"word" | "phrase" | "all">("all");
     let selectedTypes = $state<Set<string>>(new Set());
     let isInitializing = $state(true);
-    let isStarting = $state(false);
     let dataVersion = $state(0);
+
+    const isGenerating = $derived(quiz.isLoading);
 
     const quizTypeOptions: Array<{
         value: string;
@@ -116,9 +120,8 @@
     });
 
     function handleStart() {
-        if (availableCount === 0 || isStarting) return;
+        if (availableCount === 0 || isGenerating) return;
 
-        isStarting = true;
         const forceTypes = getSelectedQuizTypes();
         onStart({
             count: questionCount,
@@ -132,7 +135,7 @@
     }
 
     function handleKeydown(e: KeyboardEvent) {
-        if (e.key === "Enter" && !isInitializing && !isStarting) {
+        if (e.key === "Enter" && !isInitializing && !isGenerating) {
             if (availableCount > 0) {
                 e.preventDefault();
                 handleStart();
@@ -149,10 +152,7 @@
 <div class="start-container">
     <div class="dashboard-card">
         {#if isInitializing || vocab.isLoading}
-            <div class="state-loading">
-                <div class="spinner"></div>
-                <p>正在同步學習進度...</p>
-            </div>
+            <SyncIndicator />
         {:else if availableCount > 0}
             <div class="state-ready">
                 <div class="quiz-prompt">
@@ -220,16 +220,16 @@
                     <button
                         class="btn-start"
                         onclick={handleStart}
-                        disabled={isStarting}
+                        disabled={isGenerating}
                     >
-                        {#if isStarting}
+                        {#if isGenerating}
                             <span class="btn-spinner"></span>
                             正在出題...
                         {:else}
                             開始測驗
                         {/if}
                     </button>
-                    {#if !app.isMobile && !isStarting}
+                    {#if !app.isMobile && !isGenerating}
                         <p class="kbd-hint"><kbd>Enter</kbd> 快速開始</p>
                     {/if}
                 </div>
@@ -466,24 +466,6 @@
     }
 
     /* States */
-    .state-loading {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1rem;
-        padding: 3rem 0;
-        color: var(--color-content-secondary);
-    }
-
-    .spinner {
-        width: 28px;
-        height: 28px;
-        border: 2.5px solid var(--color-surface-secondary);
-        border-top-color: var(--color-content-primary);
-        border-radius: 50%;
-        animation: spin 0.7s linear infinite;
-    }
-
     .state-empty {
         text-align: center;
         padding: 1rem 0;

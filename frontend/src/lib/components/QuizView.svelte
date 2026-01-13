@@ -137,14 +137,7 @@
 </script>
 
 <div class="quiz-view">
-    {#if quiz.isLoading}
-        <div class="state-container">
-            <div class="loading-content">
-                <div class="spinner"></div>
-                <p class="state-text">準備測驗中...</p>
-            </div>
-        </div>
-    {:else if quiz.error}
+    {#if quiz.error}
         <div class="state-container">
             <div class="error-card">
                 <div class="error-icon">
@@ -238,34 +231,6 @@
         justify-content: center;
         min-height: 100%;
         padding: 1.5rem;
-    }
-
-    /* Loading State */
-    .loading-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1rem;
-    }
-
-    .spinner {
-        width: 32px;
-        height: 32px;
-        border: 3px solid var(--color-surface-hover);
-        border-top-color: var(--color-accent);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    .state-text {
-        color: var(--color-content-secondary);
-        font-size: 0.9375rem;
     }
 
     /* Error State */
