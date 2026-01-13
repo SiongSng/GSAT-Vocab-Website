@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
 
-export type TTSEngine = "edge-tts" | "kokoro";
+export type TTSEngine = "prebuilt" | "edge-tts" | "kokoro";
 
 export type KokoroModelStatus =
   | "not-downloaded"
@@ -24,7 +24,7 @@ const STORAGE_KEY = "tts-settings";
 
 function getDefaultState(): TTSSettingsStore {
   return {
-    engine: "edge-tts",
+    engine: "prebuilt",
     kokoro: {
       status: "not-downloaded",
       downloadProgress: 0,
@@ -40,7 +40,10 @@ function loadFromStorage(): TTSSettingsStore {
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        engine: parsed.engine ?? "edge-tts",
+        engine:
+          parsed.engine === "kokoro" || parsed.engine === "edge-tts" || parsed.engine === "prebuilt"
+            ? parsed.engine
+            : "prebuilt",
         kokoro: {
           status:
             parsed.kokoro?.status === "ready" ? "ready" : "not-downloaded",

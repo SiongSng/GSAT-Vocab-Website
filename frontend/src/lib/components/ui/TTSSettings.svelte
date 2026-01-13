@@ -31,7 +31,7 @@
                 clearAudioCache();
             }
         } else {
-            setEngine("edge-tts");
+            setEngine(engine);
             clearAudioCache();
         }
     }
@@ -43,7 +43,7 @@
         try {
             await unloadKokoro();
             if (ttsSettings.engine === "kokoro") {
-                setEngine("edge-tts");
+                setEngine("prebuilt");
                 clearAudioCache();
             }
         } finally {
@@ -56,9 +56,31 @@
 </script>
 
 <div class="tts-settings">
-    <h3 class="section-header">語音引擎</h3>
+    <h3 class="section-header">發音設定</h3>
 
     <div class="engine-options">
+        <button
+            type="button"
+            class="engine-option"
+            class:active={ttsSettings.engine === "prebuilt"}
+            onclick={() => handleEngineChange("prebuilt")}
+            disabled={isDownloading}
+        >
+            <div class="option-content">
+                <span class="option-label">預錄發音</span>
+                <span class="option-desc">最穩定、載入最快（推薦）</span>
+            </div>
+            {#if ttsSettings.engine === "prebuilt"}
+                <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                        fill-rule="evenodd"
+                        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+            {/if}
+        </button>
+
         <button
             type="button"
             class="engine-option"
@@ -67,8 +89,8 @@
             disabled={isDownloading}
         >
             <div class="option-content">
-                <span class="option-label">雲端語音</span>
-                <span class="option-desc">免下載，但連線經常不穩定</span>
+                <span class="option-label">即時合成</span>
+                <span class="option-desc">發音更自然，但經常不穩定</span>
             </div>
             {#if ttsSettings.engine === "edge-tts"}
                 <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -90,16 +112,14 @@
         >
             <div class="option-content">
                 <span class="option-label">
-                    離線模型
+                    離線發音
                     {#if isKokoroReady}
                         <span class="badge badge-ready">已下載</span>
                     {:else if !isDownloading}
                         <span class="badge badge-size">~87MB</span>
                     {/if}
                 </span>
-                <span class="option-desc"
-                    >更自然，需較高效能裝置（如 M 系列 Mac）</span
-                >
+                <span class="option-desc">下載後可離線使用，需較新的電腦</span>
             </div>
             {#if ttsSettings.engine === "kokoro"}
                 <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -148,7 +168,7 @@
             onclick={handleDeleteModel}
             disabled={isDeleting}
         >
-            {isDeleting ? "刪除中..." : "刪除離線模型"}
+            {isDeleting ? "刪除中..." : "刪除離線發音"}
         </button>
     {/if}
 </div>

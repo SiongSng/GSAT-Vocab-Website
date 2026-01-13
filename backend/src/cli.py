@@ -3,8 +3,7 @@ import gzip
 import hashlib
 import json
 import logging
-import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -22,6 +21,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from .commands.tts_export import tts_export
 from .models import CleanedVocabData, ExamType, load_official_wordlist
 from .registry import Registry
 from .stages import (
@@ -38,6 +38,8 @@ from .stages import (
 
 app = typer.Typer(help="GSAT Vocabulary Pipeline")
 console = Console()
+
+app.command("tts-export")(tts_export)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,7 +104,7 @@ def run(
 
         console.print("\n[red]Error occurred:[/]\n")
         traceback.print_exc()
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 async def _run_pipeline(
@@ -485,14 +487,14 @@ def export(
         try:
             generated_at_dt = datetime.fromisoformat(generated_at_raw.replace("Z", "+00:00"))
             if generated_at_dt.tzinfo is None:
-                generated_at_dt = generated_at_dt.replace(tzinfo=timezone.utc)
+                generated_at_dt = generated_at_dt.replace(tzinfo=UTC)
             else:
-                generated_at_dt = generated_at_dt.astimezone(timezone.utc)
+                generated_at_dt = generated_at_dt.astimezone(UTC)
         except ValueError:
             generated_at_dt = None
 
     if generated_at_dt is None:
-        generated_at_dt = datetime.now(timezone.utc)
+        generated_at_dt = datetime.now(UTC)
 
     generated_at_iso = generated_at_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     version_label = generated_at_dt.strftime("%Y.%m.%d")

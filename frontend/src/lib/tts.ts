@@ -38,6 +38,61 @@ function getSynthesisTimeout(): number {
 const audioCache = new Map<string, string>();
 const pendingRequests = new Map<string, Promise<string>>();
 
+const HF_TTS_DATASET_REPO = "TCabbage/gsat-vocab-sentences-tts";
+const HF_TTS_AUDIO_BASE_URL = `https://huggingface.co/datasets/${HF_TTS_DATASET_REPO}/resolve/main/audio`;
+const HF_TTS_CHECK_TIMEOUT_MS = 1500;
+
+const ttsHashCache = new Map<string, string>();
+const hfAvailabilityCache = new Map<string, boolean>();
+
+function normalizeTTSText(text: string): string {
+  return text.normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const normalized = normalizeTTSText(text);
+  const cached = ttsHashCache.get(normalized);
+  if (cached) return cached;
+
+  const data = new TextEncoder().encode(normalized);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(digest);
+  const hash = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  ttsHashCache.set(normalized, hash);
+  return hash;
+}
+
+async function getHFAudioUrlIfExists(text: string): Promise<string | null> {
+  const normalized = normalizeTTSText(text);
+  if (!normalized) return null;
+
+  const hash = await sha256Hex(normalized);
+  const known = hfAvailabilityCache.get(hash);
+  if (known === false) return null;
+
+  const url = `${HF_TTS_AUDIO_BASE_URL}/${hash.slice(0, 2)}/${hash}.mp3`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), HF_TTS_CHECK_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      hfAvailabilityCache.set(hash, false);
+      return null;
+    }
+    hfAvailabilityCache.set(hash, true);
+    return url;
+  } catch {
+    return url;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export type AudioState = "idle" | "loading" | "playing" | "error";
 
 let globalAudio: HTMLAudioElement | null = null;
@@ -124,6 +179,7 @@ function shouldUseKokoro(): boolean {
   return settings.engine === "kokoro" && isKokoroAvailable();
 }
 
+
 async function synthesizeOnce(text: string): Promise<Blob> {
   if (shouldUseKokoro()) {
     return synthesizeWithKokoro(text);
@@ -136,10 +192,20 @@ function jitteredDelay(baseMs: number, jitterRatio: number = 0.5): number {
   return Math.max(0, baseMs + jitter);
 }
 
-async function synthesizeWithRace(text: string): Promise<string> {
+async function synthesizeWithRace(
+  text: string,
+  options: { allowRemote: boolean },
+): Promise<string> {
   if (shouldUseKokoro()) {
     const audioBlob = await synthesizeOnce(text);
     return URL.createObjectURL(audioBlob);
+  }
+
+  if (options.allowRemote) {
+    const hfUrl = await getHFAudioUrlIfExists(text);
+    if (hfUrl) {
+      return hfUrl;
+    }
   }
 
   const errors: Error[] = [];
@@ -171,18 +237,27 @@ async function synthesizeWithRace(text: string): Promise<string> {
   }
 }
 
-export async function speakText(text: string): Promise<string> {
-  const cached = audioCache.get(text);
-  if (cached) {
-    return cached;
+async function speakTextInternal(
+  text: string,
+  options: { allowRemote?: boolean; bypassCache?: boolean } = {},
+): Promise<string> {
+  const engine = getTTSSettingsStore().engine;
+  const allowRemote =
+    options.allowRemote ?? (engine === "prebuilt" ? true : false);
+
+  if (!options.bypassCache) {
+    const cached = audioCache.get(text);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = pendingRequests.get(text);
+    if (pending) {
+      return pending;
+    }
   }
 
-  const pending = pendingRequests.get(text);
-  if (pending) {
-    return pending;
-  }
-
-  const request = synthesizeWithRace(text)
+  const request = synthesizeWithRace(text, { allowRemote })
     .then((url) => {
       audioCache.set(text, url);
       pendingRequests.delete(text);
@@ -193,8 +268,14 @@ export async function speakText(text: string): Promise<string> {
       throw err;
     });
 
-  pendingRequests.set(text, request);
+  if (!options.bypassCache) {
+    pendingRequests.set(text, request);
+  }
   return request;
+}
+
+export async function speakText(text: string): Promise<string> {
+  return speakTextInternal(text);
 }
 
 const PRELOAD_RETRY_DELAY_MS = 3000;
@@ -245,7 +326,9 @@ export function isAudioCached(text: string): boolean {
 
 export function clearAudioCache(): void {
   for (const url of audioCache.values()) {
-    URL.revokeObjectURL(url);
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+    }
   }
   audioCache.clear();
 }
@@ -308,6 +391,8 @@ export function createAudioController(getText: () => string): AudioController {
 
       const audio = getGlobalAudio();
 
+      let attemptedRemoteFallback = false;
+
       audio.onended = null;
       audio.onerror = null;
       audio.pause();
@@ -322,6 +407,62 @@ export function createAudioController(getText: () => string): AudioController {
       };
 
       audio.onerror = () => {
+        if (
+          currentController === controller &&
+          !aborted &&
+          !attemptedRemoteFallback &&
+          url.startsWith(HF_TTS_AUDIO_BASE_URL)
+        ) {
+          attemptedRemoteFallback = true;
+          const textForRetry = currentText;
+          if (!textForRetry) return;
+
+          void (async () => {
+            setState("loading");
+            audioCache.delete(textForRetry);
+            try {
+              const fallbackUrl = await speakTextInternal(textForRetry, {
+                allowRemote: false,
+                bypassCache: true,
+              });
+              if (aborted || currentController !== controller) return;
+              audio.onended = null;
+              audio.onerror = null;
+              audio.pause();
+              audio.src = fallbackUrl;
+              audio.onended = () => {
+                if (currentController === controller) {
+                  setState("idle");
+                  currentController = null;
+                }
+              };
+              audio.onerror = () => {
+                if (currentController === controller) {
+                  setState("error");
+                  currentController = null;
+                  setTimeout(() => {
+                    if (state === "error") setState("idle");
+                  }, 2000);
+                }
+              };
+
+              await audio.play();
+              if (!aborted && currentController === controller) {
+                setState("playing");
+              }
+            } catch {
+              if (currentController === controller) {
+                setState("error");
+                currentController = null;
+                setTimeout(() => {
+                  if (state === "error") setState("idle");
+                }, 2000);
+              }
+            }
+          })();
+          return;
+        }
+
         if (currentController === controller) {
           setState("error");
           currentController = null;
