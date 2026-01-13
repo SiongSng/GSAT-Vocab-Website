@@ -8,7 +8,11 @@ import type {
   SkillType,
   SkillState,
 } from "$lib/types/srs";
-import { createCardKey, getPrimarySenseId, getUnlockedSkills } from "$lib/types/srs";
+import {
+  createCardKey,
+  getPrimarySenseId,
+  getUnlockedSkills,
+} from "$lib/types/srs";
 import { createEmptyCard, State, Rating } from "ts-fsrs";
 
 const DB_NAME = "gsat-vocab-srs-v2";
@@ -159,9 +163,7 @@ function rebuildLemmaIndex(cards: SRSCard[]): void {
 function addToLemmaIndex(card: SRSCard): void {
   const existing = cardsByLemmaCache.get(card.lemma);
   if (existing) {
-    const idx = existing.findIndex(
-      (c) => c.sense_id === card.sense_id,
-    );
+    const idx = existing.findIndex((c) => c.sense_id === card.sense_id);
     if (idx >= 0) {
       existing[idx] = card;
     } else {
@@ -194,7 +196,10 @@ function toNumber(value: unknown, fallback: number = 0): number {
 
 function toState(value: unknown, fallback: State = State.New): State {
   const n = toNumber(value, fallback);
-  return n === State.New || n === State.Learning || n === State.Review || n === State.Relearning
+  return n === State.New ||
+    n === State.Learning ||
+    n === State.Review ||
+    n === State.Relearning
     ? (n as State)
     : fallback;
 }
@@ -216,7 +221,10 @@ function normalizeCardForStorage(card: SRSCard): SRSCard {
     ? Object.fromEntries(
         Object.entries(card.skills)
           .filter(([, value]) => !!value)
-          .map(([skill, value]) => [skill, normalizeSkillStateForStorage(value as SkillState)]),
+          .map(([skill, value]) => [
+            skill,
+            normalizeSkillStateForStorage(value as SkillState),
+          ]),
       )
     : undefined;
 
@@ -278,7 +286,10 @@ export async function initStorage(): Promise<void> {
   }
 
   cardsCache = new Map(
-    updatedCards.map((card) => [createCardKey(card.lemma, card.sense_id), card]),
+    updatedCards.map((card) => [
+      createCardKey(card.lemma, card.sense_id),
+      card,
+    ]),
   );
   rebuildLemmaIndex(updatedCards);
 }
@@ -372,7 +383,10 @@ export async function setAllCards(cards: SRSCard[]): Promise<void> {
   cardsByLemmaCache.clear();
   for (const card of cards) {
     const normalized = normalizeCardForStorage(card);
-    cardsCache.set(createCardKey(normalized.lemma, normalized.sense_id), normalized);
+    cardsCache.set(
+      createCardKey(normalized.lemma, normalized.sense_id),
+      normalized,
+    );
     await store.put(normalized);
   }
   await tx.done;
@@ -421,7 +435,10 @@ function scheduleSave(): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
-async function saveCard(database: IDBPDatabase<SRSDatabase>, card: SRSCard): Promise<void> {
+async function saveCard(
+  database: IDBPDatabase<SRSDatabase>,
+  card: SRSCard,
+): Promise<void> {
   const tx = database.transaction(CARDS_STORE, "readwrite");
   const store = tx.objectStore(CARDS_STORE);
   await store.put(normalizeCardForStorage(card));
@@ -445,7 +462,10 @@ async function saveDirtyCards(): Promise<void> {
         await saveCard(database, card);
       } catch (err) {
         try {
-          const stripped = normalizeCardForStorage({ ...card, skills: undefined });
+          const stripped = normalizeCardForStorage({
+            ...card,
+            skills: undefined,
+          });
           await saveCard(database, stripped);
           cardsCache.set(key, stripped);
           addToLemmaIndex(stripped);
@@ -543,11 +563,13 @@ export function shouldUnlockSecondarySenses(lemma: string): boolean {
   return primaryCard.reps >= 3;
 }
 
-const SENSE_UNLOCK_BASE_STABILITY = 3.0;
+const SENSE_UNLOCK_BASE_STABILITY = 10.0;
 const SENSE_UNLOCK_FACTOR = 1.5;
 
 export function getSenseUnlockThreshold(senseIndex: number): number {
-  return SENSE_UNLOCK_BASE_STABILITY * Math.pow(SENSE_UNLOCK_FACTOR, senseIndex);
+  return (
+    SENSE_UNLOCK_BASE_STABILITY * Math.pow(SENSE_UNLOCK_FACTOR, senseIndex)
+  );
 }
 
 export function getNextUnlockableSense(
@@ -614,7 +636,11 @@ export function getCardsWithDueSkills(now: Date = new Date()): {
   skillType: SkillType;
   skillState: SkillState;
 }[] {
-  const results: { card: SRSCard; skillType: SkillType; skillState: SkillState }[] = [];
+  const results: {
+    card: SRSCard;
+    skillType: SkillType;
+    skillState: SkillState;
+  }[] = [];
 
   for (const card of getAllCards()) {
     if (!card.skills) continue;
@@ -637,9 +663,7 @@ export function getNewSkillsForCard(card: SRSCard): SkillType[] {
   const unlockedSkills = getUnlockedSkills(card.stability);
   const existingSkills = card.skills ? Object.keys(card.skills) : [];
 
-  return unlockedSkills.filter(
-    (skill) => !existingSkills.includes(skill),
-  );
+  return unlockedSkills.filter((skill) => !existingSkills.includes(skill));
 }
 
 export async function migratePrimarySenseIds(
@@ -681,7 +705,7 @@ export async function migratePrimarySenseIds(
 
     // Check if there's already a card with a valid primary sense_id
     const hasValidPrimaryCard = lemmaCards.some(
-      (c) => c.sense_id === primarySenseId
+      (c) => c.sense_id === primarySenseId,
     );
 
     for (const card of lemmaCards) {
@@ -964,7 +988,10 @@ export async function fixCardEntryTypes(
 
   for (const fixedCard of cardsToFix) {
     await store.put(fixedCard);
-    cardsCache.set(createCardKey(fixedCard.lemma, fixedCard.sense_id), fixedCard);
+    cardsCache.set(
+      createCardKey(fixedCard.lemma, fixedCard.sense_id),
+      fixedCard,
+    );
     addToLemmaIndex(fixedCard);
   }
 
