@@ -40,10 +40,8 @@ const pendingRequests = new Map<string, Promise<string>>();
 
 const HF_TTS_DATASET_REPO = "TCabbage/gsat-vocab-sentences-tts";
 const HF_TTS_AUDIO_BASE_URL = `https://huggingface.co/datasets/${HF_TTS_DATASET_REPO}/resolve/main/audio`;
-const HF_TTS_CHECK_TIMEOUT_MS = 1500;
 
 const ttsHashCache = new Map<string, string>();
-const hfAvailabilityCache = new Map<string, boolean>();
 
 function normalizeTTSText(text: string): string {
   return text.normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -57,40 +55,17 @@ async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(normalized);
   const digest = await crypto.subtle.digest("SHA-256", data);
   const bytes = new Uint8Array(digest);
-  const hash = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  const hash = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
   ttsHashCache.set(normalized, hash);
   return hash;
 }
 
-async function getHFAudioUrlIfExists(text: string): Promise<string | null> {
+async function getHFAudioUrlAsync(text: string): Promise<string> {
   const normalized = normalizeTTSText(text);
-  if (!normalized) return null;
-
   const hash = await sha256Hex(normalized);
-  const known = hfAvailabilityCache.get(hash);
-  if (known === false) return null;
-
-  const url = `${HF_TTS_AUDIO_BASE_URL}/${hash.slice(0, 2)}/${hash}.mp3`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), HF_TTS_CHECK_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { Range: "bytes=0-0" },
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      hfAvailabilityCache.set(hash, false);
-      return null;
-    }
-    hfAvailabilityCache.set(hash, true);
-    return url;
-  } catch {
-    return url;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return `${HF_TTS_AUDIO_BASE_URL}/${hash.slice(0, 2)}/${hash}.mp3`;
 }
 
 export type AudioState = "idle" | "loading" | "playing" | "error";
@@ -179,7 +154,6 @@ function shouldUseKokoro(): boolean {
   return settings.engine === "kokoro" && isKokoroAvailable();
 }
 
-
 async function synthesizeOnce(text: string): Promise<Blob> {
   if (shouldUseKokoro()) {
     return synthesizeWithKokoro(text);
@@ -202,10 +176,7 @@ async function synthesizeWithRace(
   }
 
   if (options.allowRemote) {
-    const hfUrl = await getHFAudioUrlIfExists(text);
-    if (hfUrl) {
-      return hfUrl;
-    }
+    return await getHFAudioUrlAsync(text);
   }
 
   const errors: Error[] = [];
