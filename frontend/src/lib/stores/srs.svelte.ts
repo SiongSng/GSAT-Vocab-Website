@@ -423,6 +423,7 @@ export type StudyPriority = "mixed" | "new_first" | "review_first";
 export interface SessionOptions {
   newLimit: number;
   reviewLimit?: number;
+  secondarySenseLimit?: number;
   selectionPool?: string[];
   newCards?: SRSCard[];
   excludeLemmas?: Set<string>;
@@ -453,11 +454,14 @@ function selectSessionCards(options: SessionOptions): SessionCards {
     ? Infinity
     : (options.reviewLimit ?? Infinity);
 
+  const secondarySenseLimit = options.secondarySenseLimit ?? Infinity;
+
   const baseLearningCards = getLearningCards().filter(
     (c) => new Date(c.due) <= now && !excludeSet.has(c.lemma),
   );
 
-  const secondarySenseCards = getUnlockedSecondarySenseCards(excludeSet);
+  const secondarySenseCards = getUnlockedSecondarySenseCards(excludeSet)
+    .slice(0, secondarySenseLimit === Infinity ? undefined : secondarySenseLimit);
   const learningCards = [...baseLearningCards, ...secondarySenseCards];
 
   const reviewCards = getReviewCards(now)

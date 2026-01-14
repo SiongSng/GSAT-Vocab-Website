@@ -48,6 +48,7 @@
 
     interface StudySettings {
         newCardLimit: number;
+        secondarySenseLimit: number;
         autoSpeak: boolean;
         smartMode: boolean;
         levelFilter: number[];
@@ -57,6 +58,7 @@
 
     const defaultSettings: StudySettings = {
         newCardLimit: 20,
+        secondarySenseLimit: 5,
         autoSpeak: true,
         smartMode: true,
         levelFilter: [],
@@ -65,6 +67,7 @@
     };
 
     let newCardLimit = $state(defaultSettings.newCardLimit);
+    let secondarySenseLimit = $state(defaultSettings.secondarySenseLimit);
     let autoSpeak = $state(defaultSettings.autoSpeak);
     let smartMode = $state(defaultSettings.smartMode);
     let levelFilter: number[] = $state(defaultSettings.levelFilter);
@@ -107,6 +110,8 @@
                 const settings: StudySettings = JSON.parse(saved);
                 newCardLimit =
                     settings.newCardLimit ?? defaultSettings.newCardLimit;
+                secondarySenseLimit =
+                    settings.secondarySenseLimit ?? defaultSettings.secondarySenseLimit;
                 autoSpeak = settings.autoSpeak ?? defaultSettings.autoSpeak;
                 smartMode = settings.smartMode ?? defaultSettings.smartMode;
                 levelFilter =
@@ -126,6 +131,7 @@
         try {
             const settings: StudySettings = {
                 newCardLimit,
+                secondarySenseLimit,
                 autoSpeak,
                 smartMode,
                 levelFilter,
@@ -163,6 +169,7 @@
 
     $effect(() => {
         newCardLimit;
+        secondarySenseLimit;
         autoSpeak;
         smartMode;
         levelFilter;
@@ -391,6 +398,7 @@
     });
 
     const isUnlimited = $derived(newCardLimit >= 55);
+    const isSecondarySenseUnlimited = $derived(secondarySenseLimit >= 15);
 
     const excludedLemmas = $derived.by(() => {
         const propnLemmas = (vocab.index || [])
@@ -417,8 +425,16 @@
         return Math.max(0, newCardLimit - todayNewCardsStudied);
     });
 
+    const actualSecondarySenseLimit = $derived.by(() => {
+        if (isSecondarySenseUnlimited) {
+            return Infinity;
+        }
+        return secondarySenseLimit;
+    });
+
     const sessionOptions = $derived.by<SessionOptions>(() => ({
         newLimit: actualNewCardLimit,
+        secondarySenseLimit: actualSecondarySenseLimit,
         selectionPool: filteredNewCardPool,
         excludeLemmas: excludedLemmas,
         priority: studyPriority,
@@ -440,6 +456,7 @@
         if (!selectedDeck) return null;
         return {
             newLimit: customNewCardPool.length,
+            secondarySenseLimit: actualSecondarySenseLimit,
             selectionPool: customNewCardPool,
             excludeLemmas: customExcludedLemmas,
             priority: studyPriority,
@@ -818,6 +835,27 @@
                         張
                     </p>
                 {/if}
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-row-label">
+                    <span>第二義上限</span>
+                    <HelpTooltip text="每次練習最多出現的新義項數量（一字多義）" />
+                </div>
+                <div class="setting-row-control">
+                    <input
+                        id="secondary-sense-limit"
+                        type="range"
+                        bind:value={secondarySenseLimit}
+                        min="0"
+                        max="15"
+                        step="1"
+                        class="slider-input"
+                    />
+                    <span class="slider-value"
+                        >{secondarySenseLimit >= 15 ? "∞" : secondarySenseLimit}</span
+                    >
+                </div>
             </div>
 
             <div class="setting-row">
