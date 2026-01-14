@@ -10,47 +10,81 @@
             : 0,
     );
 
-    const newCount = $derived(
-        srs.studyQueue?.filter(
-            (c, i) => i >= srs.currentCardIndex && c.state === State.New,
-        ).length || 0,
-    );
+    const currentState = $derived(srs.currentCard?.state ?? null);
 
-    const learningCount = $derived(
-        srs.studyQueue?.filter(
-            (c, i) =>
-                i >= srs.currentCardIndex &&
-                (c.state === State.Learning || c.state === State.Relearning),
-        ).length || 0,
-    );
-
-    const reviewCount = $derived(
-        srs.studyQueue?.filter(
-            (c, i) => i >= srs.currentCardIndex && c.state === State.Review,
-        ).length || 0,
-    );
+    const stateConfig = $derived.by(() => {
+        switch (currentState) {
+            case State.New:
+                return { label: "新卡片" };
+            case State.Learning:
+                return { label: "學習中" };
+            case State.Review:
+                return { label: "複習" };
+            case State.Relearning:
+                return { label: "重學" };
+            default:
+                return null;
+        }
+    });
 </script>
 
-<div class="mt-5">
-    <div class="h-1 bg-surface-page rounded-full overflow-hidden mb-3">
+<div class="progress-container">
+    <div class="progress-bar">
         <div
-            class="h-full bg-accent/60 rounded-full transition-all duration-300"
+            class="progress-fill"
             style="width: {progressPct}%"
         ></div>
     </div>
-    <div class="flex items-center justify-center gap-4 text-sm text-content-tertiary">
-        <span class="font-medium text-content-secondary">
+    <div class="progress-info">
+        {#if stateConfig}
+            <span class="state-label">{stateConfig.label}</span>
+            <span class="separator">·</span>
+        {/if}
+        <span class="progress-count">
             {srs.progress.current} / {srs.progress.total}
         </span>
-        <span class="text-border-hover">•</span>
-        {#if newCount > 0}
-            <span class="text-srs-easy">{newCount} 待學</span>
-        {/if}
-        {#if learningCount > 0}
-            <span class="text-srs-hard">{learningCount} 學習中</span>
-        {/if}
-        {#if reviewCount > 0}
-            <span class="text-srs-again">{reviewCount} 待複習</span>
-        {/if}
     </div>
 </div>
+
+<style>
+    .progress-container {
+        margin-top: 1.25rem;
+    }
+
+    .progress-bar {
+        height: 3px;
+        background: var(--color-surface-page);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 0.75rem;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: var(--color-accent);
+        opacity: 0.5;
+        border-radius: 2px;
+        transition: width 0.3s ease;
+    }
+
+    .progress-info {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-size: 0.8125rem;
+    }
+
+    .state-label {
+        color: var(--color-content-secondary);
+    }
+
+    .separator {
+        color: var(--color-content-tertiary);
+        opacity: 0.5;
+    }
+
+    .progress-count {
+        color: var(--color-content-tertiary);
+    }
+</style>
