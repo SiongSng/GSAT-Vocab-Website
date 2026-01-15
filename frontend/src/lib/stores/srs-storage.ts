@@ -589,7 +589,7 @@ export function getNextUnlockableSense(
     if (!card) break;
 
     const threshold = getSenseUnlockThreshold(unlockedCount);
-    if (card.stability < threshold) return null;
+    if (card.stability < threshold || card.state !== State.Review) return null;
 
     unlockedCount++;
   }
