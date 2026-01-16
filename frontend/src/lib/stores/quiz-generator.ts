@@ -8,7 +8,7 @@ import type {
 } from "$lib/types/vocab";
 import { isWordEntry } from "$lib/types/vocab";
 import type { SRSCard, SkillType, SkillState } from "$lib/types/srs";
-import { State } from "$lib/types/srs";
+import { State, SKILL_UNLOCK_MIN_REPS } from "$lib/types/srs";
 import { getAllWords, getAllPhrases, getWord, getPhrase } from "./vocab-db";
 import {
   getAllCards,
@@ -101,11 +101,11 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   }
 
   // For Review state cards, also consider reps to ensure sufficient exposure
-  // Require minimum reps before advancing to harder question types
-  const MIN_REPS_FOR_REVERSE = 2;
-  const MIN_REPS_FOR_FILL_BLANK = 3;
-  const MIN_REPS_FOR_SPELLING = 5;
-  const MIN_REPS_FOR_DISTINCTION = 7;
+  // Use the same minimum reps thresholds as skill unlock
+  const MIN_REPS_FOR_REVERSE = SKILL_UNLOCK_MIN_REPS.reverse;
+  const MIN_REPS_FOR_FILL_BLANK = SKILL_UNLOCK_MIN_REPS.fill_blank;
+  const MIN_REPS_FOR_SPELLING = SKILL_UNLOCK_MIN_REPS.spelling;
+  const MIN_REPS_FOR_DISTINCTION = SKILL_UNLOCK_MIN_REPS.distinction;
 
   if (stability >= 1 && stability < 3) {
     if (reps >= MIN_REPS_FOR_REVERSE) {
