@@ -92,7 +92,6 @@ export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   }
 
   // Cards still in Learning or Relearning state should use simpler question types
-  // State.Learning = 1, State.Relearning = 3
   if (state === State.Learning || state === State.Relearning) {
     if (stability < 3) {
       return "recognition";
@@ -404,24 +403,21 @@ async function getQuizEligibleEntries(
         : await getWord(card.lemma);
     if (!entry) continue;
 
-    // Apply level and official filters for word entries
+    // Apply level and official filters
+    // Phrases don't have level or official_list properties, so skip them if these filters are active
+    const hasLevelFilter = config.levelFilter && config.levelFilter.length > 0;
+    const hasOfficialFilter = config.officialOnly;
+    
     if (isWordEntry(entry)) {
-      if (config.levelFilter && config.levelFilter.length > 0) {
-        if (entry.level === null || !config.levelFilter.includes(entry.level)) {
-          continue;
-        }
-      }
-      if (config.officialOnly && !entry.in_official_list) {
+      if (hasLevelFilter && (entry.level === null || !config.levelFilter!.includes(entry.level))) {
         continue;
       }
-    } else {
-      // Phrases don't have level or official_list, skip if filtering requires them
-      if (config.levelFilter && config.levelFilter.length > 0) {
+      if (hasOfficialFilter && !entry.in_official_list) {
         continue;
       }
-      if (config.officialOnly) {
-        continue;
-      }
+    } else if (hasLevelFilter || hasOfficialFilter) {
+      // Phrases are excluded when level or official filters are active
+      continue;
     }
 
     processedCount++;
