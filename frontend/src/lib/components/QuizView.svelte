@@ -81,11 +81,15 @@
         count: number;
         entry_type?: "word" | "phrase";
         force_types?: QuizQuestionType[];
+        levelFilter?: number[];
+        officialOnly?: boolean;
     }) {
         const quizConfig: QuizConfig = {
             count: config.count,
             entry_type: config.entry_type,
             force_types: config.force_types,
+            levelFilter: config.levelFilter,
+            officialOnly: config.officialOnly,
         };
 
         await startQuiz(quizConfig);
