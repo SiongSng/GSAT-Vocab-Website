@@ -566,10 +566,24 @@ export function shouldUnlockSecondarySenses(lemma: string): boolean {
 const SENSE_UNLOCK_BASE_STABILITY = 10.0;
 const SENSE_UNLOCK_FACTOR = 1.5;
 
+/**
+ * Minimum reps required before unlocking each secondary sense.
+ * This prevents senses from unlocking too early when user presses "Easy"
+ * on first review, which can result in high stability but low actual exposure.
+ * 
+ * The base requirement is 3 reps, increasing by 2 for each subsequent sense.
+ */
+const SENSE_UNLOCK_BASE_REPS = 3;
+const SENSE_UNLOCK_REPS_INCREMENT = 2;
+
 export function getSenseUnlockThreshold(senseIndex: number): number {
   return (
     SENSE_UNLOCK_BASE_STABILITY * Math.pow(SENSE_UNLOCK_FACTOR, senseIndex)
   );
+}
+
+export function getSenseUnlockMinReps(senseIndex: number): number {
+  return SENSE_UNLOCK_BASE_REPS + (senseIndex * SENSE_UNLOCK_REPS_INCREMENT);
 }
 
 export function getNextUnlockableSense(
@@ -588,8 +602,17 @@ export function getNextUnlockableSense(
     const card = cardBySenseId.get(senseId);
     if (!card) break;
 
-    const threshold = getSenseUnlockThreshold(unlockedCount);
-    if (card.stability < threshold || card.state !== State.Review) return null;
+    const stabilityThreshold = getSenseUnlockThreshold(unlockedCount);
+    const minReps = getSenseUnlockMinReps(unlockedCount);
+    
+    // Check stability, state, AND reps to prevent early unlock
+    if (
+      card.stability < stabilityThreshold ||
+      card.state !== State.Review ||
+      card.reps < minReps
+    ) {
+      return null;
+    }
 
     unlockedCount++;
   }
@@ -660,7 +683,7 @@ export function getCardsWithDueSkills(now: Date = new Date()): {
 }
 
 export function getNewSkillsForCard(card: SRSCard): SkillType[] {
-  const unlockedSkills = getUnlockedSkills(card.stability);
+  const unlockedSkills = getUnlockedSkills(card.stability, card.reps);
   const existingSkills = card.skills ? Object.keys(card.skills) : [];
 
   return unlockedSkills.filter((skill) => !existingSkills.includes(skill));
