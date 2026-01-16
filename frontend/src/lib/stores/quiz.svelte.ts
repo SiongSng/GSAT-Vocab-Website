@@ -120,6 +120,8 @@ export interface QuizConfig {
   count: number;
   entry_type?: "word" | "phrase" | "all";
   force_types?: QuizQuestionType[];
+  levelFilter?: number[];
+  officialOnly?: boolean;
 }
 
 export async function startQuiz(config: QuizConfig): Promise<void> {
@@ -131,6 +133,8 @@ export async function startQuiz(config: QuizConfig): Promise<void> {
       count: config.count,
       entry_type: config.entry_type,
       force_types: config.force_types,
+      levelFilter: config.levelFilter,
+      officialOnly: config.officialOnly,
     };
 
     const questions = await generateQuizLocally(generatorConfig);

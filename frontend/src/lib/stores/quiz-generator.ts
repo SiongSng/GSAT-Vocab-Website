@@ -64,25 +64,91 @@ export interface QuizConfig {
   entry_type?: "word" | "phrase" | "all";
   force_types?: QuizQuestionType[];
   specific_lemmas?: string[];
+  levelFilter?: number[];
+  officialOnly?: boolean;
 }
 
+/**
+ * Determines the quiz question type for a card based on SRS state.
+ * 
+ * The function considers multiple factors:
+ * - stability: Memory stability from FSRS algorithm
+ * - lapses: Number of times the card was forgotten
+ * - reps: Total number of reviews
+ * - state: Current learning state (New, Learning, Review, Relearning)
+ * 
+ * This prevents generating advanced question types (like spelling) for cards
+ * that were just learned, even if user pressed "Easy" on first review.
+ */
 export function getQuizTypeForCard(card: SRSCard): QuizQuestionType {
   const stability = card.stability;
   const lapses = card.lapses;
+  const reps = card.reps;
+  const state = card.state;
 
+  // Cards with high lapses or very low stability should use recognition
   if (lapses >= 3 || stability < 1) {
     return "recognition";
   }
-  if (stability >= 1 && stability < 3) {
+
+  // Cards still in Learning or Relearning state should use simpler question types
+  // State.Learning = 1, State.Relearning = 3
+  if (state === State.Learning || state === State.Relearning) {
+    if (stability < 3) {
+      return "recognition";
+    }
     return "reverse";
   }
+
+  // For Review state cards, also consider reps to ensure sufficient exposure
+  // Require minimum reps before advancing to harder question types
+  const MIN_REPS_FOR_REVERSE = 2;
+  const MIN_REPS_FOR_FILL_BLANK = 3;
+  const MIN_REPS_FOR_SPELLING = 5;
+  const MIN_REPS_FOR_DISTINCTION = 7;
+
+  if (stability >= 1 && stability < 3) {
+    if (reps >= MIN_REPS_FOR_REVERSE) {
+      return "reverse";
+    }
+    return "recognition";
+  }
   if (stability >= 3 && stability < 7) {
-    return "fill_blank";
+    if (reps >= MIN_REPS_FOR_FILL_BLANK) {
+      return "fill_blank";
+    }
+    if (reps >= MIN_REPS_FOR_REVERSE) {
+      return "reverse";
+    }
+    return "recognition";
   }
   if (stability >= 7 && stability < 21) {
+    if (reps >= MIN_REPS_FOR_SPELLING) {
+      return "spelling";
+    }
+    if (reps >= MIN_REPS_FOR_FILL_BLANK) {
+      return "fill_blank";
+    }
+    if (reps >= MIN_REPS_FOR_REVERSE) {
+      return "reverse";
+    }
+    return "recognition";
+  }
+  
+  // stability >= 21 (distinction level)
+  if (reps >= MIN_REPS_FOR_DISTINCTION) {
+    return "distinction";
+  }
+  if (reps >= MIN_REPS_FOR_SPELLING) {
     return "spelling";
   }
-  return "distinction";
+  if (reps >= MIN_REPS_FOR_FILL_BLANK) {
+    return "fill_blank";
+  }
+  if (reps >= MIN_REPS_FOR_REVERSE) {
+    return "reverse";
+  }
+  return "recognition";
 }
 
 export function skillTypeToQuizType(skillType: SkillType): QuizQuestionType {
@@ -337,6 +403,26 @@ async function getQuizEligibleEntries(
         ? await getPhrase(card.lemma)
         : await getWord(card.lemma);
     if (!entry) continue;
+
+    // Apply level and official filters for word entries
+    if (isWordEntry(entry)) {
+      if (config.levelFilter && config.levelFilter.length > 0) {
+        if (entry.level === null || !config.levelFilter.includes(entry.level)) {
+          continue;
+        }
+      }
+      if (config.officialOnly && !entry.in_official_list) {
+        continue;
+      }
+    } else {
+      // Phrases don't have level or official_list, skip if filtering requires them
+      if (config.levelFilter && config.levelFilter.length > 0) {
+        continue;
+      }
+      if (config.officialOnly) {
+        continue;
+      }
+    }
 
     processedCount++;
     if (processedCount % 50 === 0) {
@@ -920,6 +1006,8 @@ export async function generateQuizLocally(
     } else if (skillType) {
       quizType = skillTypeToQuizType(skillType);
     } else {
+      // When skillType is null, use the card's SRS state to determine quiz type
+      // getQuizTypeForCard considers stability, reps, lapses, and state
       quizType = getQuizTypeForCard(card);
     }
 

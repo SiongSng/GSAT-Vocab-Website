@@ -660,7 +660,7 @@ export function getCardsWithDueSkills(now: Date = new Date()): {
 }
 
 export function getNewSkillsForCard(card: SRSCard): SkillType[] {
-  const unlockedSkills = getUnlockedSkills(card.stability);
+  const unlockedSkills = getUnlockedSkills(card.stability, card.reps);
   const existingSkills = card.skills ? Object.keys(card.skills) : [];
 
   return unlockedSkills.filter((skill) => !existingSkills.includes(skill));

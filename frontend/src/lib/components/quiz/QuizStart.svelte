@@ -12,12 +12,15 @@
     import { onDestroy, onMount } from "svelte";
     import { onDataChange } from "$lib/stores/srs-storage";
     import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
+    import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
 
     interface Props {
         onStart: (config: {
             count: number;
             entry_type?: "word" | "phrase";
             force_types?: QuizQuestionType[];
+            levelFilter?: number[];
+            officialOnly?: boolean;
         }) => void;
     }
 
@@ -27,9 +30,13 @@
     const app = getAppStore();
     const quiz = getQuizStore();
 
+    const LEVEL_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
+
     let questionCount = $state(20);
     let entryType = $state<"word" | "phrase" | "all">("all");
     let selectedTypes = $state<Set<string>>(new Set());
+    let levelFilter: number[] = $state([]);
+    let officialOnly = $state(false);
     let isInitializing = $state(true);
     let dataVersion = $state(0);
 
@@ -58,6 +65,14 @@
             newSet.add(value);
         }
         selectedTypes = newSet;
+    }
+
+    function toggleLevelFilter(level: number) {
+        if (levelFilter.includes(level)) {
+            levelFilter = levelFilter.filter((l) => l !== level);
+        } else {
+            levelFilter = [...levelFilter, level];
+        }
     }
 
     function getSelectedQuizTypes(): QuizQuestionType[] {
@@ -128,6 +143,8 @@
             count: questionCount,
             entry_type: entryType === "all" ? undefined : entryType,
             force_types: forceTypes.length > 0 ? forceTypes : undefined,
+            levelFilter: levelFilter.length > 0 ? levelFilter : undefined,
+            officialOnly: officialOnly || undefined,
         });
     }
 
@@ -214,6 +231,53 @@
                                 </button>
                             {/each}
                         </div>
+                    </div>
+
+                    <div class="setting-group full-width">
+                        <div class="setting-label-row">
+                            <span class="setting-label">詞彙等級</span>
+                            <HelpTooltip
+                                text="大考中心官方難度分級：1-2 基礎、3-4 中級、5-6 進階"
+                            />
+                        </div>
+                        <div class="level-chips">
+                            {#each LEVEL_OPTIONS as level}
+                                <button
+                                    class="level-chip"
+                                    class:active={levelFilter.includes(level)}
+                                    onclick={() => toggleLevelFilter(level)}
+                                >
+                                    {level}
+                                </button>
+                            {/each}
+                        </div>
+                        {#if levelFilter.length > 0}
+                            <p class="filter-hint">
+                                僅測驗等級 {[...levelFilter]
+                                    .sort((a, b) => a - b)
+                                    .join("、")} 的單字
+                            </p>
+                        {/if}
+                    </div>
+
+                    <div class="setting-group full-width">
+                        <label class="toggle-row">
+                            <div class="toggle-label">
+                                <span>僅大考中心詞彙表</span>
+                                <HelpTooltip text="官方公布的 7000 單字範圍" />
+                            </div>
+                            <button
+                                type="button"
+                                onclick={() => (officialOnly = !officialOnly)}
+                                class="toggle"
+                                class:toggle-active={officialOnly}
+                                role="switch"
+                                aria-checked={officialOnly}
+                                aria-label="僅大考中心詞彙表"
+                            >
+                                <span class="toggle-thumb"></span>
+                            </button>
+                        </label>
                     </div>
                 </div>
 
@@ -399,6 +463,98 @@
         min-width: 0;
     }
 
+    /* Setting Label Row */
+    .setting-label-row {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    /* Level Chips */
+    .level-chips {
+        display: flex;
+        background: var(--color-surface-secondary);
+        padding: 3px;
+        border-radius: 8px;
+        gap: 2px;
+    }
+
+    .level-chip {
+        flex: 1;
+        padding: 0.5rem 0.5rem;
+        background: transparent;
+        border: none;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--color-content-secondary);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .level-chip:hover {
+        color: var(--color-content-primary);
+    }
+
+    .level-chip.active {
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .filter-hint {
+        font-size: 0.75rem;
+        color: var(--color-content-tertiary);
+        margin: 0;
+    }
+
+    /* Toggle Row */
+    .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+    }
+
+    .toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.875rem;
+        color: var(--color-content-secondary);
+    }
+
+    .toggle {
+        position: relative;
+        width: 2rem;
+        height: 1.125rem;
+        background-color: var(--color-border-hover);
+        border: none;
+        border-radius: 0.5625rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+        flex-shrink: 0;
+    }
+
+    .toggle-active {
+        background-color: var(--color-content-primary);
+    }
+
+    .toggle-thumb {
+        position: absolute;
+        top: 0.1875rem;
+        left: 0.1875rem;
+        width: 0.75rem;
+        height: 0.75rem;
+        background-color: white;
+        border-radius: 50%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        transition: transform 0.15s ease;
+    }
+
+    .toggle-active .toggle-thumb {
+        transform: translateX(0.875rem);
+    }
+
     /* Main Actions */
     .main-actions {
         text-align: center;
@@ -525,6 +681,16 @@
             background: var(--color-content-primary);
             color: var(--color-surface-primary);
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+        }
+
+        .level-chips {
+            background: var(--color-surface-primary);
+            border: 1px solid var(--color-border);
+        }
+
+        .level-chip.active {
+            background: var(--color-content-primary);
+            color: var(--color-surface-primary);
         }
     }
 </style>

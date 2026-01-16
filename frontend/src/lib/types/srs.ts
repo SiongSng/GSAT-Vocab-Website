@@ -41,6 +41,18 @@ export const SKILL_UNLOCK_THRESHOLDS: Record<SkillType, number> = {
   distinction: 21,
 };
 
+/**
+ * Minimum reps required before unlocking each skill type.
+ * This prevents skills from unlocking too early when user presses "Easy"
+ * on first review, which can result in high stability but low actual exposure.
+ */
+export const SKILL_UNLOCK_MIN_REPS: Record<SkillType, number> = {
+  reverse: 2,
+  fill_blank: 3,
+  spelling: 5,
+  distinction: 7,
+};
+
 export const SKILL_INFLUENCE_ON_MAIN: Record<SkillType, number> = {
   reverse: 0.3,
   fill_blank: 0.5,
@@ -48,10 +60,15 @@ export const SKILL_INFLUENCE_ON_MAIN: Record<SkillType, number> = {
   distinction: 0.8,
 };
 
-export function getUnlockedSkills(mainStability: number): SkillType[] {
+/**
+ * Get unlocked skills based on card's stability and reps.
+ * Both stability threshold AND minimum reps must be met for a skill to unlock.
+ */
+export function getUnlockedSkills(mainStability: number, reps: number = 0): SkillType[] {
   const skills: SkillType[] = [];
-  for (const [skill, threshold] of Object.entries(SKILL_UNLOCK_THRESHOLDS)) {
-    if (mainStability >= threshold) {
+  for (const [skill, stabilityThreshold] of Object.entries(SKILL_UNLOCK_THRESHOLDS)) {
+    const minReps = SKILL_UNLOCK_MIN_REPS[skill as SkillType];
+    if (mainStability >= stabilityThreshold && reps >= minReps) {
       skills.push(skill as SkillType);
     }
   }
