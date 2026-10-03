@@ -4,6 +4,7 @@
         getSRSStore,
         initSRS,
         startStudySession,
+        prepareStudySession,
         endStudySession,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
@@ -17,6 +18,9 @@
 
     let viewState: ViewState = $state("dashboard");
     let isInitializing = $state(true);
+    let isStarting = $state(false);
+    let startError = $state<string | null>(null);
+    let isDestroyed = false;
 
     onMount(async () => {
         await initSRS();
@@ -24,6 +28,7 @@
     });
 
     onDestroy(() => {
+        isDestroyed = true;
         void endStudySession();
     });
 
@@ -33,13 +38,28 @@
         }
     });
 
-    function handleStart(options: SessionOptions) {
-        startStudySession(options);
-        if (srs.studyQueue.length === 0) {
-            void endStudySession();
-            return;
+    async function handleStart(options: SessionOptions) {
+        if (isStarting) return;
+        isStarting = true;
+        startError = null;
+        try {
+            const preparedOptions = await prepareStudySession(options);
+            if (isDestroyed) return;
+            startStudySession(preparedOptions);
+            if (srs.studyQueue.length === 0) {
+                await endStudySession();
+                startError = "目前沒有可練習的卡片。";
+                return;
+            }
+            viewState = "studying";
+        } catch (error) {
+            if (isDestroyed) return;
+            console.error("Failed to start study session", error);
+            await endStudySession();
+            startError = "無法載入練習卡片，請再試一次。若問題持續，請重新載入頁面。";
+        } finally {
+            isStarting = false;
         }
-        viewState = "studying";
     }
 
     function handleBackToDashboard() {
@@ -55,7 +75,10 @@
                 <div class="text-[14px] text-content-tertiary">載入中...</div>
             </div>
         {:else if viewState === "dashboard"}
-            <StudyDashboard onStart={handleStart} />
+            {#if startError}
+                <p role="alert" class="mb-4 text-sm text-srs-again">{startError}</p>
+            {/if}
+            <StudyDashboard onStart={handleStart} {isStarting} />
         {:else if viewState === "studying" && !srs.isComplete}
             <StudySession />
         {:else if viewState === "complete" || srs.isComplete}

@@ -35,6 +35,7 @@ import { isWordEntry } from "$lib/types/vocab";
 import { DEFAULT_DAILY_LIMITS, getPrioritizedSenses } from "$lib/types/srs";
 import { preloadAudio } from "$lib/tts";
 import type { VocabEntry, VocabSense } from "$lib/types/vocab";
+import { getSRSEligibleEntry } from "./vocab-db";
 
 export { Rating, State };
 
@@ -541,6 +542,25 @@ function interleaveCards<T>(reviewCards: T[], newCards: T[]): T[] {
   }
 
   return result;
+}
+
+export async function prepareStudySession(
+  options: SessionOptions,
+): Promise<SessionOptions> {
+  if (options.cramMode || options.newCards || !options.selectionPool) {
+    return options;
+  }
+
+  const lemmas = options.selectionPool
+    .filter((lemma) => !options.excludeLemmas?.has(lemma))
+    .slice(0, options.newLimit);
+  const entries = await Promise.all(lemmas.map(getSRSEligibleEntry));
+  if (entries.some((entry) => !entry || getPrioritizedSenses(entry).length === 0)) {
+    throw new Error("Requested study vocabulary is missing or has no senses");
+  }
+
+  const newCards = entries.map((entry) => ensureEntryCard(entry!)!);
+  return { ...options, newCards };
 }
 
 export function startStudySession(options: SessionOptions): void {

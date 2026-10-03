@@ -13,8 +13,8 @@
         getTodayStats,
         onDataChange,
     } from "$lib/stores/srs-storage";
-    import { getSRSEligibleEntryCached } from "$lib/stores/vocab-db";
     import { State } from "ts-fsrs";
+    import { getSRSEligibleEntryCached } from "$lib/stores/vocab-db";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
@@ -23,13 +23,12 @@
     import { STORAGE_KEYS } from "$lib/storage-keys";
     import { isWordIndexItem } from "$lib/types/vocab";
 
-    import type { SRSCard } from "$lib/types/srs";
-
     interface Props {
         onStart: (options: SessionOptions) => void;
+        isStarting?: boolean;
     }
 
-    let { onStart }: Props = $props();
+    let { onStart, isStarting = false }: Props = $props();
 
     const vocab = getVocabStore();
     const app = getAppStore();
@@ -479,33 +478,12 @@
     const hasCardsToStudy = $derived(sessionCounts.total > 0);
 
     function handleStart() {
-        const poolLemmas = filteredNewCardPool.slice(0, actualNewCardLimit);
-        const newCards: SRSCard[] = [];
-        for (const lemma of poolLemmas) {
-            const entry = getSRSEligibleEntryCached(lemma);
-            if (entry) {
-                const card = ensureEntryCard(entry);
-                if (card) {
-                    newCards.push(card);
-                }
-            }
-        }
-        onStart({ ...sessionOptions, newCards });
+        onStart(sessionOptions);
     }
 
     function handleStartCustomDeck() {
         if (!customDeckSessionOptions) return;
-        const newCards: SRSCard[] = [];
-        for (const lemma of customNewCardPool) {
-            const entry = getSRSEligibleEntryCached(lemma);
-            if (entry) {
-                const card = ensureEntryCard(entry);
-                if (card) {
-                    newCards.push(card);
-                }
-            }
-        }
-        onStart({ ...customDeckSessionOptions, newCards });
+        onStart(customDeckSessionOptions);
     }
 
     function handleCramDeck() {
@@ -603,10 +581,13 @@
 
         <button
             onclick={handleStart}
-            disabled={!hasCardsToStudy}
+            disabled={isStarting || !hasCardsToStudy}
+            aria-busy={isStarting}
             class="btn-start"
         >
-            {#if hasCardsToStudy}
+            {#if isStarting}
+                準備中...
+            {:else if hasCardsToStudy}
                 開始練習
             {:else}
                 今日完成
@@ -739,13 +720,16 @@
                             <button
                                 type="button"
                                 onclick={handleStartCustomDeck}
-                                disabled={!customDeckSessionCounts ||
+                                disabled={isStarting || !customDeckSessionCounts ||
                                     customDeckSessionCounts.total === 0 ||
                                     !vocab.index ||
                                     vocab.index.length === 0}
                                 class="btn-start-secondary"
+                                aria-busy={isStarting}
                             >
-                                {#if customDeckSessionCounts && customDeckSessionCounts.total > 0}
+                                {#if isStarting}
+                                    準備中...
+                                {:else if customDeckSessionCounts && customDeckSessionCounts.total > 0}
                                     開始練習
                                     <span class="btn-start-count"
                                         >{customDeckSessionCounts.total} 張</span
@@ -757,7 +741,7 @@
                             <button
                                 type="button"
                                 onclick={handleCramDeck}
-                                disabled={!vocab.index ||
+                                disabled={isStarting || !vocab.index ||
                                     vocab.index.length === 0 ||
                                     selectedDeck.lemmas.length === 0}
                                 class="btn-cram"
@@ -1009,6 +993,12 @@
 {/snippet}
 
 <style>
+    .btn-start,
+    .btn-start-secondary,
+    .btn-cram {
+        touch-action: manipulation;
+    }
+
     /* Layout */
     .sync-wrapper {
         display: flex;
