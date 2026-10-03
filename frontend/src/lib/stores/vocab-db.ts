@@ -353,14 +353,6 @@ export async function getSRSEligibleEntry(
   return getPhrase(lemma);
 }
 
-export function getSRSEligibleEntryCached(
-  lemma: string,
-): WordEntry | PhraseEntry | undefined {
-  const word = getWordCached(lemma);
-  if (word) return word;
-  return getPhraseCached(lemma);
-}
-
 export async function lookupEntry(
   lemma: string,
   type?: "word" | "phrase" | "pattern",

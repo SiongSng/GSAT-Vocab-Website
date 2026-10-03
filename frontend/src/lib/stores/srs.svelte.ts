@@ -361,43 +361,21 @@ export function addSenseToSRS(
   ensureCard(lemma, senseId, entryType);
 }
 
-function getEligibleNewCards(
-  excludeSet: Set<string>,
-  selectionPool?: string[],
-): SRSCard[] {
-  if (selectionPool && selectionPool.length > 0) {
-    const result: SRSCard[] = [];
-    for (const lemma of selectionPool) {
-      if (excludeSet.has(lemma)) continue;
-      const cardsForLemma = getCardsByLemma(lemma);
-      if (cardsForLemma.length === 0) continue;
+function getEligibleNewLemmas(options: SessionOptions): string[] {
+  const pool = options.selectionPool ?? getNewCards().map((card) => card.lemma);
+  return [...new Set(pool)].filter((lemma) =>
+    !options.excludeLemmas?.has(lemma) &&
+    !getCardsByLemma(lemma).some((card) => card.state !== State.New),
+  );
+}
 
-      const newCards = cardsForLemma.filter((c) => c.state === State.New);
-      if (newCards.length === 0) continue;
-
-      const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
-      if (hasLearnedCards) continue;
-
-      result.push(newCards[0]);
-    }
-    return result;
-  }
-
-  const allNewCards = getNewCards();
-  const cardMap = new Map<string, SRSCard>();
-
-  for (const card of allNewCards) {
-    if (excludeSet.has(card.lemma)) continue;
-    if (cardMap.has(card.lemma)) continue;
-
-    const cardsForLemma = getCardsByLemma(card.lemma);
-    const hasLearnedCards = cardsForLemma.some((c) => c.state !== State.New);
-    if (hasLearnedCards) continue;
-
-    cardMap.set(card.lemma, card);
-  }
-
-  return Array.from(cardMap.values());
+function getEligibleNewCards(options: SessionOptions): SRSCard[] {
+  return getEligibleNewLemmas(options)
+    .slice(0, options.newLimit)
+    .flatMap((lemma) => {
+      const card = getCardsByLemma(lemma).find((card) => card.state === State.New);
+      return card ? [card] : [];
+    });
 }
 
 function getUnlockedSecondarySenseCards(excludeSet: Set<string>): SRSCard[] {
@@ -426,7 +404,6 @@ export interface SessionOptions {
   reviewLimit?: number;
   secondarySenseLimit?: number;
   selectionPool?: string[];
-  newCards?: SRSCard[];
   excludeLemmas?: Set<string>;
   priority?: StudyPriority;
   isCustomDeck?: boolean;
@@ -469,9 +446,7 @@ function selectSessionCards(options: SessionOptions): SessionCards {
     .filter((c) => !excludeSet.has(c.lemma))
     .slice(0, reviewLimit === Infinity ? undefined : reviewLimit);
 
-  const newCards = options.newCards
-    ? options.newCards.slice(0, options.newLimit)
-    : getEligibleNewCards(excludeSet, options.selectionPool).slice(0, options.newLimit);
+  const newCards = getEligibleNewCards(options);
 
   return { newCards, learningCards, reviewCards };
 }
@@ -479,12 +454,13 @@ function selectSessionCards(options: SessionOptions): SessionCards {
 export function getSessionCardCounts(
   options: SessionOptions,
 ): SessionCardCounts {
-  const { newCards, learningCards, reviewCards } = selectSessionCards(options);
+  const { learningCards, reviewCards } = selectSessionCards(options);
+  const newCount = Math.min(options.newLimit, getEligibleNewLemmas(options).length);
   return {
-    newCount: newCards.length,
+    newCount,
     learningCount: learningCards.length,
     reviewCount: reviewCards.length,
-    total: newCards.length + learningCards.length + reviewCards.length,
+    total: newCount + learningCards.length + reviewCards.length,
   };
 }
 
@@ -544,32 +520,35 @@ function interleaveCards<T>(reviewCards: T[], newCards: T[]): T[] {
   return result;
 }
 
-export async function prepareStudySession(
+export async function startStudySession(
   options: SessionOptions,
-): Promise<SessionOptions> {
-  if (options.cramMode || options.newCards || !options.selectionPool) {
-    return options;
-  }
-
-  const lemmas = options.selectionPool
-    .filter((lemma) => !options.excludeLemmas?.has(lemma))
-    .slice(0, options.newLimit);
-  const entries = await Promise.all(lemmas.map(getSRSEligibleEntry));
-  if (entries.some((entry) => !entry || getPrioritizedSenses(entry).length === 0)) {
-    throw new Error("Requested study vocabulary is missing or has no senses");
-  }
-
-  const newCards = entries.map((entry) => ensureEntryCard(entry!)!);
-  return { ...options, newCards };
-}
-
-export function startStudySession(options: SessionOptions): void {
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
+  await initSRS();
   const cramMode = options.cramMode ?? false;
+  const pool = cramMode
+    ? [...new Set(options.selectionPool ?? [])].filter((lemma) => !options.excludeLemmas?.has(lemma))
+    : getEligibleNewLemmas(options).slice(0, options.newLimit);
+  const entries = await Promise.all(pool.map(getSRSEligibleEntry));
+  const eligibleEntries = entries.map((entry) => {
+    if (!entry || entry.senses.length === 0) {
+      throw new Error("Requested study vocabulary is missing or has no senses");
+    }
+    return entry;
+  });
+  signal?.throwIfAborted();
+  for (const entry of eligibleEntries) {
+    ensureEntryCard(entry);
+  }
   let queue: SRSCard[];
 
   if (cramMode) {
     const excludeSet = options.excludeLemmas ?? new Set();
-    const allCards = getAllCards().filter((c) => !excludeSet.has(c.lemma));
+    const selectedLemmas = options.selectionPool ? new Set(pool) : null;
+    const allCards = getAllCards().filter((card) =>
+      !excludeSet.has(card.lemma) && (!selectedLemmas || selectedLemmas.has(card.lemma)),
+    );
 
     const seen = new Map<string, SRSCard>();
     for (const card of allCards) {

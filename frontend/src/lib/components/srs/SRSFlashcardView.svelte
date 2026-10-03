@@ -4,7 +4,6 @@
         getSRSStore,
         initSRS,
         startStudySession,
-        prepareStudySession,
         endStudySession,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
@@ -20,7 +19,7 @@
     let isInitializing = $state(true);
     let isStarting = $state(false);
     let startError = $state<string | null>(null);
-    let isDestroyed = false;
+    const startController = new AbortController();
 
     onMount(async () => {
         await initSRS();
@@ -28,7 +27,7 @@
     });
 
     onDestroy(() => {
-        isDestroyed = true;
+        startController.abort();
         void endStudySession();
     });
 
@@ -43,9 +42,8 @@
         isStarting = true;
         startError = null;
         try {
-            const preparedOptions = await prepareStudySession(options);
-            if (isDestroyed) return;
-            startStudySession(preparedOptions);
+            await startStudySession(options, startController.signal);
+            if (startController.signal.aborted) return;
             if (srs.studyQueue.length === 0) {
                 await endStudySession();
                 startError = "目前沒有可練習的卡片。";
@@ -53,7 +51,7 @@
             }
             viewState = "studying";
         } catch (error) {
-            if (isDestroyed) return;
+            if (startController.signal.aborted) return;
             console.error("Failed to start study session", error);
             await endStudySession();
             startError = "無法載入練習卡片，請再試一次。若問題持續，請重新載入頁面。";

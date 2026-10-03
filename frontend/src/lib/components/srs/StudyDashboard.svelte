@@ -2,7 +2,6 @@
     import { browser } from '$app/environment';
     import { safeGetItem, safeSetItem } from '$lib/utils/safe-storage';
     import {
-        ensureEntryCard,
         getSessionCardCounts,
         type SessionOptions,
     } from "$lib/stores/srs.svelte";
@@ -14,7 +13,6 @@
         onDataChange,
     } from "$lib/stores/srs-storage";
     import { State } from "ts-fsrs";
-    import { getSRSEligibleEntryCached } from "$lib/stores/vocab-db";
     import HelpTooltip from "$lib/components/ui/HelpTooltip.svelte";
     import BottomSheet from "$lib/components/ui/BottomSheet.svelte";
     import SyncIndicator from "$lib/components/ui/SyncIndicator.svelte";
@@ -269,14 +267,6 @@
             decks.push({ id: deckId, name, lemmas, createdAt: now });
         }
 
-        const newOnes = lemmas.filter((lemma) => !existingLemmaSet.has(lemma));
-        for (const lemma of newOnes) {
-            const entry = getSRSEligibleEntryCached(lemma);
-            if (entry) {
-                ensureEntryCard(entry);
-            }
-        }
-
         customDecks = decks;
         selectedDeckId = deckId;
         saveCustomDecks(decks);
@@ -310,10 +300,6 @@
     const allCardsSnapshot = $derived.by(() => {
         dataVersion;
         return getAllCards();
-    });
-
-    const existingLemmaSet = $derived.by(() => {
-        return new Set(allCardsSnapshot.map((c) => c.lemma));
     });
 
     const learnedLemmaSet = $derived.by(() => {
@@ -400,10 +386,10 @@
     const isSecondarySenseUnlimited = $derived(secondarySenseLimit >= 15);
 
     const excludedLemmas = $derived.by(() => {
-        const propnLemmas = (vocab.index || [])
-            .filter((w) => isWordIndexItem(w) && w.primary_pos === "PROPN")
-            .map((w) => w.lemma);
-        return new Set(propnLemmas);
+        const ineligibleLemmas = (vocab.index || [])
+            .filter((item) => item.type === "pattern" || (isWordIndexItem(item) && item.primary_pos === "PROPN"))
+            .map((item) => item.lemma);
+        return new Set(ineligibleLemmas);
     });
 
     const customExcludedLemmas = $derived.by(() => {
@@ -441,14 +427,8 @@
     }));
 
     const sessionCounts = $derived.by(() => {
-        const baseCounts = getSessionCardCounts(sessionOptions);
-        const newCount = Math.min(actualNewCardLimit, filteredNewCardPool.length);
-        return {
-            newCount,
-            learningCount: baseCounts.learningCount,
-            reviewCount: baseCounts.reviewCount,
-            total: baseCounts.learningCount + baseCounts.reviewCount + newCount,
-        };
+        allCardsSnapshot;
+        return getSessionCardCounts(sessionOptions);
     });
 
     const customDeckSessionOptions = $derived.by<SessionOptions | null>(() => {
@@ -464,15 +444,8 @@
     });
 
     const customDeckSessionCounts = $derived.by(() => {
-        if (!customDeckSessionOptions) return null;
-        const baseCounts = getSessionCardCounts(customDeckSessionOptions);
-        const newCount = customNewCardPool.length;
-        return {
-            newCount,
-            learningCount: baseCounts.learningCount,
-            reviewCount: baseCounts.reviewCount,
-            total: baseCounts.learningCount + baseCounts.reviewCount + newCount,
-        };
+        allCardsSnapshot;
+        return customDeckSessionOptions ? getSessionCardCounts(customDeckSessionOptions) : null;
     });
 
     const hasCardsToStudy = $derived(sessionCounts.total > 0);
@@ -490,6 +463,7 @@
         if (!selectedDeck) return;
         onStart({
             newLimit: 0,
+            selectionPool: selectedDeck.lemmas,
             excludeLemmas: customExcludedLemmas,
             cramMode: true,
         });
