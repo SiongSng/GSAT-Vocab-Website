@@ -245,10 +245,14 @@
             </div>
 
             <div class="word-list-wrapper">
-                <WordList
-                    words={vocab.filteredWords}
-                    isGridMode={app.isGridMode}
-                />
+                {#if vocab.isLoaded}
+                    <WordList
+                        words={vocab.filteredWords}
+                        isGridMode={app.isGridMode}
+                    />
+                {:else if vocab.error}
+                    <p role="alert" class="p-4 text-sm text-content-secondary">{vocab.error}</p>
+                {/if}
             </div>
         </main>
 

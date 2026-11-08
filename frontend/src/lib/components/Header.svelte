@@ -145,6 +145,19 @@
         }
     }
 
+    @media (max-width: 1023px) {
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
+            padding-top: calc(0.625rem + env(safe-area-inset-top, 0px));
+            padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+            padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+        }
+    }
+
     .header-left {
         display: flex;
         align-items: center;

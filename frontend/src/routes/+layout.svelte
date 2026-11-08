@@ -63,6 +63,13 @@
         }
     });
 
+    $effect(() => {
+        if (!browser) return;
+        if (!needsVocabData($page.url.pathname) || vocab.loadProgress || vocab.isLoaded || vocab.error) {
+            document.getElementById("initial-loader")?.remove();
+        }
+    });
+
     onMount(() => {
         initTTSSettings();
 
@@ -89,13 +96,35 @@
 
         const handleMediaChange = (e: MediaQueryListEvent) => {
             setMobile(e.matches);
+            pinViewport();
+        };
+
+        function pinViewport() {
+            const bleed = parseFloat(getComputedStyle(document.documentElement)
+                .getPropertyValue("--viewport-bleed")) || 0;
+            if (Math.abs(window.scrollY - bleed) > 0.5) {
+                window.scrollTo(0, bleed);
+            }
+        }
+
+        let frame = 0;
+        const schedulePin = () => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(pinViewport);
         };
 
         mediaQuery.addEventListener("change", handleMediaChange);
-        document.getElementById("initial-loader")?.remove();
+        window.addEventListener("scroll", schedulePin, { passive: true });
+        window.addEventListener("resize", schedulePin);
+        window.visualViewport?.addEventListener("resize", schedulePin);
+        pinViewport();
 
         return () => {
             mediaQuery.removeEventListener("change", handleMediaChange);
+            window.removeEventListener("scroll", schedulePin);
+            window.removeEventListener("resize", schedulePin);
+            window.visualViewport?.removeEventListener("resize", schedulePin);
+            cancelAnimationFrame(frame);
         };
     });
 </script>
@@ -135,12 +164,26 @@
 
     @media (max-width: 1023px) {
         :global(:root) {
-            --bottom-nav-height: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+            --bottom-nav-height: calc(var(--nav-item-size) + 2.375rem + env(safe-area-inset-bottom, 0px) + var(--viewport-bleed));
+        }
+
+        .app {
+            position: absolute;
+            top: var(--viewport-bleed);
+            left: 0;
+            right: 0;
+            height: calc(100dvh + var(--viewport-bleed));
+            min-height: 0;
+            padding-top: var(--header-height);
+        }
+
+        main {
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
         }
     }
 
     :global(html, body) {
-        height: 100%;
         margin: 0;
         padding: 0;
     }

@@ -60,6 +60,9 @@
 
 :root {
     color-scheme: light;
+    --viewport-bleed: 0px;
+    --header-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+    --nav-item-size: 3rem;
 }
 
 html,
@@ -72,6 +75,30 @@ body {
 
 #app {
     height: 100%;
+}
+
+@media (max-width: 1023px) {
+    :root {
+        --viewport-bleed: 160px;
+    }
+
+    html {
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
+    body {
+        position: relative;
+        height: calc(100dvh + 2 * var(--viewport-bleed));
+        overflow: hidden;
+    }
+}
+
+@media (display-mode: standalone) {
+    :root {
+        --viewport-bleed: 0px;
+        --nav-item-size: 3.25rem;
+    }
 }
 
 /* Custom Checkbox - Heptabase Style */

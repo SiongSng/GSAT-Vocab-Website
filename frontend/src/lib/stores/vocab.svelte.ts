@@ -285,7 +285,6 @@ export async function loadVocabData(): Promise<void> {
 
   isLoading = true;
   error = null;
-  document.getElementById("initial-loader")?.remove();
 
   try {
     await initVocabDB();

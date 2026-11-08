@@ -82,8 +82,8 @@
 
 <style>
     .bottom-nav {
-        position: fixed;
-        bottom: 0;
+        position: absolute;
+        bottom: var(--viewport-bleed);
         left: 0;
         right: 0;
         z-index: 50;
@@ -111,8 +111,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 3rem;
-        height: 3rem;
+        width: var(--nav-item-size);
+        height: var(--nav-item-size);
         border-radius: 9999px;
         color: var(--color-content-tertiary);
         transition: all 0.2s ease;
@@ -133,5 +133,12 @@
     .nav-icon {
         width: 1.375rem;
         height: 1.375rem;
+    }
+
+    @media (display-mode: standalone) {
+        .nav-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
     }
 </style>

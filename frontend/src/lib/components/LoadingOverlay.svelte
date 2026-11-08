@@ -21,7 +21,7 @@
 </script>
 
 <div
-    class="fixed inset-0 bg-surface-page flex flex-col items-center justify-center z-50"
+    class="absolute inset-0 bg-surface-page flex flex-col items-center justify-center z-50"
 >
     <div class="flex flex-col items-center gap-6 max-w-md w-full px-8">
         <svg

@@ -104,7 +104,7 @@
                 class="grid-container grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-3"
                 style="transform: translateY({offsetY}px);"
             >
-                {#each visibleWords as word (word.lemma)}
+                {#each visibleWords as word (`${word.type}:${word.lemma}`)}
                     <button
                         class="browse-cell"
                         class:phrase-cell={word.type === "phrase"}
@@ -122,7 +122,7 @@
     {:else}
         <div class="virtual-scroll-wrapper" style="height: {totalHeight}px;">
             <div class="word-list" style="transform: translateY({offsetY}px);">
-                {#each visibleWords as word (word.lemma)}
+                {#each visibleWords as word (`${word.type}:${word.lemma}`)}
                     <button
                         class="list-item"
                         class:active-item={vocab.selectedLemma === word.lemma}
@@ -161,6 +161,7 @@
     .virtual-scroll-wrapper {
         position: relative;
         width: 100%;
+        box-sizing: content-box;
         padding-bottom: var(--bottom-nav-height);
     }
 
